@@ -65,8 +65,8 @@ struct ComposableOTelAllTests {
 
       await store.send(.increment) { $0.count = 1 }
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(!spans.isEmpty, "Expected at least one reducer span")
@@ -89,8 +89,8 @@ struct ComposableOTelAllTests {
 
       await store.send(.decrement) { $0.count = -1 }
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(!spans.isEmpty)
@@ -114,8 +114,8 @@ struct ComposableOTelAllTests {
       await store.send(.increment) { $0.count = 2 }
       await store.send(.decrement) { $0.count = 1 }
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(spans.count >= 3)
@@ -145,8 +145,8 @@ struct ComposableOTelAllTests {
 
       await store.send(.increment) { $0.count = 1 }
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let spans = collectors.spans.spans(named: "reducer/Reduce")
       #expect(!spans.isEmpty)
@@ -174,8 +174,8 @@ struct ComposableOTelAllTests {
       }
 
       try? await Task.sleep(for: .milliseconds(50))
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let effectSpans = collectors.spans.spans(named: "effect/fetchCount")
       #expect(!effectSpans.isEmpty, "Expected an effect span for fetchCount")
@@ -200,8 +200,8 @@ struct ComposableOTelAllTests {
 
       #expect(result == 42)
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       collectors.spans.assertSpanExists(named: "dependency/testDep/getValue")
     }
@@ -225,8 +225,8 @@ struct ComposableOTelAllTests {
         // expected
       }
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       let spans = collectors.spans.spans(named: "dependency/testDep/failing")
       #expect(!spans.isEmpty)
@@ -249,8 +249,8 @@ struct ComposableOTelAllTests {
 
       #expect(result == "cached_value")
 
-      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
-      provider.forceFlush()
+      // flush spans
+      collectors.forceFlush()
 
       collectors.spans.assertSpanExists(named: "dependency/cache/load")
     }

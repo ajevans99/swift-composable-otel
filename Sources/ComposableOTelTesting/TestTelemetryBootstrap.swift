@@ -5,13 +5,35 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Container for in-memory test collectors returned by ``TelemetryClient/test(errorDetailPolicy:)``.
-public struct TestCollectors: Sendable {
+public struct TestCollectors: @unchecked Sendable {
   /// Collected spans from traced reducers, effects, and dependency calls.
   public let spans: InMemorySpanCollector
   /// Collected log records (from `telemetry.info()`, `telemetry.error()`, etc.).
   public let logs: InMemoryLogCollector
   /// Optional metric reader.
   public let metrics: InMemoryMetricReader?
+
+  // TracerProviderSdk is thread-safe but not marked Sendable
+  private let tracerProvider: TracerProviderSdk
+
+  init(
+    spans: InMemorySpanCollector,
+    logs: InMemoryLogCollector,
+    metrics: InMemoryMetricReader?,
+    tracerProvider: TracerProviderSdk
+  ) {
+    self.spans = spans
+    self.logs = logs
+    self.metrics = metrics
+    self.tracerProvider = tracerProvider
+  }
+
+  /// Flush all pending spans to the in-memory collector.
+  ///
+  /// Call this after exercising actions, before asserting on collected spans.
+  public func forceFlush() {
+    tracerProvider.forceFlush()
+  }
 }
 
 /// Convenience factory for creating a ``TelemetryClient`` wired to in-memory
@@ -81,7 +103,8 @@ extension TelemetryClient {
     let collectors = TestCollectors(
       spans: spanCollector,
       logs: logCollector,
-      metrics: metricReader
+      metrics: metricReader,
+      tracerProvider: tracerProvider
     )
 
     return (client, collectors)

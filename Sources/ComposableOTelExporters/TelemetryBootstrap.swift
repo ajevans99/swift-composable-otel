@@ -116,6 +116,24 @@ public enum TelemetryBootstrap {
 
     OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
 
+    // --- Logs ---
+
+    let logExporter: any LogRecordExporter
+    switch environment {
+    case .debug:
+      logExporter = StdoutLogExporter(isDebug: true)
+    case .production:
+      logExporter = StdoutLogExporter(isDebug: false)
+    }
+
+    let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logExporter)
+    let loggerProvider = LoggerProviderSdk(
+      resource: resource,
+      logRecordProcessors: [logProcessor]
+    )
+
+    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
+
     // --- Return a TelemetryClient for dependency injection ---
 
     let tracer = tracerProvider.get(

@@ -4,16 +4,28 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
+/// Container for in-memory test collectors returned by ``TelemetryClient/test(errorDetailPolicy:)``.
+public struct TestCollectors: Sendable {
+  /// Collected spans from traced reducers, effects, and dependency calls.
+  public let spans: InMemorySpanCollector
+  /// Collected log records (from `telemetry.info()`, `telemetry.error()`, etc.).
+  public let logs: InMemoryLogCollector
+  /// Optional metric reader.
+  public let metrics: InMemoryMetricReader?
+}
+
 /// Convenience factory for creating a ``TelemetryClient`` wired to in-memory
 /// collectors, suitable for test assertions.
 ///
 /// ```swift
-/// let (client, collector) = TelemetryClient.test()
+/// let (client, collectors) = TelemetryClient.test()
 /// let store = TestStore(...) {
 ///   MyFeature()
 /// } withDependencies: {
 ///   $0.composableOTel = client
 /// }
+/// // After exercising actions:
+/// collectors.spans.assertSpanExists(named: "reducer/MyFeature")
 /// ```
 extension TelemetryClient {
   /// Creates a test telemetry client backed by in-memory collectors.
@@ -22,19 +34,18 @@ extension TelemetryClient {
   /// `OpenTelemetry.instance` sees the same providers.
   ///
   /// - Parameters:
-  ///   - spanCollector: The in-memory span collector. Created if not provided.
   ///   - metricReader: Optional in-memory metric reader.
   ///   - errorDetailPolicy: Error detail policy for tests (default: `.redacted`).
-  /// - Returns: A tuple of `(TelemetryClient, InMemorySpanCollector)`.
+  /// - Returns: A tuple of `(TelemetryClient, TestCollectors)`.
   public static func test(
-    spanCollector: InMemorySpanCollector = InMemorySpanCollector(),
     metricReader: InMemoryMetricReader? = nil,
     errorDetailPolicy: ErrorDetailPolicy = .redacted
-  ) -> (client: TelemetryClient, spanCollector: InMemorySpanCollector) {
+  ) -> (client: TelemetryClient, collectors: TestCollectors) {
     // Build tracer provider
-    let processor = SimpleSpanProcessor(spanExporter: spanCollector)
+    let spanCollector = InMemorySpanCollector()
+    let spanProcessor = SimpleSpanProcessor(spanExporter: spanCollector)
     let tracerProvider = TracerProviderBuilder()
-      .add(spanProcessor: processor)
+      .add(spanProcessor: spanProcessor)
       .build()
     OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
 
@@ -55,13 +66,25 @@ extension TelemetryClient {
       meter = DefaultMeterProvider.instance.get(name: "ComposableOTel")
     }
 
+    // Build logger provider
+    let logCollector = InMemoryLogCollector()
+    let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logCollector)
+    let loggerProvider = LoggerProviderSdk(logRecordProcessors: [logProcessor])
+    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
+
     let client = TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter),
       errorDetailPolicy: errorDetailPolicy
     )
 
-    return (client, spanCollector)
+    let collectors = TestCollectors(
+      spans: spanCollector,
+      logs: logCollector,
+      metrics: metricReader
+    )
+
+    return (client, collectors)
   }
 }
 

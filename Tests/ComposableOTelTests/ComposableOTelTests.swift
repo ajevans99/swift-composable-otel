@@ -55,7 +55,7 @@ struct ComposableOTelAllTests {
     @Test("produces a span per action")
     @MainActor
     func spanPerAction() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
@@ -68,7 +68,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let spans = collector.spans(named: "reducer/CounterFeature")
+      let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(!spans.isEmpty, "Expected at least one reducer span")
 
       if let span = spans.first {
@@ -79,7 +79,7 @@ struct ComposableOTelAllTests {
     @Test("records action type attribute for decrement")
     @MainActor
     func actionTypeAttribute() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
@@ -92,7 +92,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let spans = collector.spans(named: "reducer/CounterFeature")
+      let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(!spans.isEmpty)
       if let span = spans.first {
         #expect(span.attributes["tca.action.type"]?.description == "decrement")
@@ -102,7 +102,7 @@ struct ComposableOTelAllTests {
     @Test("multiple actions produce multiple spans")
     @MainActor
     func multipleSpans() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
@@ -117,14 +117,14 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let spans = collector.spans(named: "reducer/CounterFeature")
+      let spans = collectors.spans.spans(named: "reducer/CounterFeature")
       #expect(spans.count >= 3)
     }
 
     @Test("reducer name defaults to type name when not specified")
     @MainActor
     func defaultReducerName() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let store = TestStore(
         initialState: CounterFeature.State()
@@ -148,7 +148,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let spans = collector.spans(named: "reducer/Reduce")
+      let spans = collectors.spans.spans(named: "reducer/Reduce")
       #expect(!spans.isEmpty)
     }
   }
@@ -160,7 +160,7 @@ struct ComposableOTelAllTests {
     @Test("tracedRun produces an effect span")
     @MainActor
     func tracedRunSpan() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
@@ -177,7 +177,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let effectSpans = collector.spans(named: "effect/fetchCount")
+      let effectSpans = collectors.spans.spans(named: "effect/fetchCount")
       #expect(!effectSpans.isEmpty, "Expected an effect span for fetchCount")
     }
   }
@@ -188,7 +188,7 @@ struct ComposableOTelAllTests {
   struct TracedCallTests {
     @Test("tracedCall creates a dependency span")
     func dependencySpan() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let result: Int = await withDependencies {
         $0.composableOTel = client
@@ -203,12 +203,12 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      collector.assertSpanExists(named: "dependency/testDep/getValue")
+      collectors.spans.assertSpanExists(named: "dependency/testDep/getValue")
     }
 
     @Test("tracedCall records error on throw")
     func dependencyError() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       struct TestError: Error {}
 
@@ -228,7 +228,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      let spans = collector.spans(named: "dependency/testDep/failing")
+      let spans = collectors.spans.spans(named: "dependency/testDep/failing")
       #expect(!spans.isEmpty)
       if let span = spans.first {
         #expect(span.status.isError)
@@ -237,7 +237,7 @@ struct ComposableOTelAllTests {
 
     @Test("non-throwing tracedCall works")
     func nonThrowingCall() async {
-      let (client, collector) = TelemetryClient.test()
+      let (client, collectors) = TelemetryClient.test()
 
       let result: String = await withDependencies {
         $0.composableOTel = client
@@ -252,7 +252,7 @@ struct ComposableOTelAllTests {
       let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
-      collector.assertSpanExists(named: "dependency/cache/load")
+      collectors.spans.assertSpanExists(named: "dependency/cache/load")
     }
   }
 

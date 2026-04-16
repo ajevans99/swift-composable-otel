@@ -1,0 +1,9 @@
+version: 1
+builder:
+  configs:
+    - documentation_targets:
+        - ComposableOTel
+        - ComposableOTelExporters
+        - ComposableOTelTesting
+      platform: macosDeveloperTools
+      swift_version: "6.0"

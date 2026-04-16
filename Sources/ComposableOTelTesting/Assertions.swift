@@ -1,7 +1,8 @@
-#if canImport(XCTest)
-import XCTest
-#endif
 import OpenTelemetrySdk
+
+#if canImport(XCTest)
+  import XCTest
+#endif
 
 // MARK: - Span assertions
 
@@ -112,8 +113,8 @@ private func fail(
   line: UInt
 ) {
   #if canImport(XCTest)
-  XCTFail(message, file: file, line: line)
+    XCTFail(message, file: file, line: line)
   #else
-  preconditionFailure(message, file: file, line: line)
+    preconditionFailure(message, file: file, line: line)
   #endif
 }

@@ -1,8 +1,8 @@
+import ComposableOTel
 import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import StdoutExporter
-import ComposableOTel
 
 /// Configures OpenTelemetry providers for a TCA application.
 public enum TelemetryBootstrap {
@@ -34,7 +34,8 @@ public enum TelemetryBootstrap {
   ) -> TelemetryClient {
     // --- Resource ---
 
-    let version = serviceVersion
+    let version =
+      serviceVersion
       ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
       ?? "unknown"
 

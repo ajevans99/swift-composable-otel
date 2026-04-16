@@ -20,7 +20,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _actionsDispatched: (any LongCounter)?
   public var actionsDispatched: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _actionsDispatched { return c }
     let c = meter.counterBuilder(name: "tca.actions.dispatched").build()
     _actionsDispatched = c
@@ -29,7 +30,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _effectsStarted: (any LongCounter)?
   public var effectsStarted: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _effectsStarted { return c }
     let c = meter.counterBuilder(name: "tca.effects.started").build()
     _effectsStarted = c
@@ -38,7 +40,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _effectsCompleted: (any LongCounter)?
   public var effectsCompleted: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _effectsCompleted { return c }
     let c = meter.counterBuilder(name: "tca.effects.completed").build()
     _effectsCompleted = c
@@ -47,7 +50,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _effectsCancelled: (any LongCounter)?
   public var effectsCancelled: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _effectsCancelled { return c }
     let c = meter.counterBuilder(name: "tca.effects.cancelled").build()
     _effectsCancelled = c
@@ -56,7 +60,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _effectsErrored: (any LongCounter)?
   public var effectsErrored: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _effectsErrored { return c }
     let c = meter.counterBuilder(name: "tca.effects.errored").build()
     _effectsErrored = c
@@ -65,7 +70,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _dependenciesCalled: (any LongCounter)?
   public var dependenciesCalled: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _dependenciesCalled { return c }
     let c = meter.counterBuilder(name: "tca.dependencies.called").build()
     _dependenciesCalled = c
@@ -74,7 +80,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _dependenciesErrored: (any LongCounter)?
   public var dependenciesErrored: any LongCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _dependenciesErrored { return c }
     let c = meter.counterBuilder(name: "tca.dependencies.errored").build()
     _dependenciesErrored = c
@@ -85,7 +92,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _reducerDuration: (any DoubleHistogram)?
   public var reducerDuration: any DoubleHistogram {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let h = _reducerDuration { return h }
     let h = meter.histogramBuilder(name: "tca.reducer.duration").build()
     _reducerDuration = h
@@ -94,7 +102,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _effectDuration: (any DoubleHistogram)?
   public var effectDuration: any DoubleHistogram {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let h = _effectDuration { return h }
     let h = meter.histogramBuilder(name: "tca.effect.duration").build()
     _effectDuration = h
@@ -103,7 +112,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _dependencyDuration: (any DoubleHistogram)?
   public var dependencyDuration: any DoubleHistogram {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let h = _dependencyDuration { return h }
     let h = meter.histogramBuilder(name: "tca.dependency.duration").build()
     _dependencyDuration = h
@@ -114,7 +124,8 @@ public final class MetricInstruments: @unchecked Sendable {
 
   private var _activeEffects: (any LongUpDownCounter)?
   public var activeEffects: any LongUpDownCounter {
-    lock.lock(); defer { lock.unlock() }
+    lock.lock()
+    defer { lock.unlock() }
     if let c = _activeEffects { return c }
     let c = meter.upDownCounterBuilder(name: "tca.store.active_effects").build()
     _activeEffects = c

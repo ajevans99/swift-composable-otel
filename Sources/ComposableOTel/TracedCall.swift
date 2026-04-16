@@ -45,8 +45,8 @@ public func tracedCall<T: Sendable>(
     let result = try await operation()
 
     let elapsed = clock.now - startTime
-    let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
-      Double(elapsed.components.seconds) * 1000
+    let durationMs =
+      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
 
     var durationHist = telemetry.metrics.dependencyDuration
     durationHist.record(value: durationMs, attributes: attrs)
@@ -54,30 +54,36 @@ public func tracedCall<T: Sendable>(
     return result
   } catch {
     let elapsed = clock.now - startTime
-    let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
-      Double(elapsed.components.seconds) * 1000
+    let durationMs =
+      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
 
     let policy = telemetry.errorDetailPolicy
     let body = policy.errorBody(for: error, context: "Dependency call failed")
 
     span.setAttribute(key: TCAAttributes.dependencyError, value: true)
     span.status = .error(description: body)
-    span.addEvent(name: "exception", attributes: [
-      TCAAttributes.errorType: .string(String(describing: type(of: error))),
-      TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-    ])
+    span.addEvent(
+      name: "exception",
+      attributes: [
+        TCAAttributes.errorType: .string(String(describing: type(of: error))),
+        TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+      ]
+    )
 
     var erroredCounter = telemetry.metrics.dependenciesErrored
     erroredCounter.add(value: 1, attributes: attrs)
     var durationHist2 = telemetry.metrics.dependencyDuration
     durationHist2.record(value: durationMs, attributes: attrs)
 
-    telemetry.error(body, attributes: [
-      TCAAttributes.dependencyName: .string(dependencyName),
-      TCAAttributes.dependencyMethod: .string(method),
-      TCAAttributes.errorType: .string(String(describing: type(of: error))),
-      TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-    ])
+    telemetry.error(
+      body,
+      attributes: [
+        TCAAttributes.dependencyName: .string(dependencyName),
+        TCAAttributes.dependencyMethod: .string(method),
+        TCAAttributes.errorType: .string(String(describing: type(of: error))),
+        TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+      ]
+    )
 
     span.end()
     throw error
@@ -114,8 +120,8 @@ public func tracedCall<T: Sendable>(
   let result = await operation()
 
   let elapsed = clock.now - startTime
-  let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
-    Double(elapsed.components.seconds) * 1000
+  let durationMs =
+    Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
 
   var durationHist = telemetry.metrics.dependencyDuration
   durationHist.record(value: durationMs, attributes: attrs)

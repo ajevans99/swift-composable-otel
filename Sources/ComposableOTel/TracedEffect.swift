@@ -24,9 +24,12 @@ extension Effect {
       span.end()
 
       var counter = telemetry.metrics.effectsStarted
-      counter.add(value: 1, attributes: [
-        TCAAttributes.effectName: .string(effectName),
-      ])
+      counter.add(
+        value: 1,
+        attributes: [
+          TCAAttributes.effectName: .string(effectName)
+        ]
+      )
     }
     return self.merge(with: signalEffect)
   }
@@ -62,9 +65,12 @@ extension Effect {
         .startSpan()
 
       var startedCounter = telemetry.metrics.effectsStarted
-      startedCounter.add(value: 1, attributes: [
-        TCAAttributes.effectName: .string(name),
-      ])
+      startedCounter.add(
+        value: 1,
+        attributes: [
+          TCAAttributes.effectName: .string(name)
+        ]
+      )
       var activeUp = telemetry.metrics.activeEffects
       activeUp.add(value: 1, attributes: [:])
 
@@ -78,13 +84,19 @@ extension Effect {
         span.end()
 
         var completedCounter = telemetry.metrics.effectsCompleted
-        completedCounter.add(value: 1, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        completedCounter.add(
+          value: 1,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(value: durationMs, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        durationHist.record(
+          value: durationMs,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var activeDown = telemetry.metrics.activeEffects
         activeDown.add(value: -1, attributes: [:])
       } catch is CancellationError {
@@ -94,13 +106,19 @@ extension Effect {
         span.end()
 
         var cancelledCounter = telemetry.metrics.effectsCancelled
-        cancelledCounter.add(value: 1, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        cancelledCounter.add(
+          value: 1,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(value: durationMs, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        durationHist.record(
+          value: durationMs,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var activeDown = telemetry.metrics.activeEffects
         activeDown.add(value: -1, attributes: [:])
       } catch {
@@ -109,28 +127,40 @@ extension Effect {
         let body = policy.errorBody(for: error, context: "Effect failed")
 
         span.status = .error(description: body)
-        span.addEvent(name: "exception", attributes: [
-          TCAAttributes.errorType: .string(String(describing: type(of: error))),
-          TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-        ])
+        span.addEvent(
+          name: "exception",
+          attributes: [
+            TCAAttributes.errorType: .string(String(describing: type(of: error))),
+            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+          ]
+        )
         span.end()
 
         var erroredCounter = telemetry.metrics.effectsErrored
-        erroredCounter.add(value: 1, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        erroredCounter.add(
+          value: 1,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(value: durationMs, attributes: [
-          TCAAttributes.effectName: .string(name),
-        ])
+        durationHist.record(
+          value: durationMs,
+          attributes: [
+            TCAAttributes.effectName: .string(name)
+          ]
+        )
         var activeDown = telemetry.metrics.activeEffects
         activeDown.add(value: -1, attributes: [:])
 
-        telemetry.error(body, attributes: [
-          TCAAttributes.effectName: .string(name),
-          TCAAttributes.errorType: .string(String(describing: type(of: error))),
-          TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-        ])
+        telemetry.error(
+          body,
+          attributes: [
+            TCAAttributes.effectName: .string(name),
+            TCAAttributes.errorType: .string(String(describing: type(of: error))),
+            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+          ]
+        )
       }
     }
   }
@@ -154,9 +184,12 @@ extension Effect {
       startSpan.end()
 
       var startedCounter = telemetry.metrics.effectsStarted
-      startedCounter.add(value: 1, attributes: [
-        TCAAttributes.effectName: .string(name),
-      ])
+      startedCounter.add(
+        value: 1,
+        attributes: [
+          TCAAttributes.effectName: .string(name)
+        ]
+      )
       var activeUp = telemetry.metrics.activeEffects
       activeUp.add(value: 1, attributes: [:])
 
@@ -170,11 +203,14 @@ extension Effect {
       } catch {
         let policy = telemetry.errorDetailPolicy
         let body = policy.errorBody(for: error, context: "Long-lived effect failed")
-        telemetry.error(body, attributes: [
-          TCAAttributes.effectName: .string(name),
-          TCAAttributes.errorType: .string(String(describing: type(of: error))),
-          TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-        ])
+        telemetry.error(
+          body,
+          attributes: [
+            TCAAttributes.effectName: .string(name),
+            TCAAttributes.errorType: .string(String(describing: type(of: error))),
+            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+          ]
+        )
       }
 
       let durationMs = durationMilliseconds(from: startTime, clock: clock)
@@ -187,13 +223,19 @@ extension Effect {
       endSpan.end()
 
       var completedCounter = telemetry.metrics.effectsCompleted
-      completedCounter.add(value: 1, attributes: [
-        TCAAttributes.effectName: .string(name),
-      ])
+      completedCounter.add(
+        value: 1,
+        attributes: [
+          TCAAttributes.effectName: .string(name)
+        ]
+      )
       var durationHist = telemetry.metrics.effectDuration
-      durationHist.record(value: durationMs, attributes: [
-        TCAAttributes.effectName: .string(name),
-      ])
+      durationHist.record(
+        value: durationMs,
+        attributes: [
+          TCAAttributes.effectName: .string(name)
+        ]
+      )
       var activeDown = telemetry.metrics.activeEffects
       activeDown.add(value: -1, attributes: [:])
     }
@@ -202,7 +244,9 @@ extension Effect {
 
 // MARK: - Duration Helper
 
-private func durationMilliseconds(from start: ContinuousClock.Instant, clock: ContinuousClock) -> Double {
+private func durationMilliseconds(from start: ContinuousClock.Instant, clock: ContinuousClock)
+  -> Double
+{
   let elapsed = clock.now - start
   return Double(elapsed.components.seconds) * 1000.0
     + Double(elapsed.components.attoseconds) / 1e15

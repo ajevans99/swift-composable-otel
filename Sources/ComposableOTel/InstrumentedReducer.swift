@@ -70,8 +70,8 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
     let effect = base._reduce(into: &state, action: action)
 
     let elapsed = clock.now - startTime
-    let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
-      Double(elapsed.components.seconds) * 1000
+    let durationMs =
+      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
 
     if let stateSnapshot {
       let newSnapshot = String(describing: state)

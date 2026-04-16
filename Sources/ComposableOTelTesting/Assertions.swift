@@ -1,8 +1,5 @@
+import IssueReporting
 import OpenTelemetrySdk
-
-#if canImport(XCTest)
-  import XCTest
-#endif
 
 // MARK: - Span assertions
 
@@ -105,16 +102,12 @@ extension InMemoryMetricReader {
 
 // MARK: - Failure helper
 
-/// Reports a test failure via XCTest when available, otherwise falls back to
-/// `preconditionFailure`.
+/// Reports a test failure via IssueReporting, which dynamically routes to
+/// XCTest/Swift Testing when running in a test context.
 private func fail(
   _ message: String,
   file: StaticString,
   line: UInt
 ) {
-  #if canImport(XCTest)
-    XCTFail(message, file: file, line: line)
-  #else
-    preconditionFailure(message, file: file, line: line)
-  #endif
+  reportIssue(message, fileID: "", filePath: file, line: line, column: 0)
 }

@@ -1,3 +1,4 @@
+import Dependencies
 import Foundation
 import OpenTelemetryApi
 
@@ -5,6 +6,9 @@ import OpenTelemetryApi
 ///
 /// Creates a span `dependency/{dependencyName}/{method}` covering the call duration,
 /// and records metrics for call count, duration, and errors.
+///
+/// When called from a TCA effect, inherits the store's dependency context automatically.
+/// Outside TCA context, uses the live (global OTel) telemetry client.
 ///
 /// ```swift
 /// try await tracedCall("goalDatabase", method: "fetchGoal") {
@@ -16,13 +20,10 @@ public func tracedCall<T: Sendable>(
   method: String,
   operation: @Sendable () async throws -> T
 ) async throws -> T {
-  let tracer = OpenTelemetry.instance.tracerProvider.get(
-    instrumentationName: "ComposableOTel",
-    instrumentationVersion: "0.1.0"
-  )
+  @Dependency(\.composableOTel) var telemetry
 
   let spanName = "dependency/\(dependencyName)/\(method)"
-  let span = tracer.spanBuilder(spanName: spanName)
+  let span = telemetry.tracer.spanBuilder(spanName: spanName)
     .setSpanKind(spanKind: .internal)
     .setAttribute(key: TCAAttributes.dependencyName, value: dependencyName)
     .setAttribute(key: TCAAttributes.dependencyMethod, value: method)
@@ -34,7 +35,7 @@ public func tracedCall<T: Sendable>(
     TCAAttributes.dependencyMethod: .string(method),
   ]
 
-  var calledCounter = TCAMetrics.shared.dependenciesCalled
+  var calledCounter = telemetry.metrics.dependenciesCalled
   calledCounter.add(value: 1, attributes: attrs)
 
   let clock = ContinuousClock()
@@ -47,7 +48,7 @@ public func tracedCall<T: Sendable>(
     let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
       Double(elapsed.components.seconds) * 1000
 
-    var durationHist = TCAMetrics.shared.dependencyDuration
+    var durationHist = telemetry.metrics.dependencyDuration
     durationHist.record(value: durationMs, attributes: attrs)
     span.end()
     return result
@@ -56,7 +57,7 @@ public func tracedCall<T: Sendable>(
     let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
       Double(elapsed.components.seconds) * 1000
 
-    let policy = TelemetryConfiguration.shared.errorDetailPolicy
+    let policy = telemetry.errorDetailPolicy
     let body = policy.errorBody(for: error, context: "Dependency call failed")
 
     span.setAttribute(key: TCAAttributes.dependencyError, value: true)
@@ -66,12 +67,12 @@ public func tracedCall<T: Sendable>(
       TCAAttributes.errorRedacted: .bool(policy.isRedacted),
     ])
 
-    var erroredCounter = TCAMetrics.shared.dependenciesErrored
+    var erroredCounter = telemetry.metrics.dependenciesErrored
     erroredCounter.add(value: 1, attributes: attrs)
-    var durationHist2 = TCAMetrics.shared.dependencyDuration
+    var durationHist2 = telemetry.metrics.dependencyDuration
     durationHist2.record(value: durationMs, attributes: attrs)
 
-    TCALogger.shared.error(body, attributes: [
+    telemetry.error(body, attributes: [
       TCAAttributes.dependencyName: .string(dependencyName),
       TCAAttributes.dependencyMethod: .string(method),
       TCAAttributes.errorType: .string(String(describing: type(of: error))),
@@ -84,24 +85,15 @@ public func tracedCall<T: Sendable>(
 }
 
 /// Traces a non-throwing async dependency call with OpenTelemetry.
-///
-/// ```swift
-/// await tracedCall("myClient", method: "loadCache") {
-///   await self.loadCache()
-/// }
-/// ```
 public func tracedCall<T: Sendable>(
   _ dependencyName: String,
   method: String,
   operation: @Sendable () async -> T
 ) async -> T {
-  let tracer = OpenTelemetry.instance.tracerProvider.get(
-    instrumentationName: "ComposableOTel",
-    instrumentationVersion: "0.1.0"
-  )
+  @Dependency(\.composableOTel) var telemetry
 
   let spanName = "dependency/\(dependencyName)/\(method)"
-  let span = tracer.spanBuilder(spanName: spanName)
+  let span = telemetry.tracer.spanBuilder(spanName: spanName)
     .setSpanKind(spanKind: .internal)
     .setAttribute(key: TCAAttributes.dependencyName, value: dependencyName)
     .setAttribute(key: TCAAttributes.dependencyMethod, value: method)
@@ -113,7 +105,7 @@ public func tracedCall<T: Sendable>(
     TCAAttributes.dependencyMethod: .string(method),
   ]
 
-  var calledCounter = TCAMetrics.shared.dependenciesCalled
+  var calledCounter = telemetry.metrics.dependenciesCalled
   calledCounter.add(value: 1, attributes: attrs)
 
   let clock = ContinuousClock()
@@ -125,7 +117,7 @@ public func tracedCall<T: Sendable>(
   let durationMs = Double(elapsed.components.attoseconds) / 1e15 +
     Double(elapsed.components.seconds) * 1000
 
-  var durationHist = TCAMetrics.shared.dependencyDuration
+  var durationHist = telemetry.metrics.dependencyDuration
   durationHist.record(value: durationMs, attributes: attrs)
   span.end()
   return result

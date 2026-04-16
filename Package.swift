@@ -22,6 +22,10 @@ let package = Package(
       url: "https://github.com/pointfreeco/swift-composable-architecture",
       from: "1.17.0"
     ),
+    .package(
+      url: "https://github.com/pointfreeco/swift-dependencies",
+      from: "1.4.0"
+    ),
   ],
   targets: [
     .target(
@@ -29,6 +33,8 @@ let package = Package(
       dependencies: [
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+        .product(name: "Dependencies", package: "swift-dependencies"),
+        .product(name: "DependenciesMacros", package: "swift-dependencies"),
       ]
     ),
     .target(

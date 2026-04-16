@@ -16,19 +16,22 @@ public enum TelemetryBootstrap {
 
   /// Configure telemetry with environment-appropriate defaults.
   ///
-  /// - Parameters:
-  ///   - serviceName: The service name resource attribute (e.g., "my-ios-app").
-  ///   - serviceVersion: Optional service version. Auto-detected from Bundle if nil.
-  ///   - environment: The deployment environment.
-  ///   - samplingRatio: Trace sampling ratio (0.0 to 1.0). Default: 1.0 for debug, 0.1 for production.
-  ///   - errorDetailPolicy: How error details are handled in telemetry.
+  /// Registers global OTel providers and returns a ``TelemetryClient`` suitable for
+  /// injecting into `DependencyValues.composableOTel`.
+  ///
+  /// ```swift
+  /// // In App init:
+  /// let client = TelemetryBootstrap.configure(serviceName: "my-app")
+  /// // Then inject into store dependencies
+  /// ```
+  @discardableResult
   public static func configure(
     serviceName: String,
     serviceVersion: String? = nil,
     environment: Environment = .debug,
     samplingRatio: Double? = nil,
     errorDetailPolicy: ErrorDetailPolicy = .redacted
-  ) {
+  ) -> TelemetryClient {
     // --- Resource ---
 
     let version = serviceVersion
@@ -112,8 +115,18 @@ public enum TelemetryBootstrap {
 
     OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
 
-    // --- Shared configuration ---
+    // --- Return a TelemetryClient for dependency injection ---
 
-    TelemetryConfiguration.shared.errorDetailPolicy = errorDetailPolicy
+    let tracer = tracerProvider.get(
+      instrumentationName: "ComposableOTel",
+      instrumentationVersion: "0.1.0"
+    )
+    let meter = meterProvider.get(name: "ComposableOTel")
+
+    return TelemetryClient(
+      tracer: tracer,
+      metrics: MetricInstruments(meter: meter),
+      errorDetailPolicy: errorDetailPolicy
+    )
   }
 }

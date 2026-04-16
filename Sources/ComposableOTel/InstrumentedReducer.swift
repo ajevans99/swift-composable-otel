@@ -1,4 +1,5 @@
 import ComposableArchitecture
+import Dependencies
 import Foundation
 import OpenTelemetryApi
 
@@ -38,6 +39,8 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
   @usableFromInline let options: InstrumentationOptions
   @usableFromInline let reducerName: String
 
+  @Dependency(\.composableOTel) var telemetry
+
   @inlinable
   public init(base: Base, name: String? = nil, options: InstrumentationOptions = .init()) {
     self.base = base
@@ -49,22 +52,16 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
     into state: inout Base.State,
     action: Base.Action
   ) -> Effect<Base.Action> {
-    let tracer = OpenTelemetry.instance.tracerProvider.get(
-      instrumentationName: "ComposableOTel",
-      instrumentationVersion: "0.1.0"
-    )
-
     let actionName = Self.extractActionName(action)
     let spanName = "reducer/\(reducerName)"
 
-    let span = tracer.spanBuilder(spanName: spanName)
+    let span = telemetry.tracer.spanBuilder(spanName: spanName)
       .setSpanKind(spanKind: .internal)
       .setAttribute(key: TCAAttributes.reducerName, value: reducerName)
       .setAttribute(key: TCAAttributes.actionType, value: actionName)
       .setActive(true)
       .startSpan()
 
-    // Snapshot state before reduction if diff tracking is enabled
     let stateSnapshot: String? = options.stateDiffs ? String(describing: state) : nil
 
     let clock = ContinuousClock()
@@ -90,14 +87,14 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
         TCAAttributes.reducerName: .string(reducerName),
         TCAAttributes.actionType: .string(actionName),
       ]
-      var actionsCounter = TCAMetrics.shared.actionsDispatched
+      var actionsCounter = telemetry.metrics.actionsDispatched
       actionsCounter.add(value: 1, attributes: attrs)
-      var durationHist = TCAMetrics.shared.reducerDuration
+      var durationHist = telemetry.metrics.reducerDuration
       durationHist.record(value: durationMs, attributes: attrs)
     }
 
     if options.actionLogging {
-      TCALogger.shared.info(
+      telemetry.info(
         "Action dispatched: \(actionName)",
         attributes: [
           TCAAttributes.reducerName: .string(reducerName),

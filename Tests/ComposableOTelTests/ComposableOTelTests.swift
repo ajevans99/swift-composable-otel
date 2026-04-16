@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import ComposableOTel
 import ComposableOTelTesting
+import Dependencies
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import Testing
@@ -43,19 +44,6 @@ struct CounterFeature {
   }
 }
 
-// MARK: - Helpers
-
-/// Sets up test telemetry and returns (collector, provider) for flushing.
-private func setupTestTelemetry() -> (InMemorySpanCollector, TracerProviderSdk) {
-  let collector = InMemorySpanCollector()
-  let processor = SimpleSpanProcessor(spanExporter: collector)
-  let provider = TracerProviderBuilder()
-    .add(spanProcessor: processor)
-    .build()
-  OpenTelemetry.registerTracerProvider(tracerProvider: provider)
-  return (collector, provider)
-}
-
 // All telemetry tests must be serialized since they share OpenTelemetry.instance
 @Suite("ComposableOTel", .serialized)
 struct ComposableOTelAllTests {
@@ -67,13 +55,17 @@ struct ComposableOTelAllTests {
     @Test("produces a span per action")
     @MainActor
     func spanPerAction() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
+      } withDependencies: {
+        $0.composableOTel = client
       }
 
       await store.send(.increment) { $0.count = 1 }
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let spans = collector.spans(named: "reducer/CounterFeature")
@@ -87,13 +79,17 @@ struct ComposableOTelAllTests {
     @Test("records action type attribute for decrement")
     @MainActor
     func actionTypeAttribute() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
+      } withDependencies: {
+        $0.composableOTel = client
       }
 
       await store.send(.decrement) { $0.count = -1 }
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let spans = collector.spans(named: "reducer/CounterFeature")
@@ -106,15 +102,19 @@ struct ComposableOTelAllTests {
     @Test("multiple actions produce multiple spans")
     @MainActor
     func multipleSpans() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
+      } withDependencies: {
+        $0.composableOTel = client
       }
 
       await store.send(.increment) { $0.count = 1 }
       await store.send(.increment) { $0.count = 2 }
       await store.send(.decrement) { $0.count = 1 }
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let spans = collector.spans(named: "reducer/CounterFeature")
@@ -124,7 +124,7 @@ struct ComposableOTelAllTests {
     @Test("reducer name defaults to type name when not specified")
     @MainActor
     func defaultReducerName() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       let store = TestStore(
         initialState: CounterFeature.State()
@@ -139,9 +139,13 @@ struct ComposableOTelAllTests {
           }
         }
         .instrumented()
+      } withDependencies: {
+        $0.composableOTel = client
       }
 
       await store.send(.increment) { $0.count = 1 }
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let spans = collector.spans(named: "reducer/Reduce")
@@ -156,10 +160,12 @@ struct ComposableOTelAllTests {
     @Test("tracedRun produces an effect span")
     @MainActor
     func tracedRunSpan() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
+      } withDependencies: {
+        $0.composableOTel = client
       }
 
       await store.send(.fetchAndSet)
@@ -168,6 +174,7 @@ struct ComposableOTelAllTests {
       }
 
       try? await Task.sleep(for: .milliseconds(50))
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let effectSpans = collector.spans(named: "effect/fetchCount")
@@ -181,13 +188,19 @@ struct ComposableOTelAllTests {
   struct TracedCallTests {
     @Test("tracedCall creates a dependency span")
     func dependencySpan() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
-      let result: Int = await tracedCall("testDep", method: "getValue") {
-        42
+      let result: Int = await withDependencies {
+        $0.composableOTel = client
+      } operation: {
+        await tracedCall("testDep", method: "getValue") {
+          42
+        }
       }
 
       #expect(result == 42)
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       collector.assertSpanExists(named: "dependency/testDep/getValue")
@@ -195,18 +208,24 @@ struct ComposableOTelAllTests {
 
     @Test("tracedCall records error on throw")
     func dependencyError() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
       struct TestError: Error {}
 
       do {
-        let _: Int = try await tracedCall("testDep", method: "failing") {
-          throw TestError()
+        let _: Int = try await withDependencies {
+          $0.composableOTel = client
+        } operation: {
+          try await tracedCall("testDep", method: "failing") {
+            throw TestError()
+          }
         }
         Issue.record("Should have thrown")
       } catch {
         // expected
       }
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       let spans = collector.spans(named: "dependency/testDep/failing")
@@ -218,13 +237,19 @@ struct ComposableOTelAllTests {
 
     @Test("non-throwing tracedCall works")
     func nonThrowingCall() async {
-      let (collector, provider) = setupTestTelemetry()
+      let (client, collector) = TelemetryClient.test()
 
-      let result: String = await tracedCall("cache", method: "load") {
-        "cached_value"
+      let result: String = await withDependencies {
+        $0.composableOTel = client
+      } operation: {
+        await tracedCall("cache", method: "load") {
+          "cached_value"
+        }
       }
 
       #expect(result == "cached_value")
+
+      let provider = OpenTelemetry.instance.tracerProvider as! TracerProviderSdk
       provider.forceFlush()
 
       collector.assertSpanExists(named: "dependency/cache/load")
@@ -265,14 +290,14 @@ struct ComposableOTelAllTests {
     }
   }
 
-  // MARK: - TelemetryConfiguration Tests
+  // MARK: - TelemetryClient Tests
 
-  @Suite("TelemetryConfiguration")
-  struct TelemetryConfigurationTests {
-    @Test("default policy is redacted")
+  @Suite("TelemetryClient")
+  struct TelemetryClientTests {
+    @Test("default error detail policy is redacted")
     func defaultRedacted() {
-      let config = TelemetryConfiguration.shared
-      #expect(config.errorDetailPolicy.isRedacted == true)
+      let (client, _) = TelemetryClient.test()
+      #expect(client.errorDetailPolicy.isRedacted == true)
     }
   }
 

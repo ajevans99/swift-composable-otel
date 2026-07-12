@@ -96,7 +96,7 @@ private struct StateChangeBenchmarkFeature {
 }
 
 @main
-private enum ComposableOTelBenchmarks {
+private enum ReleaseBenchmarks {
   @MainActor
   static func main() async throws {
     let budgets = try loadBudgets()

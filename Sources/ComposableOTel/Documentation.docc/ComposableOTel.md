@@ -14,8 +14,9 @@ logs. Reducer actions and state are never reflected. Optional state-change repor
 non-exported ``StateChangeToken`` values. Errors expose only schema-bounded metadata from
 ``TelemetryErrorMetadata`` and generic status/log text.
 
-`ComposableOTelExporters` installs exporter-boundary filtering and metric views. Production remains
-stdout-only; endpoint and headers do not send OTLP telemetry.
+`ComposableOTelExporters` supplies the development stdout bootstrap plus a lifecycle-owning
+production `TelemetryRuntime` with bounded OTLP/HTTP delivery. Both install the same
+exporter-boundary filtering and metric views.
 
 ### Adoption
 

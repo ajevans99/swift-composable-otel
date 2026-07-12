@@ -2,7 +2,7 @@ import ComposableOTel
 import Foundation
 import OpenTelemetrySdk
 
-/// A privacy-preserving span exporter with compact console formatting.
+/// A development-only privacy-preserving span exporter with compact console formatting.
 ///
 /// Output format:
 /// ```

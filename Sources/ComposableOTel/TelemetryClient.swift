@@ -139,9 +139,9 @@ struct SendableLogger: @unchecked Sendable {
 
 /// The dependency-injected runtime for bounded ComposableOTel instrumentation.
 ///
-/// Use `TelemetryBootstrap.configure` for the package-owned SDK pipeline. The
-/// ``unsafeCustomSDK(tracer:metrics:logger:policy:)`` factory is a trust boundary: callers using it
-/// must install privacy-preserving views/processors/exporters themselves.
+/// Use `TelemetryRuntime.client` for production or `TelemetryBootstrap.configure` for explicit
+/// development stdout. The ``unsafeCustomSDK(tracer:metrics:logger:policy:)`` factory is a trust
+/// boundary: callers using it must install privacy-preserving views/processors/exporters themselves.
 public struct TelemetryClient: Sendable {
   let tracer: SendableTracer
   let metrics: MetricInstruments

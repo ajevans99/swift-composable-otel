@@ -566,7 +566,7 @@ struct ComposableOTelAllTests {
       let resource = TelemetryBootstrap.makeResource(
         serviceName: "metadata-test",
         serviceVersion: "1.2.3",
-        environment: .production(endpoint: "https://unused.invalid"),
+        deploymentEnvironment: "production",
         policy: testPolicy()
       )
       #expect(resource.attributes["service.name"] == .string("metadata-test"))

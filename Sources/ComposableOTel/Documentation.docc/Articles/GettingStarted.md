@@ -49,8 +49,8 @@ let store = Store(initialState: AppFeature.State()) {
 ```
 
 Bootstrap is thread-safe and first-configuration-wins idempotent. It does not replace process-global
-OpenTelemetry providers. Both environments use privacy-preserving stdout exporters. Production
-endpoint and headers are unused, and the package does not provide remote OTLP transport.
+OpenTelemetry providers and is intentionally development-only. Use `TelemetryRuntime` from
+`ComposableOTelExporters` for production OTLP/HTTP delivery.
 
 ## Instrument a reducer
 

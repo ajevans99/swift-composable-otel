@@ -6,11 +6,11 @@ import OpenTelemetrySdk
 /// Sanitizes span names, resources, attributes, events, links, and status before export.
 public final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Sendable {
   private let exporter: any SpanExporter
-  private let policy: TelemetryPolicy
+  private let boundary: TelemetryPrivacyBoundary
 
   public init(exporter: any SpanExporter, policy: TelemetryPolicy) {
     self.exporter = exporter
-    self.policy = policy
+    boundary = TelemetryPrivacyBoundary(policy: policy)
   }
 
   @discardableResult
@@ -25,9 +25,8 @@ public final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Senda
     spans: [SpanData],
     explicitTimeout: TimeInterval?
   ) -> SpanExporterResultCode {
-    guard policy.signals.tracesEnabled else { return .success }
-    return exporter.export(
-      spans: spans.filter { isSafeInstrumentationScope($0.instrumentationScope) }.map(sanitize),
+    exporter.export(
+      spans: boundary.sanitizedSpans(spans),
       explicitTimeout: explicitTimeout
     )
   }
@@ -64,47 +63,16 @@ public final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Senda
     shutdownSync(explicitTimeout: explicitTimeout)
   }
 
-  private func sanitize(_ original: SpanData) -> SpanData {
-    var span = original
-    let events = original.events.compactMap { event -> SpanData.Event? in
-      guard let name = policy.sanitizedEventName(event.name) else { return nil }
-      return SpanData.Event(
-        name: name,
-        timestamp: event.timestamp,
-        attributes: policy.sanitizedSpanAttributes(event.attributes)
-      )
-    }
-    let status: Status
-    switch original.status {
-    case .error:
-      status = .error(description: "Operation failed")
-    case .ok:
-      status = .ok
-    case .unset:
-      status = .unset
-    }
-    span.settingName(policy.sanitizedSpanName(original.name))
-    span.settingAttributes(policy.sanitizedSpanAttributes(original.attributes))
-    span.settingEvents(events)
-    span.settingLinks([])
-    span.settingStatus(status)
-    span.settingResource(
-      Resource(
-        attributes: policy.sanitizedResourceAttributes(original.resource.attributes)
-      )
-    )
-    return span
-  }
 }
 
 /// Rebuilds log records from allowlisted bodies, resources, attributes, and event names.
 public final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unchecked Sendable {
   private let exporter: any LogRecordExporter
-  private let policy: TelemetryPolicy
+  private let boundary: TelemetryPrivacyBoundary
 
   public init(exporter: any LogRecordExporter, policy: TelemetryPolicy) {
     self.exporter = exporter
-    self.policy = policy
+    boundary = TelemetryPrivacyBoundary(policy: policy)
   }
 
   public func export(
@@ -118,9 +86,8 @@ public final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unche
     logRecords: [ReadableLogRecord],
     explicitTimeout: TimeInterval?
   ) -> ExportResult {
-    guard policy.signals.logsEnabled else { return .success }
-    return exporter.export(
-      logRecords: logRecords.map(sanitize),
+    exporter.export(
+      logRecords: boundary.sanitizedLogs(logRecords),
       explicitTimeout: explicitTimeout
     )
   }
@@ -156,31 +123,16 @@ public final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unche
     forceFlushSync(explicitTimeout: explicitTimeout)
   }
 
-  private func sanitize(_ record: ReadableLogRecord) -> ReadableLogRecord {
-    ReadableLogRecord(
-      resource: Resource(
-        attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
-      ),
-      instrumentationScopeInfo: safeInstrumentationScope,
-      timestamp: record.timestamp,
-      observedTimestamp: record.observedTimestamp,
-      spanContext: record.spanContext,
-      severity: record.severity,
-      body: policy.sanitizedLogBody(record.body),
-      attributes: policy.sanitizedLogAttributes(record.attributes),
-      eventName: record.eventName.flatMap(policy.sanitizedEventName)
-    )
-  }
 }
 
 /// Drops unknown instruments and sanitizes package metric dimensions immediately before export.
 public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked Sendable {
   private let exporter: any MetricExporter
-  private let policy: TelemetryPolicy
+  private let boundary: TelemetryPrivacyBoundary
 
   public init(exporter: any MetricExporter, policy: TelemetryPolicy) {
     self.exporter = exporter
-    self.policy = policy
+    boundary = TelemetryPrivacyBoundary(policy: policy)
   }
 
   public func export(metrics: [MetricData]) -> ExportResult {
@@ -188,8 +140,7 @@ public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked S
   }
 
   private func exportSync(metrics: [MetricData]) -> ExportResult {
-    guard policy.signals.metricsEnabled else { return .success }
-    return exporter.export(metrics: sanitize(metrics))
+    exporter.export(metrics: boundary.sanitizedMetrics(metrics))
   }
 
   public func flush() -> ExportResult {
@@ -230,8 +181,68 @@ public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked S
     exporter.getDefaultAggregation(for: instrument)
   }
 
-  private func sanitize(_ metrics: [MetricData]) -> [MetricData] {
-    metrics.compactMap { metric in
+}
+
+struct TelemetryPrivacyBoundary: Sendable {
+  let policy: TelemetryPolicy
+
+  func sanitizedSpans(_ spans: [SpanData]) -> [SpanData] {
+    guard policy.signals.tracesEnabled else { return [] }
+    return spans.filter { isSafeInstrumentationScope($0.instrumentationScope) }.map { original in
+      var span = original
+      let events = original.events.compactMap { event -> SpanData.Event? in
+        guard let name = policy.sanitizedEventName(event.name) else { return nil }
+        return SpanData.Event(
+          name: name,
+          timestamp: event.timestamp,
+          attributes: policy.sanitizedSpanAttributes(event.attributes)
+        )
+      }
+      let status: Status
+      switch original.status {
+      case .error:
+        status = .error(description: "Operation failed")
+      case .ok:
+        status = .ok
+      case .unset:
+        status = .unset
+      }
+      span.settingName(policy.sanitizedSpanName(original.name))
+      span.settingAttributes(policy.sanitizedSpanAttributes(original.attributes))
+      span.settingEvents(events)
+      span.settingLinks([])
+      span.settingStatus(status)
+      span.settingResource(
+        Resource(
+          attributes: policy.sanitizedResourceAttributes(original.resource.attributes)
+        )
+      )
+      return span
+    }
+  }
+
+  func sanitizedLogs(_ records: [ReadableLogRecord]) -> [ReadableLogRecord] {
+    guard policy.signals.logsEnabled else { return [] }
+    return records.map { record in
+      ReadableLogRecord(
+        resource: Resource(
+          attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
+        ),
+        instrumentationScopeInfo: safeInstrumentationScope,
+        timestamp: record.timestamp,
+        observedTimestamp: record.observedTimestamp,
+        spanContext: record.spanContext,
+        severity: record.severity,
+        body: policy.sanitizedLogBody(record.body),
+        attributes: policy.sanitizedLogAttributes(record.attributes),
+        eventName: record.eventName.flatMap(policy.sanitizedEventName)
+      )
+    }
+  }
+
+  func sanitizedMetrics(_ metrics: [MetricData]) -> [MetricData] {
+    guard policy.signals.metricsEnabled else { return [] }
+    return metrics.compactMap { metric -> MetricData? in
       guard ComposableOTelSemantics.Metrics.all.contains(metric.name),
         isSafeInstrumentationScope(metric.instrumentationScopeInfo),
         metric.resource.attributes
@@ -249,7 +260,6 @@ public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked S
       return metric
     }
   }
-
 }
 
 private let safeInstrumentationScope = InstrumentationScopeInfo(

@@ -19,6 +19,10 @@ let package = Package(
       from: "2.4.1"
     ),
     .package(
+      url: "https://github.com/open-telemetry/opentelemetry-swift.git",
+      from: "2.4.1"
+    ),
+    .package(
       url: "https://github.com/pointfreeco/swift-composable-architecture",
       from: "1.25.0"
     ),
@@ -51,6 +55,10 @@ let package = Package(
       dependencies: [
         "ComposableOTel",
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(
+          name: "OpenTelemetryProtocolExporterHTTP",
+          package: "opentelemetry-swift"
+        ),
         .product(name: "StdoutExporter", package: "opentelemetry-swift-core"),
       ]
     ),

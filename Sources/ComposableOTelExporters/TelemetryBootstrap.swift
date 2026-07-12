@@ -4,7 +4,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 import StdoutExporter
 
-/// Configures OpenTelemetry providers for a TCA application.
+/// Configures the package-owned, privacy-preserving OpenTelemetry SDK pipeline.
 public enum TelemetryBootstrap {
   private final class State: @unchecked Sendable {
     private let lock = NSLock()
@@ -24,43 +24,27 @@ public enum TelemetryBootstrap {
 
   private static let state = State()
 
-  /// The deployment environment for telemetry configuration.
   public enum Environment: Sendable {
-    /// Console output for development. Uses StdoutExporter.
+    /// Privacy-preserving stdout export with full trace sampling.
     case debug
-    /// Production-tuned sampling and intervals, still using StdoutExporter in this release.
+    /// Privacy-preserving stdout export with reduced trace sampling.
     ///
-    /// The endpoint and headers are reserved for the later OTLP runtime. They are not read and
-    /// no telemetry is sent remotely by the current implementation.
+    /// Endpoint and headers remain reserved for issue #5 and are not read or contacted.
     case production(endpoint: String, headers: [String: String] = [:])
   }
 
-  /// Configure telemetry with environment-appropriate defaults.
+  /// Configures bounded stdout telemetry once for the process.
   ///
-  /// The first call serializes global OTel provider registration and returns a cached
-  /// `TelemetryClient` suitable for injecting into `DependencyValues.composableOTel`.
-  /// All later calls return that same client without rebuilding or re-registering providers;
-  /// therefore, the first configuration owns process-wide bootstrap settings.
-  ///
-  /// OpenTelemetry exposes its tracer, meter, and logger globals as separate writes. Call this
-  /// method before starting compatibility code that reads those globals; normal ComposableOTel
-  /// instrumentation uses only the returned client.
-  ///
-  /// Both environments export traces, metrics, and logs to standard output. Production OTLP
-  /// transport and lifecycle management are not implemented in this release.
-  ///
-  /// ```swift
-  /// // In App init:
-  /// let client = TelemetryBootstrap.configure(serviceName: "my-app")
-  /// // Then inject into store dependencies
-  /// ```
+  /// The first call owns the cached package client; OpenTelemetry process globals remain untouched.
+  /// The policy controls each signal independently, and logs are disabled by default. Values
+  /// outside the policy schema aggregate to `other`.
   @discardableResult
   public static func configure(
-    serviceName: String,
-    serviceVersion: String? = nil,
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID? = nil,
     environment: Environment = .debug,
     samplingRatio: Double? = nil,
-    errorDetailPolicy: ErrorDetailPolicy = .redacted
+    policy: TelemetryPolicy = .init()
   ) -> TelemetryClient {
     state.configure {
       makeClient(
@@ -68,104 +52,105 @@ public enum TelemetryBootstrap {
         serviceVersion: serviceVersion,
         environment: environment,
         samplingRatio: samplingRatio,
-        errorDetailPolicy: errorDetailPolicy
+        policy: policy
       )
     }
   }
 
   private static func makeClient(
-    serviceName: String,
-    serviceVersion: String?,
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID?,
     environment: Environment,
     samplingRatio: Double?,
-    errorDetailPolicy: ErrorDetailPolicy
+    policy: TelemetryPolicy
   ) -> TelemetryClient {
-    // --- Resource ---
-
     let resource = makeResource(
       serviceName: serviceName,
       serviceVersion: serviceVersion,
-      environment: environment
+      environment: environment,
+      policy: policy
     )
-
-    // --- Sampler ---
 
     let ratio: Double
     switch environment {
-    case .debug: ratio = samplingRatio ?? 1.0
-    case .production: ratio = samplingRatio ?? 0.1
+    case .debug:
+      ratio = samplingRatio ?? 1
+    case .production:
+      ratio = samplingRatio ?? 0.1
     }
-
     let sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: ratio))
 
-    // --- Traces ---
-
-    let spanExporter: SpanExporter
+    let rawSpanExporter: any SpanExporter
     switch environment {
     case .debug:
-      spanExporter = StdoutSpanExporter(isDebug: true)
+      rawSpanExporter = StdoutSpanExporter(isDebug: true)
     case .production:
-      // TODO: Replace with OtlpTraceExporter once OTLP support is added.
-      // The production endpoint and headers from Environment.production are
-      // reserved for that integration.
-      spanExporter = StdoutSpanExporter(isDebug: false)
+      rawSpanExporter = StdoutSpanExporter(isDebug: false)
     }
-
+    let spanExporter = PrivacyPreservingSpanExporter(
+      exporter: rawSpanExporter,
+      policy: policy
+    )
     let spanProcessor = SimpleSpanProcessor(spanExporter: spanExporter)
-
+    let spanLimits = SpanLimits()
+      .settingAttributeCountLimit(16)
+      .settingAttributeValueLengthLimit(
+        UInt(TelemetryIdentifier<FeatureIdentifierKind>.maximumLength)
+      )
+      .settingEventCountLimit(4)
+      .settingLinkCountLimit(0)
+      .settingAttributePerEventCountLimit(8)
+      .settingAttributePerLinkCountLimit(0)
     let tracerProvider = TracerProviderBuilder()
       .with(resource: resource)
+      .with(spanLimits: spanLimits)
       .with(sampler: sampler)
       .add(spanProcessor: spanProcessor)
       .build()
 
-    // --- Metrics ---
-
-    let metricExporter: StdoutMetricExporter
+    let rawMetricExporter: any MetricExporter
     switch environment {
     case .debug:
-      metricExporter = StdoutMetricExporter(isDebug: true)
+      rawMetricExporter = StdoutMetricExporter(isDebug: true)
     case .production:
-      // TODO: Replace with OtlpMetricExporter once OTLP support is added.
-      metricExporter = StdoutMetricExporter(isDebug: false)
+      rawMetricExporter = StdoutMetricExporter(isDebug: false)
     }
-
+    let metricExporter = PrivacyPreservingMetricExporter(
+      exporter: rawMetricExporter,
+      policy: policy
+    )
     let metricInterval: TimeInterval
     switch environment {
-    case .debug: metricInterval = 5.0
-    case .production: metricInterval = 60.0
+    case .debug:
+      metricInterval = 5
+    case .production:
+      metricInterval = 60
     }
-
     let metricReader = PeriodicMetricReaderBuilder(exporter: metricExporter)
       .setInterval(timeInterval: metricInterval)
       .build()
-
-    let meterProvider = MeterProviderSdk.builder()
+    let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
       .registerMetricReader(reader: metricReader)
-      .registerView(
-        selector: InstrumentSelectorBuilder().build(),
-        view: View.builder().build()
-      )
-      .build()
+    ComposableOTelMetricConfiguration.registerViews(on: meterBuilder, policy: policy)
+    let meterProvider = meterBuilder.build()
 
-    // --- Logs ---
-
-    let logExporter: any LogRecordExporter
+    let rawLogExporter: any LogRecordExporter
     switch environment {
     case .debug:
-      logExporter = StdoutLogExporter(isDebug: true)
+      rawLogExporter = StdoutLogExporter(isDebug: true)
     case .production:
-      logExporter = StdoutLogExporter(isDebug: false)
+      rawLogExporter = StdoutLogExporter(isDebug: false)
     }
-
+    let logExporter = PrivacyPreservingLogRecordExporter(
+      exporter: rawLogExporter,
+      policy: policy
+    )
     let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logExporter)
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
       logRecordProcessors: [logProcessor]
     )
-
-    // --- Return a TelemetryClient for dependency injection ---
 
     let tracer = tracerProvider.get(
       instrumentationName: ComposableOTelMetadata.instrumentationName,
@@ -182,45 +167,39 @@ public enum TelemetryBootstrap {
       .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
 
-    // OpenTelemetry exposes separate global setters, so publish them together only after every
-    // provider and the injected client components are ready.
-    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
-    OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
-    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
-
-    return TelemetryClient(
+    return TelemetryClient.unsafeCustomSDK(
       tracer: tracer,
-      metrics: MetricInstruments(meter: meter),
+      metrics: ComposableOTelMetricConfiguration.makeInstruments(meter: meter),
       logger: logger,
-      errorDetailPolicy: errorDetailPolicy
+      policy: policy
     )
   }
 
   static func makeResource(
-    serviceName: String,
-    serviceVersion: String?,
-    environment: Environment
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID?,
+    environment: Environment,
+    policy: TelemetryPolicy
   ) -> Resource {
-    let version =
-      serviceVersion
-      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-      ?? "unknown"
-
     let deploymentEnvironment: String
     switch environment {
-    case .debug: deploymentEnvironment = "debug"
-    case .production: deploymentEnvironment = "production"
+    case .debug:
+      deploymentEnvironment = "debug"
+    case .production:
+      deploymentEnvironment = "production"
     }
 
-    let packageResource = Resource(attributes: [
-      "service.name": .string(serviceName),
-      "service.version": .string(version),
-      "deployment.environment": .string(deploymentEnvironment),
-      "telemetry.distro.name": .string(ComposableOTelMetadata.packageName),
-      "telemetry.distro.version": .string(ComposableOTelMetadata.version),
+    var attributes: [String: AttributeValue] = [
+      "service.name": .string(serviceName.rawValue),
+      "deployment.environment.name": .string(deploymentEnvironment),
       "os.type": .string("darwin"),
-      "os.version": .string(ProcessInfo.processInfo.operatingSystemVersionString),
-    ])
-    return Resource().merging(other: packageResource)
+    ]
+    let resolvedVersion =
+      serviceVersion?.rawValue
+      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+    if let resolvedVersion {
+      attributes["service.version"] = .string(resolvedVersion)
+    }
+    return Resource(attributes: policy.sanitizedResourceAttributes(attributes))
   }
 }

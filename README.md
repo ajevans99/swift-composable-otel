@@ -1,21 +1,16 @@
 # swift-composable-otel
 
-OpenTelemetry instrumentation for
+Privacy-safe, bounded OpenTelemetry instrumentation for
 [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture).
-
-The package emits reducer, effect, and dependency spans; structured log records; and
-metrics through the OpenTelemetry Swift API and SDK.
 
 > [!IMPORTANT]
 > The current tagged release is
 > [`0.2.2`](https://github.com/ajevans99/swift-composable-otel/tree/0.2.2).
-> It is a pre-1.0 instrumentation prototype, not a production OTLP runtime.
-> Both `.debug` and `.production` use stdout exporters. The production endpoint and
-> headers are currently ignored, and no telemetry is sent remotely.
+> The behavior documented below is unreleased and remains a pre-1.0 instrumentation prototype, not
+> a production OTLP runtime. Both `.debug` and `.production` use stdout exporters. Production
+> endpoint and header values are ignored, and no telemetry is sent remotely.
 
 ## Installation
-
-Add the package to `Package.swift`:
 
 ```swift
 dependencies: [
@@ -29,151 +24,236 @@ dependencies: [
 Add only the products required by each target:
 
 ```swift
-dependencies: [
-  // Core instrumentation APIs.
-  .product(name: "ComposableOTel", package: "swift-composable-otel"),
-
-  // SDK bootstrap and stdout exporters for an application target.
-  .product(name: "ComposableOTelExporters", package: "swift-composable-otel"),
-
-  // In-memory collectors and assertions for a test target.
-  .product(name: "ComposableOTelTesting", package: "swift-composable-otel"),
-]
+.product(name: "ComposableOTel", package: "swift-composable-otel")
+.product(name: "ComposableOTelExporters", package: "swift-composable-otel")
+.product(name: "ComposableOTelTesting", package: "swift-composable-otel")
 ```
+
+## Bounded schema
+
+Applications explicitly declare the finite identifiers they permit:
+
+```swift
+let schema = try! TelemetrySchema(
+  features: ["library"],
+  actions: ["refresh", "book-selected", "response-received"],
+  effects: ["fetch-books"],
+  dependencies: ["book-client"],
+  operations: ["fetch"],
+  routes: ["book-detail"],
+  errorTypes: ["network-error"],
+  errorCategories: ["network"],
+  errorCodes: ["unavailable"],
+  services: ["example-app"],
+  serviceVersions: ["1.2.3"]
+)
+
+let policy = TelemetryPolicy(
+  schema: schema,
+  classifyError: { _ in
+    TelemetryErrorMetadata(
+      type: "network-error",
+      category: "network",
+      code: "unavailable",
+      retryable: true
+    )
+  }
+)
+```
+
+`FeatureID`, `ActionID`, `EffectID`, `DependencyID`, `OperationID`, `RouteID`, error IDs,
+`ServiceID`, and `ServiceVersionID` are distinct types. General identifiers accept 1 through 48
+lowercase ASCII characters using letters, digits, `.`, `_`, or `-` and require a leading letter.
+Service versions additionally accept a leading digit plus uppercase letters and `+` for bounded
+semantic-version prerelease/build syntax. Invalid dynamic input is rejected. Valid identifiers not
+present in the configured schema deterministically aggregate to `other`; raw SDK values that are
+malformed also aggregate to `other`.
+
+Schema construction rejects limits above 32 features, 128 actions, 64 effects, 64 dependencies,
+128 operations, 64 routes, 32 error types, 32 error categories, 64 error codes, 8 services, or 16
+service versions. Rejected values are never printed.
 
 ## Quick start
 
-Configure the SDK once, retain the returned client in TCA dependencies, and instrument selected
-reducers:
+Bootstrap once and inject the returned client:
 
 ```swift
-import ComposableArchitecture
-import ComposableOTel
-import ComposableOTelExporters
-import SwiftUI
+let telemetry = TelemetryBootstrap.configure(
+  serviceName: "example-app",
+  serviceVersion: "1.2.3",
+  environment: .debug,
+  policy: policy
+)
 
-@main
-struct MyApp: App {
-  let store: StoreOf<AppFeature>
+let store = Store(initialState: AppFeature.State()) {
+  AppFeature()
+} withDependencies: {
+  $0.composableOTel = telemetry
+}
+```
 
-  init() {
-    let telemetry = TelemetryBootstrap.configure(
-      serviceName: "my-app",
-      environment: .debug
-    )
-    self.store = Store(initialState: AppFeature.State()) {
-      AppFeature()
-    } withDependencies: {
-      $0.composableOTel = telemetry
+Instrument a reducer without reflecting actions:
+
+```swift
+Reduce { state, action in
+  // Feature logic.
+}
+.instrumented(
+  feature: "library",
+  action: { action in
+    switch action {
+    case .refresh: "refresh"
+    case .bookSelected: "book-selected"
+    case .responseReceived: "response-received"
     }
-  }
-
-  var body: some Scene {
-    WindowGroup {
-      AppView(store: store)
-    }
-  }
-}
+  },
+  stateChangeToken: { StateChangeToken($0.revision) }
+)
 ```
+
+The optional state token is compared before and after synchronous reduction but is never exported.
+If it is omitted, `tca.state.changed` is omitted. The package never calls
+`String(describing:)` on actions or state and never materializes state descriptions.
+
+Trace effects and dependency operations with typed IDs:
 
 ```swift
-@Reducer
-struct MyFeature {
-  var body: some ReducerOf<Self> {
-    Reduce { state, action in
-      // Feature logic.
-    }
-    .instrumented(name: "MyFeature")
+return .tracedRun(effect: "fetch-books") { send in
+  let books = try await tracedCall(
+    dependency: "book-client",
+    operation: "fetch"
+  ) {
+    try await client.fetch()
   }
+  await send(.responseReceived(books))
 }
 ```
 
-Create a fully wrapped effect with `.tracedRun`:
+Record route names without parameters:
 
 ```swift
-return .tracedRun(name: "fetchData") { send in
-  let data = try await client.fetch()
-  await send(.dataLoaded(data))
-}
+telemetry.recordNavigation(.push, route: "book-detail")
 ```
 
-Wrap dependency calls with `tracedCall`:
+## Signal controls
+
+Traces, metrics, and logs are independent. Action and navigation logs are disabled by default:
 
 ```swift
-try await tracedCall("myClient", method: "fetch") {
-  try await client.fetch()
-}
+let signals = TelemetrySignalConfiguration(
+  tracesEnabled: true,
+  metricsEnabled: true,
+  logsEnabled: false
+)
+let policy = TelemetryPolicy(schema: schema, signals: signals)
 ```
 
-## Current behavior
+Trace sampling applies only to traces. Disabling or sampling traces does not suppress metrics or
+logs, and disabling logs does not suppress error status, events, or metrics.
 
-The table describes the unreleased behavior on `main`; the tagged `0.2.2` release predates these
-corrections.
+## Semantic conventions
 
-| Area | Current behavior |
+Package-owned span names never contain identifiers:
+
+| Span | Bounded attributes |
 | --- | --- |
-| Reducers | `.instrumented()` uses closure-based task-local activation for synchronous reduction. Traced effects created during reduction capture the reducer span as their explicit parent; the reducer span still ends before effect execution. |
-| State | `stateDiffs: true` compares pre/post `String(describing:)` snapshots only to set `tca.state.changed`. State values and diffs are not exported. With the option disabled, the attribute is currently always `true`. |
-| Effects | `.tracedRun()` uses one task-locally active span across suspension and inherited child tasks. It records exactly one `success`, `cancelled`, or `error` outcome and rethrows failures and cancellation to TCA's normal handling. |
-| Effect markers | `.traceStart()` adds only a merged initiation marker. The old `.traced()` spelling is deprecated because it never observed the wrapped effect lifecycle. |
-| Long-lived effects | `.tracedLongLivedRun()` uses one lifecycle span. Normal stream completion is `success`; cancellation and errors are distinct outcomes and are rethrown. |
-| Dependencies | `tracedCall` uses closure-based task-local activation and records a span, count, duration, and errors. Its throwing overload rethrows the original error. |
-| Logs | `TelemetryClient` stores an injected logger. Log calls never re-resolve the mutable global logger provider. |
-| Metrics | Reducer, effect, dependency, and active-effect instruments are registered lazily. Effect terminal counters are mutually exclusive, and active-effect increments/decrements are paired by structured cleanup. Sampling does not suppress metrics. |
-| Errors | `.redacted` is the default and omits `String(describing: error)` while retaining the error type. `SpanAttributeRedactor` is stored but is not applied by the current exporters. |
-| Sampling | Parent-based trace ID ratio sampling defaults to `1.0` in debug and `0.1` in production. It applies to traces only. |
+| `tca.reducer` | `tca.feature.name`, `tca.action.name`, optional `tca.state.changed` |
+| `tca.effect` | `tca.effect.name`, `tca.effect.long_lived`, `tca.effect.outcome` |
+| `tca.dependency` | `tca.dependency.name`, `tca.operation.name` |
+| `tca.navigation` | `tca.navigation.operation`, `tca.navigation.route` |
 
-Effects constructed during instrumented reduction explicitly inherit that reducer span. Effects
-constructed elsewhere intentionally start a root trace. While a traced operation runs, normal
-Swift child tasks inherit its OpenTelemetry task-local context; detached tasks do not.
+Effect outcomes are exactly `success`, `cancelled`, or `error`. Package event names and log bodies
+are fixed constants. Error status is rewritten to generic text before export. Production-safe error
+fields are bounded type, category, optional code, handled, and retryable values. Raw error
+descriptions, localized text, backend bodies, stack traces, URLs, payloads, and state/action values
+are not package fields.
 
-Tracing does not convert thrown failures into success. Handle and map a failure to an action inside
-the host operation when that is desired. Otherwise the error is rethrown to TCA, which reports an
-unhandled non-cancellation `Effect.run` error according to its standard behavior. TCA treats
-rethrowing `CancellationError` as normal effect cancellation.
+Package metrics use explicit descriptions, units, SDK views, and export-time dimension filtering:
+
+| Metrics | Unit | Dimensions | Maximum series |
+| --- | --- | --- | --- |
+| `tca.actions.dispatched`, `tca.reducer.duration` | `{action}`, `ms` | feature, action | 4,257 |
+| Effect start/terminal/duration/active metrics | `{effect}`, `ms` | effect, long-lived | 130 each |
+| Dependency call/error/duration metrics | `{call}`, `ms` | dependency, operation | 8,385 each |
+| `tca.navigation.transitions` | `{transition}` | operation, route | 260 |
+
+The maxima include the `other` aggregation value. Unknown instruments are dropped. Metric
+exemplars are removed by the package exporter boundary so filtered attributes cannot reappear.
+
+See the DocC **Semantic Conventions and Stability** article for the complete field policy.
+
+## Privacy boundary
+
+`TelemetryBootstrap` applies allowlist-first policy before stdout export:
+
+- span names, attributes, events, links, status, and resources are sanitized;
+- log bodies, attributes, event names, and resources are rebuilt from allowlists;
+- metric views filter dimensions and define histograms; the exporter drops unknown instruments,
+  sanitizes dimensions again, removes exemplars, and refuses unsafe resources;
+- instrumentation scope name/version are fixed; spans and metrics from unsafe scopes are dropped,
+  and log scope metadata is rebuilt;
+- resource fields are limited to bounded service name/version, fixed deployment environment,
+  `os.type=darwin`, and fixed OpenTelemetry distribution/SDK identity.
+
+The package no longer exposes arbitrary `info`, `error`, raw body, raw attribute, tracer, logger, or
+meter convenience APIs. `TelemetryClient.unsafeCustomSDK` and
+`MetricInstruments.unsafeCustomSDK` are intentionally named trust boundaries. A custom SDK,
+processor, reader, or exporter can bypass package enforcement unless it uses
+`PrivacyPreservingSpanExporter`, `PrivacyPreservingLogRecordExporter`,
+`PrivacyPreservingMetricExporter`, `ComposableOTelMetricConfiguration`, and a resource sanitized
+by the same `TelemetryPolicy`.
+
+The package does not offer a raw-payload development mode. Applications that create raw
+OpenTelemetry data directly own its classification, consent, redaction, retention, and exporter
+policy.
+
+## Context and lifecycle semantics
+
+Reducer spans cover synchronous reduction. Traced effects created during reduction capture the
+reducer span as their explicit parent; the reducer span ends before effect execution. Effect spans
+remain task-locally active across suspension and inherited child tasks. Detached tasks do not
+inherit that context.
+
+One-shot and long-lived effects emit exactly one terminal outcome. Errors and cancellation are
+recorded and rethrown to TCA's normal handling. Active-effect increments and decrements are paired
+by structured cleanup.
 
 ## Exporters
 
-`TelemetryBootstrap.configure` is thread-safe and process-idempotent. The first call owns the
-process-wide OpenTelemetry providers and configuration; repeated or concurrent calls return the
-same cached `TelemetryClient` without registering providers again. Accessing the default no-op
-dependency before bootstrap does not snapshot or poison the later configured client.
-OpenTelemetry exposes its compatibility globals through separate setters, so call bootstrap before
-starting code that reads those globals. Normal ComposableOTel paths use the returned client only.
+`TelemetryBootstrap.configure` is thread-safe and first-configuration-wins idempotent. It returns
+an isolated package client and does not replace OpenTelemetry process globals, so unrelated SDK
+traffic is not rewritten or dropped by this package policy.
 
-Bootstrap currently behaves as follows:
+| Environment | Export destination | Default trace ratio | Metric interval |
+| --- | --- | --- | --- |
+| `.debug` | stdout | `1.0` | 5 seconds |
+| `.production` | stdout | `0.1` | 60 seconds |
 
-| Environment | Traces | Metrics | Logs | Default trace ratio | Metric interval |
-| --- | --- | --- | --- | --- | --- |
-| `.debug` | stdout | stdout | stdout | `1.0` | 5 seconds |
-| `.production` | stdout | stdout | stdout | `0.1` | 60 seconds |
-
-The `.production(endpoint:headers:)` values reserve API shape for a later runtime. They do not
-configure OTLP, HTTP, gRPC, TLS, authentication, retries, persistence, or application lifecycle
-flushes in `0.2.2`.
+`.production(endpoint:headers:)` does not configure OTLP, HTTP, gRPC, TLS, authentication, retry,
+persistence, lifecycle flush, or remote transport. Those remain issue #5 work.
 
 ## Testing
 
 ```swift
-import ComposableOTelTesting
+let reader = InMemoryMetricReader()
+let (telemetry, collectors) = TelemetryClient.test(
+  metricReader: reader,
+  policy: policy
+)
 
-let (telemetry, collectors) = TelemetryClient.test()
-let store = TestStore(initialState: MyFeature.State()) {
-  MyFeature()
+let store = TestStore(initialState: AppFeature.State()) {
+  AppFeature()
 } withDependencies: {
   $0.composableOTel = telemetry
 }
 
-await store.send(.someAction)
+await store.send(.refresh)
 collectors.forceFlush()
-collectors.spans.assertSpanExists(named: "reducer/MyFeature")
+collectors.spans.assertSpanExists(named: "tca.reducer")
 ```
 
-`TelemetryClient.test()` owns its tracer, meter, and logger providers without replacing
-`OpenTelemetry.instance` globals, so independently injected test clients remain isolated under
-concurrency. `configureTestTelemetry` is the deprecated global-provider compatibility helper and
-still requires serialized use. The optional metric reader covers effect counters and balanced
-active-effect accounting in the package regression suite.
+Test clients own isolated providers and install the same span/log privacy wrappers and metric views
+as bootstrap. They do not replace process globals.
 
 ## Compatibility
 
@@ -181,22 +261,15 @@ active-effect accounting in the package regression suite.
 | --- | --- |
 | iOS | 17.0+; generic device build required in CI |
 | macOS | 14.0+; package build and tests required in CI |
-| watchOS | Unsupported today. The intended future floor is watchOS 10.0; see the named watchOS support gate in [SUPPORT.md](SUPPORT.md). |
-| Swift | Swift tools 6.0 manifest; Xcode 16.3+ with Swift 6.x is the CI support baseline |
+| watchOS | Unsupported; the intended future floor is watchOS 10.0 and remains gated by [SUPPORT.md](SUPPORT.md) |
+| Swift | Swift tools 6.0 manifest; Xcode 16.3+ with Swift 6.x |
 | Composable Architecture | `>= 1.25.0, < 2.0.0` |
 | swift-dependencies | `>= 1.5.1, < 2.0.0` |
 | OpenTelemetry Swift core | `>= 2.4.1, < 3.0.0` |
+| swift-sharing compatibility constraint | `== 2.8.2` |
 
-See [SUPPORT.md](SUPPORT.md) for platform and dependency policy, [CHANGELOG.md](CHANGELOG.md)
-for release history, and [RELEASING.md](RELEASING.md) for versioning and release requirements.
-
-## Products
-
-| Product | Purpose |
-| --- | --- |
-| `ComposableOTel` | Core TCA instrumentation APIs and package metadata |
-| `ComposableOTelExporters` | OpenTelemetry SDK bootstrap and stdout exporters |
-| `ComposableOTelTesting` | In-memory span, log, and metric helpers |
+See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
+[RELEASING.md](RELEASING.md).
 
 ## License
 

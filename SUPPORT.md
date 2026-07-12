@@ -42,6 +42,7 @@ A successful ad hoc build alone does not satisfy this gate.
 | `swift-composable-architecture` | `>= 1.25.0, < 2.0.0` | `1.25.0` |
 | `swift-dependencies` | `>= 1.5.1, < 2.0.0` | `1.5.1` |
 | `xctest-dynamic-overlay` | `>= 1.9.0, < 2.0.0` | `1.9.0` |
+| `swift-sharing` | `== 2.8.2` | `2.8.2` |
 
 `Package.swift` is authoritative for dependency constraints. Documentation must be updated in the
 same pull request whenever a bound changes.
@@ -60,6 +61,12 @@ build gate; the unavailable historical SDK is not treated as a package source fa
 The minimum job catches accidental use of newer APIs. The latest job catches upstream
 compatibility regressions. A dependency update that fails either set is not supported until the
 constraint, implementation, or documented support range is deliberately changed.
+
+TCA permits all `swift-sharing` 2.x releases. The package constrains `swift-sharing` to 2.8.2, the
+final release before 2.9 enabled cross-package traits on `swift-dependencies`. A tools-version 6.0
+root selects the dependency's 6.0 compatibility manifest, which does not declare those traits. The
+constraint keeps the published package graph coherent; it can be removed when the supported tools
+version can consume those traits.
 
 ## `Package.resolved`
 

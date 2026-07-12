@@ -30,6 +30,11 @@ let package = Package(
       url: "https://github.com/pointfreeco/xctest-dynamic-overlay",
       from: "1.9.0"
     ),
+    // swift-sharing 2.9 cross-package traits require a tools-version newer than this package's 6.0.
+    .package(
+      url: "https://github.com/pointfreeco/swift-sharing",
+      exact: "2.8.2"
+    ),
   ],
   targets: [
     .target(
@@ -53,6 +58,7 @@ let package = Package(
       name: "ComposableOTelTesting",
       dependencies: [
         "ComposableOTel",
+        "ComposableOTelExporters",
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "IssueReporting", package: "xctest-dynamic-overlay"),
       ]

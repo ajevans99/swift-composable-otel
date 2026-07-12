@@ -1,10 +1,8 @@
 # Getting Started
 
-Add the current ComposableOTel instrumentation prototype to a TCA application.
+Configure a finite telemetry schema, inject a client, and instrument selected TCA work.
 
-## Install the package
-
-Use the repository URL and current tagged release:
+## Install
 
 ```swift
 .package(
@@ -15,18 +13,32 @@ Use the repository URL and current tagged release:
 
 Add `ComposableOTel` and `ComposableOTelExporters` to the application target.
 
-## Bootstrap telemetry once
-
-Configure the OpenTelemetry SDK and inject the returned client into the root store:
+## Define policy
 
 ```swift
-import ComposableArchitecture
-import ComposableOTel
-import ComposableOTelExporters
+let schema = try! TelemetrySchema(
+  features: ["library"],
+  actions: ["refresh", "response-received"],
+  effects: ["fetch-books"],
+  dependencies: ["book-client"],
+  operations: ["fetch"],
+  routes: ["book-detail"],
+  services: ["example-app"]
+)
 
+let policy = TelemetryPolicy(schema: schema)
+```
+
+Identifiers use lowercase bounded names, not user values, IDs, URLs, titles, notes, search text, or
+route parameters. Values absent from the schema aggregate to `other`.
+
+## Bootstrap once
+
+```swift
 let telemetry = TelemetryBootstrap.configure(
-  serviceName: "my-app",
-  environment: .debug
+  serviceName: "example-app",
+  environment: .debug,
+  policy: policy
 )
 
 let store = Store(initialState: AppFeature.State()) {
@@ -36,78 +48,71 @@ let store = Store(initialState: AppFeature.State()) {
 }
 ```
 
-Bootstrap is thread-safe and idempotent: the first configuration owns the process-wide providers,
-and later calls return the same client. Both bootstrap environments currently use stdout
-exporters. A
-`.production(endpoint:headers:)` endpoint is not contacted, its headers are not used, and the
-package does not provide a remote OTLP runtime yet.
+Bootstrap is thread-safe and first-configuration-wins idempotent. It does not replace process-global
+OpenTelemetry providers. Both environments use privacy-preserving stdout exporters. Production
+endpoint and headers are unused, and the package does not provide remote OTLP transport.
 
 ## Instrument a reducer
 
 ```swift
-@Reducer
-struct GoalFeature {
-  var body: some ReducerOf<Self> {
-    Reduce { state, action in
-      // Feature logic.
+Reduce { state, action in
+  // Feature logic.
+}
+.instrumented(
+  feature: "library",
+  action: { action in
+    switch action {
+    case .refresh: "refresh"
+    case .responseReceived: "response-received"
     }
-    .instrumented(name: "GoalFeature")
+  },
+  stateChangeToken: { StateChangeToken($0.revision) }
+)
+```
+
+The action mapper replaces reflection. Associated values and custom descriptions are never read.
+The optional state token is compared but never exported; no state description is created.
+
+## Trace effects and dependencies
+
+```swift
+return .tracedRun(effect: "fetch-books") { send in
+  let books = try await tracedCall(
+    dependency: "book-client",
+    operation: "fetch"
+  ) {
+    try await database.fetchAll()
   }
+  await send(.responseReceived(books))
 }
 ```
 
-Each action creates a task-locally active span covering synchronous reducer execution. Action
-logging and metrics are enabled by default. `stateDiffs: true` compares string snapshots only to
-set a changed boolean; it does not export state values or a diff. The span ends before any returned
-effect executes, but a traced effect created during reduction captures it as an explicit parent.
+Effect failures and cancellation are recorded and rethrown. Reducer-to-effect explicit parenting
+and task-local propagation across suspension and inherited child tasks are preserved.
 
-## Trace an effect
-
-Use `.tracedRun(name:)` to wrap the operation:
+## Configure signals
 
 ```swift
-case .fetchGoals:
-  return .tracedRun(name: "fetchGoals") { send in
-    let goals = try await database.fetchAllGoals()
-    await send(.goalsLoaded(goals))
-  }
+let policy = TelemetryPolicy(
+  schema: schema,
+  signals: TelemetrySignalConfiguration(
+    tracesEnabled: true,
+    metricsEnabled: true,
+    logsEnabled: false
+  )
+)
 ```
 
-This records one `success`, `cancelled`, or `error` outcome, balances the active-effect metric, and
-keeps the effect span active across suspension and inherited child tasks. Failures and cancellation
-are rethrown to TCA's standard `Effect.run` handling. Catch and map an error inside the host
-operation when action mapping is desired.
+Each signal is independent. Logs are disabled by default, and trace sampling never suppresses
+metrics.
 
-Use `.traceStart()` only when a start marker is sufficient; it does not observe the wrapped effect
-lifecycle. The old `.traced()` marker spelling is deprecated.
-
-## Trace a dependency call
+## Test
 
 ```swift
-let goals = try await tracedCall("goalDatabase", method: "fetchAll") {
-  try await database.fetchAllGoals()
-}
-```
-
-The throwing overload records an error and rethrows the original error. The nonthrowing overload
-records successful call telemetry.
-
-## Test instrumentation
-
-```swift
-import ComposableOTelTesting
-
-let (telemetry, collectors) = TelemetryClient.test()
-let store = TestStore(initialState: GoalFeature.State()) {
-  GoalFeature()
-} withDependencies: {
-  $0.composableOTel = telemetry
-}
-
-await store.send(.refresh)
+let (telemetry, collectors) = TelemetryClient.test(policy: policy)
+// Inject, exercise the feature, then:
 collectors.forceFlush()
-collectors.spans.assertSpanExists(named: "reducer/GoalFeature")
+collectors.spans.assertSpanExists(named: "tca.reducer")
 ```
 
-The `ComposableOTelTesting` module documentation covers isolated injected clients and the
-deprecated global-provider compatibility helper.
+Read <doc:SemanticConventions> before adding identifiers or custom SDK integration.

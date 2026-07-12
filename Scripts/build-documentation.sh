@@ -20,6 +20,7 @@ if ! {
   for scheme in ComposableOTel ComposableOTelExporters ComposableOTelTesting; do
     xcodebuild \
       -quiet \
+      -skipMacroValidation \
       -scheme "$scheme" \
       -destination "generic/platform=macOS" \
       -derivedDataPath "$derived_data_path" \

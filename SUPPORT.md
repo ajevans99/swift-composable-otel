@@ -29,7 +29,7 @@ A successful ad hoc build alone does not satisfy this gate.
 ## Swift toolchain
 
 - The manifest uses `swift-tools-version: 6.0`.
-- The supported CI baseline is Xcode 16.4 or newer with Swift 6.x.
+- The supported CI baseline is Xcode 16.3 or newer with Swift 6.x.
 - Newer Swift 6 toolchains are expected to work, but a release is gated by the CI toolchain
   declared in `.github/workflows/ci.yml`.
 - Swift 7 source or language compatibility is not claimed.

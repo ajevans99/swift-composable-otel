@@ -15,6 +15,15 @@ fi
 cd "$repository_root"
 rm -f Package.resolved
 
+manifest_backup=""
+cleanup() {
+  if [[ -n "$manifest_backup" ]]; then
+    cp -p "$manifest_backup" Package.swift
+    rm -f "$manifest_backup"
+  fi
+}
+trap cleanup EXIT
+
 swift_package() {
   if [[ "${SWIFT_PACKAGE_DISABLE_SANDBOX:-0}" == "1" ]]; then
     "${swift_command[@]}" package --disable-sandbox "$@"
@@ -23,11 +32,10 @@ swift_package() {
   fi
 }
 
-resolve_exact() {
+verify_resolved() {
   local package="$1"
   local version="$2"
 
-  swift_package resolve "$package" --version "$version"
   if ! grep -A6 "\"identity\" : \"$package\"" Package.resolved \
     | grep -q "\"version\" : \"$version\""
   then
@@ -38,10 +46,22 @@ resolve_exact() {
 
 case "${1:-}" in
 minimum)
-  resolve_exact opentelemetry-swift-core 2.3.0
-  resolve_exact swift-composable-architecture 1.17.0
-  resolve_exact swift-dependencies 1.4.0
-  resolve_exact xctest-dynamic-overlay 1.9.0
+  manifest_backup="$(mktemp)"
+  cp -p Package.swift "$manifest_backup"
+
+  requirement_count="$(grep -c 'from: "' Package.swift)"
+  if [[ "$requirement_count" != "4" ]]; then
+    echo "Expected four direct minimum-version requirements in Package.swift" >&2
+    exit 1
+  fi
+
+  perl -pi -e 's/\bfrom: /exact: /g' Package.swift
+  swift_package resolve
+
+  verify_resolved opentelemetry-swift-core 2.3.0
+  verify_resolved swift-composable-architecture 1.17.0
+  verify_resolved swift-dependencies 1.4.0
+  verify_resolved xctest-dynamic-overlay 1.9.0
   ;;
 latest)
   swift_package resolve

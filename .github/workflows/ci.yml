@@ -35,9 +35,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Minimum dependencies (Xcode 16.4)
+          - name: Minimum dependencies (Xcode 16.3)
             os: macos-15
-            xcode_path: /Applications/Xcode_16.4.app/Contents/Developer
+            xcode_path: /Applications/Xcode_16.3.app/Contents/Developer
             dependency_set: minimum
           - name: Latest dependencies (current Xcode)
             os: macos-26
@@ -69,6 +69,7 @@ jobs:
         run: |
           for scheme in ComposableOTel ComposableOTelExporters ComposableOTelTesting; do
             xcodebuild \
+              -skipMacroValidation \
               -scheme "$scheme" \
               -destination "generic/platform=iOS" \
               -configuration Debug \

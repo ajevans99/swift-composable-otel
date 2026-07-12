@@ -322,18 +322,18 @@ public final class TelemetryRuntime: @unchecked Sendable {
   ) async -> TelemetryRuntimeOperationResult {
     async let spans: Void = spanQueue.forceFlush()
     async let logs: Void = logQueue.forceFlush()
-    async let metrics: ExportResult = performProviderOperation {
-      self.meterProvider.value.forceFlush()
+    async let metricsSucceeded: Bool = performProviderOperation {
+      self.meterProvider.value.forceFlush() == .success
     }
     _ = await (spans, logs)
-    let metricResult = await metrics
+    let metricSucceeded = await metricsSucceeded
 
     let remaining = max(0, deadline.timeIntervalSince(clock.now()))
     let deliveryCompleted = await delivery.flush(timeout: .runtimeSeconds(remaining))
     return await operationResult(
       operation: operation,
       deliveryCompleted: deliveryCompleted,
-      metricSucceeded: metricResult == .success
+      metricSucceeded: metricSucceeded
     )
   }
 

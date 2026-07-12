@@ -30,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   flush/shutdown results, lifecycle hooks, and non-recursive exporter diagnostics.
 - Optional atomic OTLP persistence with age/size limits, Apple file protection, backup exclusion,
   relaunch recovery, and corruption removal.
+- An idempotent consent-revocation operation that skips flush, cancels delivery, permanently stops
+  the runtime, and deletes all unsent in-memory and persisted telemetry.
 
 ### Changed
 
@@ -74,6 +76,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Production endpoints reject non-TLS URLs and embedded credentials. Authorization is acquired for
   each attempt and is never persisted; sanitized telemetry is enforced before queues, disk, and
   network delivery.
+- Hosts can swap to `TelemetryClient.noop` and atomically disable/discard a production runtime;
+  filesystem deletion failures are surfaced and retryable without resuming export.
 
 ## [0.2.2] - 2026-04-15
 

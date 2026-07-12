@@ -63,6 +63,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
   private let meterProvider: UncheckedSendableBox<MeterProviderSdk>
   private let loggerProvider: UncheckedSendableBox<LoggerProviderSdk>
   private let shutdownCoordinator = RuntimeShutdownCoordinator()
+  private let discardCoordinator = RuntimeDiscardCoordinator()
   private let clock: TelemetryRuntimeClock
   private let providerLifecycleQueue = DispatchQueue(
     label: "com.swift-composable-otel.provider-lifecycle",
@@ -316,6 +317,71 @@ public final class TelemetryRuntime: @unchecked Sendable {
     }
   }
 
+  /// Permanently stops this runtime and deletes all unsent in-memory and persisted telemetry.
+  ///
+  /// Swap the host application's telemetry dependency to `TelemetryClient.noop` before invoking
+  /// this operation. Unlike ``shutdown(timeout:)``, this method never flushes pending telemetry and
+  /// cannot be reversed by a later lifecycle or export-condition update.
+  public func disableAndDiscardPending() async -> TelemetryRuntimeOperationResult {
+    spanQueue.stopAccepting()
+    logQueue.stopAccepting()
+
+    return await discardCoordinator.perform {
+      let baseline = self.diagnosticsState.snapshot()
+      let deliveryOutcome = await self.delivery.disableAndDiscardPending()
+      async let traces = self.spanQueue.disableAndDiscardPending()
+      async let logs = self.logQueue.disableAndDiscardPending()
+      _ = await (traces, logs)
+      await self.performProviderOperation {
+        self.tracerProvider.value.shutdown()
+        _ = self.meterProvider.value.shutdown()
+      }
+
+      let current = self.diagnosticsState.snapshot()
+      func result(
+        for signal: TelemetryRuntimeSignal,
+        enabled: Bool
+      ) -> TelemetrySignalOperationResult {
+        let discarded = max(
+          0,
+          current.signal(signal).droppedItems - baseline.signal(signal).droppedItems
+        )
+        let signalFailures = deliveryOutcome.failedBySignal[signal, default: 0]
+        let pending = signalFailures
+        let status: TelemetrySignalOperationResult.Status
+        if signalFailures > 0 {
+          status = .failed
+        } else if !enabled {
+          status = .disabled
+        } else {
+          status = .success
+        }
+        return TelemetrySignalOperationResult(
+          status: status,
+          pendingItems: pending,
+          droppedItems: discarded
+        )
+      }
+
+      return TelemetryRuntimeOperationResult(
+        operation: .disableAndDiscardPending,
+        traces: result(
+          for: .traces,
+          enabled: self.configuration.policy.signals.tracesEnabled
+        ),
+        metrics: result(
+          for: .metrics,
+          enabled: self.configuration.policy.signals.metricsEnabled
+        ),
+        logs: result(
+          for: .logs,
+          enabled: self.configuration.policy.signals.logsEnabled
+        ),
+        persistedItems: deliveryOutcome.remainingPersistedItems
+      )
+    }
+  }
+
   private func flush(
     operation: TelemetryRuntimeOperationResult.Operation,
     deadline: Date
@@ -476,6 +542,7 @@ private actor RuntimeShutdownCoordinator {
     if let result {
       return result
     }
+
     if let task {
       return await task.value
     }
@@ -485,6 +552,32 @@ private actor RuntimeShutdownCoordinator {
     self.task = task
     let result = await task.value
     self.result = result
+    self.task = nil
+    return result
+  }
+}
+
+private actor RuntimeDiscardCoordinator {
+  private var task: Task<TelemetryRuntimeOperationResult, Never>?
+  private var result: TelemetryRuntimeOperationResult?
+
+  func perform(
+    _ operation: @escaping @Sendable () async -> TelemetryRuntimeOperationResult
+  ) async -> TelemetryRuntimeOperationResult {
+    if let result {
+      return result
+    }
+    if let task {
+      return await task.value
+    }
+    let task = Task {
+      await operation()
+    }
+    self.task = task
+    let result = await task.value
+    if result.succeeded {
+      self.result = result
+    }
     self.task = nil
     return result
   }

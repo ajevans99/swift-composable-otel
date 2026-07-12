@@ -180,6 +180,8 @@ for requiredPrivacyClaim in [
   "short-lived",
   "`TelemetryRuntime`",
   "never persisted",
+  "TelemetryClient.noop",
+  "disableAndDiscardPending",
 ] where !readme.contains(requiredPrivacyClaim) {
   failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
@@ -208,6 +210,7 @@ for requiredRuntimeBoundary in [
   "OtlpHttpMetricExporter",
   "OtlpHttpLogExporter",
   "deploymentEnvironment: \"production\"",
+  "public func disableAndDiscardPending()",
 ] where !runtime.contains(requiredRuntimeBoundary) {
   failures.append("TelemetryRuntime is missing production boundary: \(requiredRuntimeBoundary)")
 }

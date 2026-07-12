@@ -360,6 +360,77 @@ struct TelemetryRuntimeTests {
       #expect(decodedBodies.none { $0.containsData(Data(runtimeSentinelSecret.utf8)) })
       _ = await runtime.shutdown(timeout: .milliseconds(50))
     }
+
+    @Test("purges known files even when directory listing fails")
+    func purgeFallback() throws {
+      let fileSystem = TestRuntimeFileSystem()
+      let store = try RuntimePersistenceStore(
+        configuration: .init(
+          directory: URL(fileURLWithPath: "/runtime-spool"),
+          maximumBytes: 64 * 1_024
+        ),
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: RuntimeDiagnosticsState(handler: nil)
+      )
+      #expect(
+        store.save(
+          PendingOTLPBatch(
+            id: UUID(),
+            signal: .traces,
+            createdAt: Date(),
+            attempt: 0,
+            request: testRequest()
+          )
+        ).saved
+      )
+      fileSystem.failListings = true
+
+      let uncertain = store.removeAll()
+      #expect(uncertain.failedFiles == 1)
+      #expect(fileSystem.fileCount == 0)
+
+      fileSystem.failListings = false
+      let retry = store.removeAll()
+      #expect(retry.failedFiles == 0)
+      #expect(retry.remainingItems == 0)
+    }
+
+    @Test("purges live files across resolved Apple filesystem paths")
+    func liveFileSystemPurge() throws {
+      let resolvedDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("swift-composable-otel-\(UUID().uuidString)")
+      let unresolvedPath = resolvedDirectory.path.replacingOccurrences(
+        of: "/private/var",
+        with: "/var",
+        options: .anchored
+      )
+      let directory = URL(fileURLWithPath: unresolvedPath)
+      defer {
+        try? FileManager.default.removeItem(at: directory)
+      }
+      let store = try RuntimePersistenceStore(
+        configuration: .init(directory: directory, maximumBytes: 64 * 1_024),
+        fileSystem: .live,
+        diagnostics: RuntimeDiagnosticsState(handler: nil)
+      )
+      #expect(
+        store.save(
+          PendingOTLPBatch(
+            id: UUID(),
+            signal: .logs,
+            createdAt: Date(),
+            attempt: 0,
+            request: testRequest()
+          )
+        ).saved
+      )
+
+      let result = store.removeAll()
+
+      #expect(result.failedFiles == 0)
+      #expect(result.remainingItems == 0)
+      #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
   }
 
   @Suite("Lifecycle")
@@ -391,6 +462,236 @@ struct TelemetryRuntimeTests {
       #expect(first.operation == .shutdown)
     }
   }
+
+  @Suite("Consent revocation")
+  struct ConsentRevocationTests {
+    @Test("discards queued and persisted telemetry and leaves relaunch empty")
+    func queuedPersistenceAndRelaunch() async throws {
+      let fileSystem = TestRuntimeFileSystem()
+      let auth = AuthRecorder()
+      let transport = ScriptedTransport([.status(202)])
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(
+        maximumQueueSize: 4,
+        maximumBatchSize: 2,
+        scheduledDelay: .seconds(60)
+      )
+      configuration.persistence = .init(
+        directory: URL(fileURLWithPath: "/runtime-spool"),
+        maximumBytes: 64 * 1_024
+      )
+      let dependencies = TelemetryRuntimeDependencies(
+        clock: .live,
+        fileSystem: fileSystem.fileSystem,
+        makeID: UUID.init
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport,
+        authenticator: .init { request in
+          await auth.authorize(request)
+        },
+        dependencies: dependencies
+      )
+      await runtime.setExportCondition(.unavailable)
+      runtime.client.recordNavigation(.push, route: "settings")
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually { runtime.diagnostics.persistedItems == 1 }
+      runtime.client.recordNavigation(.push, route: "settings")
+
+      let result = await runtime.disableAndDiscardPending()
+
+      #expect(result.operation == .disableAndDiscardPending)
+      #expect(result.succeeded)
+      #expect(result.persistedItems == 0)
+      #expect(result.traces.droppedItems >= 2)
+      #expect(fileSystem.fileCount == 0)
+      #expect(await auth.requestCount == 0)
+      #expect(await transport.requestCount == 0)
+      #expect(runtime.diagnostics.completedDiscards == 1)
+
+      await runtime.setExportCondition(.available)
+      await runtime.applicationDidBecomeActive()
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await Task.sleep(for: .milliseconds(20))
+      #expect(await auth.requestCount == 0)
+      #expect(await transport.requestCount == 0)
+
+      let relaunchedTransport = ScriptedTransport([.status(202)])
+      let relaunched = try makeRuntime(
+        configuration: configuration,
+        transport: relaunchedTransport.transport,
+        dependencies: dependencies
+      )
+      try await Task.sleep(for: .milliseconds(20))
+      #expect(await relaunchedTransport.requestCount == 0)
+      _ = await relaunched.disableAndDiscardPending()
+    }
+
+    @Test("cancels an in-flight attempt without starting another")
+    func inFlightCancellation() async throws {
+      let auth = AuthRecorder()
+      let transport = ScriptedTransport([.suspend, .status(202)])
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport,
+        authenticator: .init { request in
+          await auth.authorize(request)
+        }
+      )
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually { await transport.requestCount == 1 }
+      try await eventually { await auth.requestCount == 1 }
+
+      let result = await runtime.disableAndDiscardPending()
+
+      #expect(result.succeeded)
+      try await eventually { await transport.cancellationCount == 1 }
+      try await Task.sleep(for: .milliseconds(20))
+      #expect(await transport.requestCount == 1)
+      #expect(await auth.requestCount == 1)
+    }
+
+    @Test("is concurrent and idempotent")
+    func concurrentIdempotency() async throws {
+      let fileSystem = TestRuntimeFileSystem()
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.persistence = .init(
+        directory: URL(fileURLWithPath: "/runtime-spool"),
+        maximumBytes: 64 * 1_024
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        dependencies: .init(
+          clock: .live,
+          fileSystem: fileSystem.fileSystem,
+          makeID: UUID.init
+        )
+      )
+      await runtime.setExportCondition(.unavailable)
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually { runtime.diagnostics.persistedItems == 1 }
+
+      let results = await withTaskGroup(
+        of: TelemetryRuntimeOperationResult.self,
+        returning: [TelemetryRuntimeOperationResult].self
+      ) { group in
+        for _ in 0..<16 {
+          group.addTask {
+            await runtime.disableAndDiscardPending()
+          }
+        }
+        var results: [TelemetryRuntimeOperationResult] = []
+        for await result in group {
+          results.append(result)
+        }
+        return results
+      }
+
+      let first = try #require(results.first)
+      #expect(results.allSatisfy { $0 == first })
+      #expect(fileSystem.removeCount == 1)
+      #expect(runtime.diagnostics.completedDiscards == 1)
+    }
+
+    @Test("reports persistence deletion failure without resuming export")
+    func deletionFailureIsolation() async throws {
+      let fileSystem = TestRuntimeFileSystem()
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.persistence = .init(
+        directory: URL(fileURLWithPath: "/runtime-spool"),
+        maximumBytes: 64 * 1_024
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        dependencies: .init(
+          clock: .live,
+          fileSystem: fileSystem.fileSystem,
+          makeID: UUID.init
+        )
+      )
+      await runtime.setExportCondition(.unavailable)
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually { runtime.diagnostics.persistedItems == 1 }
+      fileSystem.failRemovals = true
+
+      let result = await runtime.disableAndDiscardPending()
+
+      #expect(!result.succeeded)
+      #expect(result.traces.status == .failed)
+      #expect(result.persistedItems == 1)
+      #expect(fileSystem.fileCount == 1)
+      #expect(runtime.diagnostics.failedDiscards == 1)
+
+      fileSystem.failRemovals = false
+      let retry = await runtime.disableAndDiscardPending()
+      #expect(retry.succeeded)
+      #expect(retry.persistedItems == 0)
+      #expect(fileSystem.fileCount == 0)
+      #expect(runtime.diagnostics.completedDiscards == 1)
+    }
+
+    @Test("does not collect metrics while disabling")
+    func metricsAreDiscarded() async throws {
+      let transport = ScriptedTransport([.status(202)])
+      let runtime = try makeRuntime(
+        configuration: runtimeConfiguration(
+          signals: .init(tracesEnabled: false, metricsEnabled: true, logsEnabled: false)
+        ),
+        transport: transport.transport
+      )
+      runtime.client.recordNavigation(.push, route: "settings")
+
+      let result = await runtime.disableAndDiscardPending()
+
+      #expect(result.metrics.status == .success)
+      try await Task.sleep(for: .milliseconds(20))
+      #expect(await transport.requestCount == 0)
+    }
+
+    @Test("keeps graceful shutdown persistence until explicit discard")
+    func gracefulShutdownStillRetains() async throws {
+      let fileSystem = TestRuntimeFileSystem()
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.persistence = .init(
+        directory: URL(fileURLWithPath: "/runtime-spool"),
+        maximumBytes: 64 * 1_024
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        dependencies: .init(
+          clock: .live,
+          fileSystem: fileSystem.fileSystem,
+          makeID: UUID.init
+        )
+      )
+      await runtime.setExportCondition(.unavailable)
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually { runtime.diagnostics.persistedItems == 1 }
+
+      _ = await runtime.shutdown(timeout: .milliseconds(10))
+      #expect(fileSystem.fileCount == 1)
+
+      let discard = await runtime.disableAndDiscardPending()
+      #expect(discard.succeeded)
+      #expect(fileSystem.fileCount == 0)
+    }
+  }
 }
 
 private func runtimeConfiguration(
@@ -412,6 +713,7 @@ private func makeRuntime(
   endpoints: OTLPEndpoints? = nil,
   configuration: TelemetryRuntime.Configuration? = nil,
   transport: TelemetryHTTPTransport = ScriptedTransport([]).transport,
+  authenticator: TelemetryRequestAuthenticator = .none,
   dependencies: TelemetryRuntimeDependencies = .live
 ) throws -> TelemetryRuntime {
   var resolved = configuration ?? runtimeConfiguration()
@@ -421,7 +723,7 @@ private func makeRuntime(
   return try TelemetryRuntime(
     configuration: resolved,
     transport: transport,
-    authenticator: .none,
+    authenticator: authenticator,
     diagnosticHandler: nil,
     dependencies: dependencies
   )
@@ -603,6 +905,7 @@ private actor ScriptedTransport {
 
   private var steps: [Step]
   private var requests: [URLRequest] = []
+  private var cancellations = 0
 
   init(_ steps: [Step]) {
     self.steps = steps
@@ -621,6 +924,10 @@ private actor ScriptedTransport {
     requests.count
   }
 
+  var cancellationCount: Int {
+    cancellations
+  }
+
   private func send(_ request: URLRequest) async throws -> TelemetryHTTPResponse {
     requests.append(request)
     let step = steps.isEmpty ? .suspend : steps.removeFirst()
@@ -628,14 +935,23 @@ private actor ScriptedTransport {
     case .status(let status):
       return TelemetryHTTPResponse(statusCode: status)
     case .suspend:
-      try await Task.sleep(for: .seconds(30))
-      throw CancellationError()
+      do {
+        try await Task.sleep(for: .seconds(30))
+        throw CancellationError()
+      } catch {
+        cancellations += 1
+        throw error
+      }
     }
   }
 }
 
 private actor AuthRecorder {
   private(set) var headers: [String] = []
+
+  var requestCount: Int {
+    headers.count
+  }
 
   func authorize(_ original: URLRequest) -> URLRequest {
     var request = original
@@ -650,6 +966,9 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
   private let lock = NSLock()
   private var files: [URL: Data] = [:]
   private var directories: Set<URL> = []
+  private var shouldFailListings = false
+  private var shouldFailRemovals = false
+  private var removals = 0
   private(set) var atomicWriteCount = 0
   private(set) var protectedURLs: Set<URL> = []
   private(set) var backupExcludedURLs: Set<URL> = []
@@ -662,12 +981,16 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
         }
       },
       listFiles: { [weak self] directory in
-        self?.lock.withLock {
-          self?.files.keys.filter {
+        guard let self else { return [] }
+        return try self.lock.withLock {
+          guard !self.shouldFailListings else {
+            throw TestRuntimeFileSystemError.listingFailed
+          }
+          return self.files.keys.filter {
             $0.deletingLastPathComponent().standardizedFileURL.path
               == directory.standardizedFileURL.path
           }
-        } ?? []
+        }
       },
       read: { [weak self] url in
         guard let data = self?.lock.withLock({ self?.files[url] }) else {
@@ -682,8 +1005,13 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
         }
       },
       remove: { [weak self] url in
-        _ = self?.lock.withLock {
-          self?.files.removeValue(forKey: url)
+        guard let self else { return }
+        try self.lock.withLock {
+          guard !self.shouldFailRemovals else {
+            throw TestRuntimeFileSystemError.removalFailed
+          }
+          self.files.removeValue(forKey: url)
+          self.removals += 1
         }
       },
       applyProtection: { [weak self] url, _ in
@@ -703,10 +1031,45 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
     lock.withLock { Array(files.values) }
   }
 
+  var fileCount: Int {
+    lock.withLock { files.count }
+  }
+
+  var removeCount: Int {
+    lock.withLock { removals }
+  }
+
+  var failRemovals: Bool {
+    get {
+      lock.withLock { shouldFailRemovals }
+    }
+    set {
+      lock.withLock {
+        shouldFailRemovals = newValue
+      }
+    }
+  }
+
+  var failListings: Bool {
+    get {
+      lock.withLock { shouldFailListings }
+    }
+    set {
+      lock.withLock {
+        shouldFailListings = newValue
+      }
+    }
+  }
+
   func insert(_ data: Data, at url: URL) {
     lock.withLock {
       files[url] = data
     }
+  }
+
+  private enum TestRuntimeFileSystemError: Error {
+    case listingFailed
+    case removalFailed
   }
 }
 

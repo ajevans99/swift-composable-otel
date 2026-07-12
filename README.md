@@ -165,9 +165,9 @@ current regression coverage.
 | macOS | 14.0+; package build and tests required in CI |
 | watchOS | Unsupported today. The intended future floor is watchOS 10.0; see the named watchOS support gate in [SUPPORT.md](SUPPORT.md). |
 | Swift | Swift tools 6.0 manifest; Xcode 16.3+ with Swift 6.x is the CI support baseline |
-| Composable Architecture | `>= 1.17.0, < 2.0.0` |
+| Composable Architecture | `>= 1.25.0, < 2.0.0` |
 | swift-dependencies | `>= 1.5.1, < 2.0.0` |
-| OpenTelemetry Swift core | `>= 2.3.0, < 3.0.0` |
+| OpenTelemetry Swift core | `>= 2.4.1, < 3.0.0` |
 
 See [SUPPORT.md](SUPPORT.md) for platform and dependency policy, [CHANGELOG.md](CHANGELOG.md)
 for release history, and [RELEASING.md](RELEASING.md) for versioning and release requirements.

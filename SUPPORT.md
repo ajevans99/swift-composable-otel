@@ -38,8 +38,8 @@ A successful ad hoc build alone does not satisfy this gate.
 
 | Package | Supported range | Minimum set |
 | --- | --- | --- |
-| `opentelemetry-swift-core` | `>= 2.3.0, < 3.0.0` | `2.3.0` |
-| `swift-composable-architecture` | `>= 1.17.0, < 2.0.0` | `1.17.0` |
+| `opentelemetry-swift-core` | `>= 2.4.1, < 3.0.0` | `2.4.1` |
+| `swift-composable-architecture` | `>= 1.25.0, < 2.0.0` | `1.25.0` |
 | `swift-dependencies` | `>= 1.5.1, < 2.0.0` | `1.5.1` |
 | `xctest-dynamic-overlay` | `>= 1.9.0, < 2.0.0` | `1.9.0` |
 

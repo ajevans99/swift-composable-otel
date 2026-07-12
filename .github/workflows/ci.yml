@@ -65,7 +65,10 @@ jobs:
       - name: Test on macOS
         run: swift test
 
+      # The macOS 15 image does not install Xcode 16.3's iOS 18.4 platform.
+      # The latest lane remains the generic iOS build gate.
       - name: Build all products for iOS
+        if: matrix.dependency_set == 'latest'
         run: |
           for scheme in ComposableOTel ComposableOTelExporters ComposableOTelTesting; do
             xcodebuild \

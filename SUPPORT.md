@@ -48,8 +48,14 @@ same pull request whenever a bound changes.
 
 CI resolves and tests two dependency sets:
 
-- **Minimum:** pins each direct dependency to the lower bound above.
-- **Latest:** resolves the newest versions allowed by `Package.swift`.
+- **Minimum:** pins each direct dependency to the lower bound above, then builds and tests on
+  macOS with Xcode 16.3.
+- **Latest:** resolves the newest versions allowed by `Package.swift`, then builds and tests on
+  macOS and builds every product for a generic iOS device with the current Xcode.
+
+The GitHub-hosted macOS 15 image does not install Xcode 16.3's iOS 18.4 platform, so that
+lane cannot select a generic iOS destination. The current-Xcode lane remains the required iOS
+build gate; the unavailable historical SDK is not treated as a package source failure.
 
 The minimum job catches accidental use of newer APIs. The latest job catches upstream
 compatibility regressions. A dependency update that fails either set is not supported until the

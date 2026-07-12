@@ -60,7 +60,7 @@ minimum)
 
   verify_resolved opentelemetry-swift-core 2.3.0
   verify_resolved swift-composable-architecture 1.17.0
-  verify_resolved swift-dependencies 1.4.0
+  verify_resolved swift-dependencies 1.5.1
   verify_resolved xctest-dynamic-overlay 1.9.0
   ;;
 latest)

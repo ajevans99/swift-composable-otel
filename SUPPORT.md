@@ -40,7 +40,7 @@ A successful ad hoc build alone does not satisfy this gate.
 | --- | --- | --- |
 | `opentelemetry-swift-core` | `>= 2.3.0, < 3.0.0` | `2.3.0` |
 | `swift-composable-architecture` | `>= 1.17.0, < 2.0.0` | `1.17.0` |
-| `swift-dependencies` | `>= 1.4.0, < 2.0.0` | `1.4.0` |
+| `swift-dependencies` | `>= 1.5.1, < 2.0.0` | `1.5.1` |
 | `xctest-dynamic-overlay` | `>= 1.9.0, < 2.0.0` | `1.9.0` |
 
 `Package.swift` is authoritative for dependency constraints. Documentation must be updated in the

@@ -1,35 +1,63 @@
 # ``ComposableOTelExporters``
 
-Bootstrap OpenTelemetry SDK providers with the exporters available in this release.
+Configure the package-owned privacy boundary, development stdout, and production mobile OTLP.
 
 ## Overview
 
-``TelemetryBootstrap`` serializes process-global tracer, meter, and logger provider registration
-on its first call and returns a `TelemetryClient` for TCA dependency injection. Repeated and
-concurrent calls return the first cached client without re-registering providers. The first
-configuration therefore owns process-wide bootstrap settings.
+``TelemetryRuntime`` owns isolated tracer, meter, and logger providers; bounded processors and
+readers; official OTLP/HTTP encoders; request delivery; optional persistence; and lifecycle state.
+It validates TLS endpoints, applies host-supplied short-lived authentication on every attempt, and
+exposes only its feature-facing `TelemetryClient`.
 
-Instrumentation uses the providers cached in that returned client. The global registrations are a
-compatibility boundary for upstream OpenTelemetry code, not a provider lookup path for normal
-ComposableOTel spans, metrics, or logs. OpenTelemetry publishes the three provider globals through
-separate upstream setters, so start compatibility global readers only after `configure` returns.
+``TelemetryBootstrap`` remains an explicit development-only stdout path. Neither path replaces
+process-global OpenTelemetry providers.
 
-Both `.debug` and `.production` configure `StdoutSpanExporter`, `StdoutMetricExporter`, and
-`StdoutLogExporter`. Production changes the default trace ratio from `1.0` to `0.1`, changes
-metric export from every 5 seconds to every 60 seconds, and disables debug formatting. The
-production endpoint and headers are reserved but unused.
+``PrivacyPreservingSpanExporter`` sanitizes names, attributes, events, links, status, and resources.
+``PrivacyPreservingLogRecordExporter`` rebuilds records from allowlisted bodies, attributes, event
+names, and resources. ``PrivacyPreservingMetricExporter`` drops unknown instruments and unsafe
+resources, sanitizes dimensions, and removes exemplars.
 
-This module does not currently provide remote OTLP transport, TLS or authentication handling,
-retry or persistence, background lifecycle integration, or explicit flush and shutdown
-ownership. ``ConsoleSpanExporter`` is available separately and is not installed by
-``TelemetryBootstrap``.
+``ComposableOTelMetricConfiguration`` installs a catch-all drop view plus per-instrument views with
+dimension processors and duration histograms. It also creates instruments with stable descriptions
+and units.
+
+Read <doc:MobileOTLPRuntime> before enabling remote export. Mobile delivery remains best-effort:
+suspension and termination can interrupt every queue, retry, persistence, or flush strategy.
+
+Custom SDK integrations must install all three wrappers, package metric views, and a resource
+sanitized by the same policy. Otherwise they are outside the package trust boundary.
 
 ## Topics
 
 ### Bootstrap
 
 - ``TelemetryBootstrap``
+- ``TelemetryRuntime``
+- ``OTLPEndpoints``
+- ``TelemetryHTTPTransport``
+- ``TelemetryRequestAuthenticator``
+- ``TelemetryBatchConfiguration``
+- ``TelemetryDeliveryConfiguration``
+- ``TelemetryPersistenceConfiguration``
 
-### Exporters
+### Lifecycle and diagnostics
+
+- ``TelemetryRuntimeOperationResult``
+- ``TelemetryRuntimeDiagnostics``
+- ``TelemetryRuntimeDiagnosticEvent``
+- ``TelemetryExportCondition``
+
+### Articles
+
+- <doc:MobileOTLPRuntime>
+
+### Policy boundary
+
+- ``PrivacyPreservingSpanExporter``
+- ``PrivacyPreservingLogRecordExporter``
+- ``PrivacyPreservingMetricExporter``
+- ``ComposableOTelMetricConfiguration``
+
+### Console
 
 - ``ConsoleSpanExporter``

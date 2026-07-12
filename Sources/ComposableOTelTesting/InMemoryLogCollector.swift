@@ -4,8 +4,7 @@ import OpenTelemetrySdk
 
 /// A thread-safe, in-memory log record exporter for tests.
 ///
-/// Collects all emitted log records so tests can assert on log output
-/// from `telemetry.info()`, `telemetry.error()`, etc.
+/// Collects policy-filtered package log records for test assertions.
 ///
 /// ```swift
 /// let (client, collectors) = TelemetryClient.test()

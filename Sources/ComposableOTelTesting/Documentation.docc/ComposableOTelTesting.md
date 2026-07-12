@@ -1,26 +1,21 @@
 # ``ComposableOTelTesting``
 
-In-memory helpers for inspecting ComposableOTel instrumentation.
+Inspect bounded ComposableOTel signals with isolated in-memory collectors.
 
 ## Overview
 
-Use ``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)`` to create a client
-and ``TestCollectors``. Inject the client through TCA dependencies, exercise the feature, call
-``TestCollectors/forceFlush()``, and inspect spans or logs.
+Use ``ComposableOTel/TelemetryClient/test(metricReader:policy:)`` with the same policy as the
+application. Test clients install the production span/log privacy wrappers and package metric
+views, own local providers, and never replace process-global OpenTelemetry providers.
 
-The factory owns its providers locally and does not replace `OpenTelemetry.instance` globals.
-Independently injected clients therefore retain isolated span, metric, and log pipelines. The
-deprecated `configureTestTelemetry` helper is the global-provider compatibility path and must be
-serialized.
-
-The optional in-memory metric reader is provisional in `0.2.2`, but package regression tests use it
-to verify effect outcomes and balanced active-effect accounting.
+``TestCollectors`` exposes spans, logs, and the optional metric reader. Call
+``TestCollectors/forceFlush()`` before assertions.
 
 ## Topics
 
 ### Test client
 
-- ``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)``
+- ``ComposableOTel/TelemetryClient/test(metricReader:policy:)``
 - ``TestCollectors``
 
 ### Collectors

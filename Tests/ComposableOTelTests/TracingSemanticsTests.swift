@@ -34,7 +34,7 @@ private struct LifecycleFeature {
     Reduce { state, action in
       switch action {
       case .start:
-        return .tracedLongLivedRun(name: "longLived") { send in
+        return .tracedLongLivedRun(effect: "long-lived") { send in
           try await Task.sleep(for: .milliseconds(10))
           await send(.completed)
         }
@@ -42,7 +42,7 @@ private struct LifecycleFeature {
         state.completed = true
         return .none
       case .startCancellable:
-        return .tracedLongLivedRun(name: "cancelledLongLived") { _ in
+        return .tracedLongLivedRun(effect: "cancelled-long-lived") { _ in
           try await Task.sleep(for: .seconds(30))
         }
         .cancellable(id: CancelID.listener)
@@ -58,7 +58,7 @@ struct TracingSemanticsTests {
   @Test("reducer span is the explicit parent of its traced effect")
   @MainActor
   func reducerEffectParent() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: CounterFeature.State()) {
       CounterFeature()
     } withDependencies: {
@@ -72,12 +72,15 @@ struct TracingSemanticsTests {
     collectors.forceFlush()
 
     let reducerSpan = try #require(
-      collectors.spans.spans(named: "reducer/CounterFeature").first {
-        $0.attributes[TCAAttributes.actionType] == .string("fetchAndSet")
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.reducer).first {
+        $0.attributes[TCAAttributes.actionName] == .string("fetch-and-set")
       }
     )
-    let effectSpan = try #require(collectors.spans.spans(named: "effect/fetchCount").first)
-
+    let effectSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first {
+        $0.attributes[TCAAttributes.effectName] == .string("fetch-count")
+      }
+    )
     #expect(effectSpan.traceId == reducerSpan.traceId)
     #expect(effectSpan.parentSpanId == reducerSpan.spanId)
     #expect(effectSpan.status == .ok)
@@ -86,37 +89,43 @@ struct TracingSemanticsTests {
 
   @Test("effect context survives await and inherited child tasks")
   func taskLocalPropagation() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
 
     try await withDependencies {
       $0.composableOTel = client
     } operation: {
       try await client.withEffectTrace(
-        name: "propagation",
+        effect: "propagation",
         longLived: false,
         parentContext: nil
       ) {
         try await Task.sleep(for: .milliseconds(1))
-        _ = await tracedCall("awaited", method: "load") {
-          1
-        }
+        _ = await tracedCall(dependency: "awaited", operation: "load") { 1 }
         _ = await Task {
-          await tracedCall("childTask", method: "load") {
-            2
-          }
+          await tracedCall(dependency: "child-task", operation: "load") { 2 }
         }.value
       }
     }
     collectors.forceFlush()
 
-    let effectSpan = try #require(collectors.spans.spans(named: "effect/propagation").first)
+    let effectSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first {
+        $0.attributes[TCAAttributes.effectName] == .string("propagation")
+      }
+    )
+    let dependencySpans = collectors.spans.spans(
+      named: ComposableOTelSemantics.Spans.dependency
+    )
     let awaitedSpan = try #require(
-      collectors.spans.spans(named: "dependency/awaited/load").first
+      dependencySpans.first {
+        $0.attributes[TCAAttributes.dependencyName] == .string("awaited")
+      }
     )
     let childTaskSpan = try #require(
-      collectors.spans.spans(named: "dependency/childTask/load").first
+      dependencySpans.first {
+        $0.attributes[TCAAttributes.dependencyName] == .string("child-task")
+      }
     )
-
     #expect(awaitedSpan.traceId == effectSpan.traceId)
     #expect(awaitedSpan.parentSpanId == effectSpan.spanId)
     #expect(childTaskSpan.traceId == effectSpan.traceId)
@@ -125,11 +134,10 @@ struct TracingSemanticsTests {
 
   @Test("effect tracing records and rethrows failures")
   func errorRethrow() async throws {
-    let (client, collectors) = TelemetryClient.test()
-
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     do {
       let _: Void = try await client.withEffectTrace(
-        name: "failure",
+        effect: "failure",
         longLived: false,
         parentContext: nil
       ) {
@@ -141,18 +149,20 @@ struct TracingSemanticsTests {
     }
     collectors.forceFlush()
 
-    let span = try #require(collectors.spans.spans(named: "effect/failure").first)
+    let span = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
+    )
     #expect(span.status.isError)
     #expect(span.attributes[TCAAttributes.effectOutcome] == .string("error"))
-    #expect(span.events.map(\.name) == ["exception"])
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.exception])
   }
 
   @Test("effect tracing records and rethrows cancellation")
   func cancellationRethrow() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     let task = Task {
       try await client.withEffectTrace(
-        name: "cancellation",
+        effect: "cancellation",
         longLived: false,
         parentContext: nil
       ) {
@@ -164,24 +174,26 @@ struct TracingSemanticsTests {
     task.cancel()
     do {
       try await task.value
-      Issue.record("Expected the traced operation to throw cancellation")
+      Issue.record("Expected cancellation")
     } catch is CancellationError {
     }
     collectors.forceFlush()
 
-    let span = try #require(collectors.spans.spans(named: "effect/cancellation").first)
+    let span = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
+    )
     #expect(span.status == .unset)
     #expect(span.attributes[TCAAttributes.effectOutcome] == .string("cancelled"))
     #expect(span.attributes[TCAAttributes.effectCancelled] == .bool(true))
-    #expect(span.events.map(\.name) == ["effect.cancelled"])
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.effectCancelled])
   }
 
   @Test("handled or translated cancellation follows the operation result")
   func handledCancellation() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     let recoveredTask = Task {
       try await client.withEffectTrace(
-        name: "recoveredCancellation",
+        effect: "recovered-cancellation",
         longLived: false,
         parentContext: nil
       ) {
@@ -197,7 +209,7 @@ struct TracingSemanticsTests {
 
     let translatedTask = Task {
       try await client.withEffectTrace(
-        name: "translatedCancellation",
+        effect: "translated-cancellation",
         longLived: false,
         parentContext: nil
       ) {
@@ -212,17 +224,22 @@ struct TracingSemanticsTests {
     translatedTask.cancel()
     do {
       try await translatedTask.value
-      Issue.record("Expected cancellation to be translated into the host error")
+      Issue.record("Expected translated cancellation")
     } catch let error as ExpectedError {
       #expect(error == .failed)
     }
     collectors.forceFlush()
 
+    let spans = collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect)
     let recovered = try #require(
-      collectors.spans.spans(named: "effect/recoveredCancellation").first
+      spans.first {
+        $0.attributes[TCAAttributes.effectName] == .string("recovered-cancellation")
+      }
     )
     let translated = try #require(
-      collectors.spans.spans(named: "effect/translatedCancellation").first
+      spans.first {
+        $0.attributes[TCAAttributes.effectName] == .string("translated-cancellation")
+      }
     )
     #expect(recovered.attributes[TCAAttributes.effectOutcome] == .string("success"))
     #expect(recovered.status == .ok)
@@ -233,7 +250,7 @@ struct TracingSemanticsTests {
   @Test("long-lived effects use one span and classify normal completion")
   @MainActor
   func longLivedCompletion() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: LifecycleFeature.State()) {
       LifecycleFeature()
     } withDependencies: {
@@ -247,19 +264,19 @@ struct TracingSemanticsTests {
     await store.finish()
     collectors.forceFlush()
 
-    let spans = collectors.spans.spans(named: "effect/longLived")
+    let spans = collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect)
     let span = try #require(spans.first)
     #expect(spans.count == 1)
     #expect(span.status == .ok)
     #expect(span.attributes[TCAAttributes.effectLongLived] == .bool(true))
     #expect(span.attributes[TCAAttributes.effectOutcome] == .string("success"))
-    #expect(span.events.map(\.name) == ["effect.completed"])
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.effectCompleted])
   }
 
   @Test("long-lived cancellation is not completion")
   @MainActor
   func longLivedCancellation() async throws {
-    let (client, collectors) = TelemetryClient.test()
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: LifecycleFeature.State()) {
       LifecycleFeature()
     } withDependencies: {
@@ -272,30 +289,33 @@ struct TracingSemanticsTests {
     collectors.forceFlush()
 
     let span = try #require(
-      collectors.spans.spans(named: "effect/cancelledLongLived").first
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
     )
     #expect(span.attributes[TCAAttributes.effectOutcome] == .string("cancelled"))
-    #expect(span.events.map(\.name) == ["effect.cancelled"])
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.effectCancelled])
   }
 
   @Test("effect counters and active accounting are balanced exactly once")
   func balancedEffectMetrics() async throws {
     let metricReader = InMemoryMetricReader()
-    let (client, _) = TelemetryClient.test(metricReader: metricReader)
+    let (client, _) = TelemetryClient.test(
+      metricReader: metricReader,
+      policy: testPolicy()
+    )
 
     try await client.withEffectTrace(
-      name: "success",
+      effect: "success",
       longLived: false,
       parentContext: nil
     ) {}
     try await client.withEffectTrace(
-      name: "longLivedSuccess",
+      effect: "long-lived-success",
       longLived: true,
       parentContext: nil
     ) {}
     do {
       let _: Void = try await client.withEffectTrace(
-        name: "error",
+        effect: "error",
         longLived: false,
         parentContext: nil
       ) {
@@ -306,7 +326,7 @@ struct TracingSemanticsTests {
 
     let cancelledTask = Task {
       try await client.withEffectTrace(
-        name: "cancelled",
+        effect: "cancelled",
         longLived: true,
         parentContext: nil
       ) {
@@ -318,41 +338,53 @@ struct TracingSemanticsTests {
     _ = try? await cancelledTask.value
 
     let metrics = metricReader.collectMetrics()
-    #expect(sumLongPoints(named: "tca.effects.started", in: metrics) == 4)
-    #expect(sumLongPoints(named: "tca.effects.completed", in: metrics) == 2)
-    #expect(sumLongPoints(named: "tca.effects.cancelled", in: metrics) == 1)
-    #expect(sumLongPoints(named: "tca.effects.errored", in: metrics) == 1)
-
-    let activePoints = longPoints(named: "tca.store.active_effects", in: metrics)
+    #expect(
+      sumLongPoints(named: ComposableOTelSemantics.Metrics.effectsStarted, in: metrics) == 4
+    )
+    #expect(
+      sumLongPoints(named: ComposableOTelSemantics.Metrics.effectsCompleted, in: metrics) == 2
+    )
+    #expect(
+      sumLongPoints(named: ComposableOTelSemantics.Metrics.effectsCancelled, in: metrics) == 1
+    )
+    #expect(
+      sumLongPoints(named: ComposableOTelSemantics.Metrics.effectsErrored, in: metrics) == 1
+    )
+    let activePoints = longPoints(
+      named: ComposableOTelSemantics.Metrics.activeEffects,
+      in: metrics
+    )
     #expect(activePoints.count == 4)
     #expect(activePoints.allSatisfy { $0.value == 0 })
   }
 
   @Test("test clients retain isolated cached loggers under concurrency")
   func injectedLoggerIsolation() async {
-    let (firstClient, firstCollectors) = TelemetryClient.test()
-    let (secondClient, secondCollectors) = TelemetryClient.test()
+    let policy = testPolicy(
+      signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: true)
+    )
+    let (firstClient, firstCollectors) = TelemetryClient.test(policy: policy)
+    let (secondClient, secondCollectors) = TelemetryClient.test(policy: policy)
 
-    firstClient.info("first")
-    secondClient.info("second")
+    firstClient.recordNavigation(.push, route: "settings")
+    secondClient.recordNavigation(.push, route: "settings")
     await withTaskGroup(of: Void.self) { group in
-      for index in 0..<64 {
+      for _ in 0..<64 {
         group.addTask {
-          firstClient.info("concurrent-\(index)")
+          firstClient.recordNavigation(.push, route: "settings")
         }
       }
     }
-
-    #expect(firstCollectors.logs.records(containing: "first").count == 1)
-    #expect(firstCollectors.logs.records(containing: "concurrent-").count == 64)
-    #expect(firstCollectors.logs.records(containing: "second").isEmpty)
-    #expect(secondCollectors.logs.records(containing: "second").count == 1)
-    #expect(secondCollectors.logs.records(containing: "first").isEmpty)
+    #expect(firstCollectors.logs.allRecords.count == 65)
+    #expect(secondCollectors.logs.allRecords.count == 1)
   }
 
   @Test("bootstrap is atomic, idempotent, and unaffected by prior default-client access")
   func concurrentBootstrap() async {
     let defaultClient = currentTelemetryClient()
+    let globalTracerProvider = ObjectIdentifier(OpenTelemetry.instance.tracerProvider as AnyObject)
+    let globalMeterProvider = ObjectIdentifier(OpenTelemetry.instance.meterProvider as AnyObject)
+    let globalLoggerProvider = ObjectIdentifier(OpenTelemetry.instance.loggerProvider as AnyObject)
     let clients = await withTaskGroup(
       of: TelemetryClient.self,
       returning: [TelemetryClient].self
@@ -360,8 +392,9 @@ struct TracingSemanticsTests {
       for index in 0..<32 {
         group.addTask {
           TelemetryBootstrap.configure(
-            serviceName: "bootstrap-\(index)",
-            environment: .production(endpoint: "https://unused.invalid")
+            serviceName: ServiceID(validating: "bootstrap-\(index)")!,
+            environment: .debug,
+            policy: testPolicy()
           )
         }
       }
@@ -375,12 +408,21 @@ struct TracingSemanticsTests {
     let first = clients[0]
     #expect(defaultClient.metrics !== first.metrics)
     #expect(clients.allSatisfy { $0.metrics === first.metrics })
-
     let repeated = TelemetryBootstrap.configure(
-      serviceName: "ignored-after-first-configuration",
-      environment: .debug
+      serviceName: "metadata-test",
+      environment: .debug,
+      policy: testPolicy()
     )
     #expect(repeated.metrics === first.metrics)
+    #expect(
+      ObjectIdentifier(OpenTelemetry.instance.tracerProvider as AnyObject) == globalTracerProvider
+    )
+    #expect(
+      ObjectIdentifier(OpenTelemetry.instance.meterProvider as AnyObject) == globalMeterProvider
+    )
+    #expect(
+      ObjectIdentifier(OpenTelemetry.instance.loggerProvider as AnyObject) == globalLoggerProvider
+    )
   }
 }
 

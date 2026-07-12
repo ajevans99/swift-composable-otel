@@ -14,6 +14,7 @@ fi
 
 cd "$repository_root"
 rm -f Package.resolved
+rm -f .build/workspace-state.json
 
 manifest_backup=""
 cleanup() {
@@ -50,21 +51,23 @@ minimum)
   cp -p Package.swift "$manifest_backup"
 
   requirement_count="$(grep -c 'from: "' Package.swift)"
-  if [[ "$requirement_count" != "4" ]]; then
-    echo "Expected four direct minimum-version requirements in Package.swift" >&2
+  if [[ "$requirement_count" != "5" ]]; then
+    echo "Expected five direct minimum-version requirements in Package.swift" >&2
     exit 1
   fi
 
   perl -pi -e 's/\bfrom: /exact: /g' Package.swift
   swift_package resolve
-
+  verify_resolved opentelemetry-swift 2.4.1
   verify_resolved opentelemetry-swift-core 2.4.1
   verify_resolved swift-composable-architecture 1.25.0
   verify_resolved swift-dependencies 1.5.1
   verify_resolved xctest-dynamic-overlay 1.9.0
+  verify_resolved swift-sharing 2.8.2
   ;;
 latest)
-  swift_package resolve
+  swift_package update
+  verify_resolved swift-sharing 2.8.2
   ;;
 *)
   echo "Usage: $0 <minimum|latest>" >&2

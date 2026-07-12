@@ -1,62 +1,63 @@
 # ``ComposableOTel``
 
-Instrument The Composable Architecture with OpenTelemetry signals.
+Instrument The Composable Architecture with bounded, privacy-safe OpenTelemetry signals.
 
 ## Overview
 
-ComposableOTel provides dependency-injected APIs for reducer spans, effect lifecycle signals,
-dependency-call spans, structured logs, and metrics.
+ComposableOTel emits fixed-name reducer, effect, dependency, and navigation spans plus bounded
+metrics and optional fixed-body logs. Applications provide a finite ``TelemetrySchema`` and typed
+identifiers. Unknown values aggregate to `other`; invalid dynamic values cannot become telemetry
+identifiers.
 
-The current release is a pre-1.0 instrumentation prototype. Reducer spans cover synchronous
-reducer execution and use closure-based task-local activation. Traced effects created during
-reduction capture the reducer span as their explicit parent, then use their own active span across
-suspension and inherited child tasks. Effect failures and cancellation are recorded and rethrown.
-Logs use the logger stored by the injected ``TelemetryClient``. ``SpanAttributeRedactor`` is not
-yet invoked.
+The default ``TelemetrySignalConfiguration`` enables traces and metrics independently and disables
+logs. Reducer actions and state are never reflected. Optional state-change reporting compares
+non-exported ``StateChangeToken`` values. Errors expose only schema-bounded metadata from
+``TelemetryErrorMetadata`` and generic status/log text.
 
-`ComposableOTelExporters` configures stdout export only. Its production endpoint and headers do
-not send remote OTLP telemetry in this release.
+`ComposableOTelExporters` supplies the development stdout bootstrap plus a lifecycle-owning
+production `TelemetryRuntime` with bounded OTLP/HTTP delivery. Both install the same
+exporter-boundary filtering and metric views.
 
-### Incremental adoption
+### Adoption
 
-- Add ``ComposableArchitecture/Reducer/instrumented(name:options:)`` for reducer spans, optional
-  action logs, and metrics.
-- Use ``ComposableArchitecture/Effect/tracedRun(name:priority:operation:)`` for one-shot effect
-  lifecycle outcomes.
-- Use ``ComposableArchitecture/Effect/traceStart(name:)`` only when an initiation marker is enough.
-- Wrap dependency methods with `tracedCall` for per-call spans and metrics.
-- Override `@Dependency(\.composableOTel)` with a test client from `ComposableOTelTesting`.
+- Define a ``TelemetrySchema`` and ``TelemetryPolicy``.
+- Add `Reducer.instrumented(feature:action:stateChangeToken:)`.
+- Use `Effect.tracedRun(effect:priority:operation:)` or
+  `Effect.tracedLongLivedRun(effect:priority:operation:)`.
+- Use `tracedCall(dependency:operation:operation:)` for dependency work.
+- Call ``TelemetryClient/recordNavigation(_:route:)`` with route names that contain no parameters.
+- Test through `ComposableOTelTesting`.
 
 ## Topics
 
-### Essentials
+### Policy and identifiers
+
+- ``TelemetrySchema``
+- ``TelemetryPolicy``
+- ``TelemetryIdentifier``
+- ``TelemetrySignalConfiguration``
+- ``TelemetryErrorMetadata``
+- ``TelemetryOutcome``
+- ``NavigationOperation``
+- ``StateChangeToken``
+
+### Runtime
 
 - ``TelemetryClient``
-- ``SendableTracer``
-- ``SendableLogger``
+- ``MetricInstruments``
 - ``ComposableOTelMetadata``
-- ``InstrumentationOptions``
+- ``ComposableOTelSemantics``
+- ``TCAAttributes``
 
-### Reducer instrumentation
+### Reducers and effects
 
 - ``InstrumentedReducer``
-- ``ComposableArchitecture/Reducer/instrumented(name:options:)``
-
-### Effect tracing
-
-- ``ComposableArchitecture/Effect/traced(name:)``
-- ``ComposableArchitecture/Effect/traceStart(name:)``
-- ``ComposableArchitecture/Effect/tracedRun(name:priority:operation:)``
-- ``ComposableArchitecture/Effect/tracedLongLivedRun(name:priority:operation:)``
-
-### Configuration
-
-- ``ErrorDetailPolicy``
-- ``SpanAttributeRedactor``
-- ``NoOpRedactor``
-- ``TCAAttributes``
-- ``MetricInstruments``
+- ``ComposableArchitecture/Reducer/instrumented(feature:action:stateChangeToken:)``
+- ``ComposableArchitecture/Effect/traceStart(effect:)``
+- ``ComposableArchitecture/Effect/tracedRun(effect:priority:operation:)``
+- ``ComposableArchitecture/Effect/tracedLongLivedRun(effect:priority:operation:)``
 
 ### Articles
 
 - <doc:GettingStarted>
+- <doc:SemanticConventions>

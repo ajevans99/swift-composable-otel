@@ -58,32 +58,35 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
     let actionName = Self.extractActionName(action)
     let spanName = "reducer/\(reducerName)"
 
-    let span = telemetry.tracer.spanBuilder(spanName: spanName)
+    let spanBuilder = telemetry.tracer.spanBuilder(spanName: spanName)
       .setSpanKind(spanKind: .internal)
       .setAttribute(key: TCAAttributes.reducerName, value: reducerName)
       .setAttribute(key: TCAAttributes.actionType, value: actionName)
-      .setActive(true)
-      .startSpan()
 
     let stateSnapshot: String? = options.stateDiffs ? String(describing: state) : nil
 
     let clock = ContinuousClock()
     let startTime = clock.now
 
-    let effect = base._reduce(into: &state, action: action)
+    let (effect, durationMs) = spanBuilder.withActiveSpan { span in
+      let effect = ReducerTraceContext.$spanContext.withValue(span.context) {
+        base._reduce(into: &state, action: action)
+      }
 
-    let elapsed = clock.now - startTime
-    let durationMs =
-      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
+      let elapsed = clock.now - startTime
+      let durationMs =
+        Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
 
-    if let stateSnapshot {
-      let newSnapshot = String(describing: state)
-      span.setAttribute(key: TCAAttributes.stateChanged, value: newSnapshot != stateSnapshot)
-    } else {
-      span.setAttribute(key: TCAAttributes.stateChanged, value: true)
+      if let stateSnapshot {
+        let newSnapshot = String(describing: state)
+        span.setAttribute(key: TCAAttributes.stateChanged, value: newSnapshot != stateSnapshot)
+      } else {
+        span.setAttribute(key: TCAAttributes.stateChanged, value: true)
+      }
+      span.setAttribute(key: TCAAttributes.reducerDurationMs, value: durationMs)
+      span.status = .ok
+      return (effect, durationMs)
     }
-    span.setAttribute(key: TCAAttributes.reducerDurationMs, value: durationMs)
-    span.end()
 
     if options.metricsEnabled {
       let attrs: [String: AttributeValue] = [
@@ -143,7 +146,8 @@ extension Reducer {
   /// Wraps this reducer with OpenTelemetry instrumentation.
   ///
   /// Each action produces a synchronous reducer span and, when enabled, action logs and metrics.
-  /// Reducer effects are not covered by the reducer span.
+  /// Traced effects created during reduction capture that span as their explicit parent. The
+  /// reducer span still ends before the returned effect executes.
   ///
   /// ```swift
   /// Reduce { state, action in

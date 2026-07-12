@@ -148,12 +148,26 @@ public struct SendableTracer: @unchecked Sendable {
   }
 }
 
+/// A Sendable wrapper around an OpenTelemetry logger.
+public struct SendableLogger: @unchecked Sendable {
+  public let underlying: any Logger
+
+  public init(_ logger: any Logger) {
+    self.underlying = logger
+  }
+
+  public func logRecordBuilder() -> LogRecordBuilder {
+    underlying.logRecordBuilder()
+  }
+}
+
 /// The runtime client for TCA OpenTelemetry instrumentation.
 ///
-/// Access via `@Dependency(\.composableOTel)`. Holds references to the OTel tracer,
-/// metric instruments, and error handling configuration.
+/// Access via `@Dependency(\.composableOTel)`. The client owns stable tracer, meter-instrument,
+/// and logger references so normal instrumentation never re-resolves mutable global providers.
 ///
-/// The `liveValue` reads from `OpenTelemetry.instance` globals. Override in tests:
+/// The default dependency value is no-op. Inject the client returned by `TelemetryBootstrap`
+/// in applications, and override it in tests:
 /// ```swift
 /// let (client, collectors) = TelemetryClient.test()
 /// let store = TestStore(...) {
@@ -169,6 +183,9 @@ public struct TelemetryClient: Sendable {
   /// Pre-built metric instruments (reference-stable cache).
   public var metrics: MetricInstruments
 
+  /// The cached logger used for structured log records.
+  public var logger: SendableLogger
+
   /// How error details are exported in telemetry.
   public var errorDetailPolicy: ErrorDetailPolicy
 
@@ -181,25 +198,47 @@ public struct TelemetryClient: Sendable {
   public init(
     tracer: any Tracer,
     metrics: MetricInstruments,
+    logger: any Logger = DefaultLoggerProvider.instance
+      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(ComposableOTelMetadata.version)
+      .build(),
     errorDetailPolicy: ErrorDetailPolicy = .redacted,
     redactor: any SpanAttributeRedactor = NoOpRedactor()
   ) {
     self.tracer = SendableTracer(tracer)
     self.metrics = metrics
+    self.logger = SendableLogger(logger)
     self.errorDetailPolicy = errorDetailPolicy
     self.redactor = redactor
   }
+
+  /// A provider-independent no-op client used as the default dependency value.
+  public static let noop: TelemetryClient = {
+    let tracer = DefaultTracerProvider.instance.get(
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
+    )
+    let meter = DefaultMeterProvider.instance
+      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+      .build()
+    let logger = DefaultLoggerProvider.instance
+      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(ComposableOTelMetadata.version)
+      .build()
+    return TelemetryClient(
+      tracer: tracer,
+      metrics: MetricInstruments(meter: meter),
+      logger: logger
+    )
+  }()
 }
 
-// MARK: - Logger helper
+// MARK: - Logging
 
 extension TelemetryClient {
   /// Emit a structured log record.
   public func log(severity: Severity, body: String, attributes: [String: AttributeValue] = [:]) {
-    let logger = OpenTelemetry.instance.loggerProvider
-      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
-      .setInstrumentationVersion(ComposableOTelMetadata.version)
-      .build()
     logger.logRecordBuilder()
       .setSeverity(severity)
       .setBody(.string(body))
@@ -219,36 +258,8 @@ extension TelemetryClient {
 // MARK: - DependencyKey
 
 private enum TelemetryClientKey: DependencyKey {
-  static let liveValue: TelemetryClient = {
-    let tracer = OpenTelemetry.instance.tracerProvider.get(
-      instrumentationName: ComposableOTelMetadata.instrumentationName,
-      instrumentationVersion: ComposableOTelMetadata.version
-    )
-    let meter = OpenTelemetry.instance.meterProvider
-      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
-      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
-      .build()
-    return TelemetryClient(
-      tracer: tracer,
-      metrics: MetricInstruments(meter: meter)
-    )
-  }()
-
-  static let testValue: TelemetryClient = {
-    // Default test value uses no-op providers (DefaultTracer, DefaultMeter)
-    let tracer = DefaultTracerProvider.instance.get(
-      instrumentationName: ComposableOTelMetadata.instrumentationName,
-      instrumentationVersion: ComposableOTelMetadata.version
-    )
-    let meter = DefaultMeterProvider.instance
-      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
-      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
-      .build()
-    return TelemetryClient(
-      tracer: tracer,
-      metrics: MetricInstruments(meter: meter)
-    )
-  }()
+  static let liveValue = TelemetryClient.noop
+  static let testValue = TelemetryClient.noop
 }
 
 extension DependencyValues {

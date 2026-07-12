@@ -47,8 +47,7 @@ struct CounterFeature {
   }
 }
 
-// All telemetry tests must be serialized since they share OpenTelemetry.instance
-@Suite("ComposableOTel", .serialized)
+@Suite("ComposableOTel")
 struct ComposableOTelAllTests {
 
   // MARK: - InstrumentedReducer Tests

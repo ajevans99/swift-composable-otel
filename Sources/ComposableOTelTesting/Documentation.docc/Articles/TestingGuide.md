@@ -36,7 +36,7 @@ let spans = collectors.spans.spans(named: "effect/fetchData")
 
 ## Inspect logs
 
-The test client registers its in-memory logger provider globally:
+The test client caches its in-memory logger without replacing global providers:
 
 ```swift
 let errors = collectors.logs.records(withSeverity: .error)
@@ -55,18 +55,18 @@ let (telemetry, collectors) = TelemetryClient.test(metricReader: metricReader)
 let metrics = metricReader.collectMetrics()
 ```
 
-The metric reader API is provisional in `0.2.2` and is not covered by the package regression
-suite. Do not use it as a release gate without consumer-side validation.
+The metric reader API is provisional in `0.2.2`. The package regression suite uses it to verify
+effect terminal counters and that active-effect values return to zero.
 
-## Serialize telemetry tests
+## Global compatibility tests
 
-``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)`` replaces process-global
-tracer, meter, and logger providers. Run all telemetry suites serially to prevent tests from
-observing another test's providers:
+``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)`` keeps providers local, so
+separately injected clients can run concurrently. Only the deprecated `configureTestTelemetry`
+helper replaces process-global providers. Serialize suites that still use that compatibility API:
 
 ```swift
-@Suite("MyFeature telemetry", .serialized)
-struct MyFeatureTelemetryTests {
+@Suite("Legacy global telemetry", .serialized)
+struct LegacyGlobalTelemetryTests {
   // Tests.
 }
 ```

@@ -8,7 +8,8 @@ import OpenTelemetryApi
 /// and records metrics for call count, duration, and errors.
 ///
 /// When called from a TCA effect, inherits the store's dependency context automatically.
-/// Outside TCA context, uses the live (global OTel) telemetry client.
+/// Outside a dependency scope, the default client is no-op; inject a configured client to emit
+/// telemetry.
 ///
 /// ```swift
 /// try await tracedCall("goalDatabase", method: "fetchGoal") {
@@ -23,12 +24,10 @@ public func tracedCall<T: Sendable>(
   @Dependency(\.composableOTel) var telemetry
 
   let spanName = "dependency/\(dependencyName)/\(method)"
-  let span = telemetry.tracer.spanBuilder(spanName: spanName)
+  let spanBuilder = telemetry.tracer.spanBuilder(spanName: spanName)
     .setSpanKind(spanKind: .internal)
     .setAttribute(key: TCAAttributes.dependencyName, value: dependencyName)
     .setAttribute(key: TCAAttributes.dependencyMethod, value: method)
-    .setActive(true)
-    .startSpan()
 
   let attrs: [String: AttributeValue] = [
     TCAAttributes.dependencyName: .string(dependencyName),
@@ -41,52 +40,48 @@ public func tracedCall<T: Sendable>(
   let clock = ContinuousClock()
   let startTime = clock.now
 
-  do {
-    let result = try await operation()
+  return try await spanBuilder.withActiveSpan { span in
+    defer {
+      let elapsed = clock.now - startTime
+      let durationMs =
+        Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
+      var durationHistogram = telemetry.metrics.dependencyDuration
+      durationHistogram.record(value: durationMs, attributes: attrs)
+    }
 
-    let elapsed = clock.now - startTime
-    let durationMs =
-      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
+    do {
+      let result = try await operation()
+      span.status = .ok
+      return result
+    } catch {
+      let policy = telemetry.errorDetailPolicy
+      let body = policy.errorBody(for: error, context: "Dependency call failed")
 
-    var durationHist = telemetry.metrics.dependencyDuration
-    durationHist.record(value: durationMs, attributes: attrs)
-    span.end()
-    return result
-  } catch {
-    let elapsed = clock.now - startTime
-    let durationMs =
-      Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
+      span.setAttribute(key: TCAAttributes.dependencyError, value: true)
+      span.status = .error(description: body)
+      span.addEvent(
+        name: "exception",
+        attributes: [
+          TCAAttributes.errorType: .string(String(describing: type(of: error))),
+          TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+        ]
+      )
 
-    let policy = telemetry.errorDetailPolicy
-    let body = policy.errorBody(for: error, context: "Dependency call failed")
+      var erroredCounter = telemetry.metrics.dependenciesErrored
+      erroredCounter.add(value: 1, attributes: attrs)
 
-    span.setAttribute(key: TCAAttributes.dependencyError, value: true)
-    span.status = .error(description: body)
-    span.addEvent(
-      name: "exception",
-      attributes: [
-        TCAAttributes.errorType: .string(String(describing: type(of: error))),
-        TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-      ]
-    )
+      telemetry.error(
+        body,
+        attributes: [
+          TCAAttributes.dependencyName: .string(dependencyName),
+          TCAAttributes.dependencyMethod: .string(method),
+          TCAAttributes.errorType: .string(String(describing: type(of: error))),
+          TCAAttributes.errorRedacted: .bool(policy.isRedacted),
+        ]
+      )
 
-    var erroredCounter = telemetry.metrics.dependenciesErrored
-    erroredCounter.add(value: 1, attributes: attrs)
-    var durationHist2 = telemetry.metrics.dependencyDuration
-    durationHist2.record(value: durationMs, attributes: attrs)
-
-    telemetry.error(
-      body,
-      attributes: [
-        TCAAttributes.dependencyName: .string(dependencyName),
-        TCAAttributes.dependencyMethod: .string(method),
-        TCAAttributes.errorType: .string(String(describing: type(of: error))),
-        TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-      ]
-    )
-
-    span.end()
-    throw error
+      throw error
+    }
   }
 }
 
@@ -99,12 +94,10 @@ public func tracedCall<T: Sendable>(
   @Dependency(\.composableOTel) var telemetry
 
   let spanName = "dependency/\(dependencyName)/\(method)"
-  let span = telemetry.tracer.spanBuilder(spanName: spanName)
+  let spanBuilder = telemetry.tracer.spanBuilder(spanName: spanName)
     .setSpanKind(spanKind: .internal)
     .setAttribute(key: TCAAttributes.dependencyName, value: dependencyName)
     .setAttribute(key: TCAAttributes.dependencyMethod, value: method)
-    .setActive(true)
-    .startSpan()
 
   let attrs: [String: AttributeValue] = [
     TCAAttributes.dependencyName: .string(dependencyName),
@@ -117,14 +110,17 @@ public func tracedCall<T: Sendable>(
   let clock = ContinuousClock()
   let startTime = clock.now
 
-  let result = await operation()
+  return await spanBuilder.withActiveSpan { span in
+    defer {
+      let elapsed = clock.now - startTime
+      let durationMs =
+        Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
+      var durationHistogram = telemetry.metrics.dependencyDuration
+      durationHistogram.record(value: durationMs, attributes: attrs)
+    }
 
-  let elapsed = clock.now - startTime
-  let durationMs =
-    Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1000
-
-  var durationHist = telemetry.metrics.dependencyDuration
-  durationHist.record(value: durationMs, attributes: attrs)
-  span.end()
-  return result
+    let result = await operation()
+    span.status = .ok
+    return result
+  }
 }

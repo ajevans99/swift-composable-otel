@@ -4,7 +4,8 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
-/// Container for in-memory test collectors returned by ``TelemetryClient/test(errorDetailPolicy:)``.
+/// Container for in-memory test collectors returned by
+/// ``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)``.
 public struct TestCollectors: @unchecked Sendable {
   /// Collected spans from traced reducers, effects, and dependency calls.
   public let spans: InMemorySpanCollector
@@ -36,7 +37,7 @@ public struct TestCollectors: @unchecked Sendable {
   }
 }
 
-/// Convenience factory for creating a ``TelemetryClient`` wired to in-memory
+/// Convenience factory for creating a `TelemetryClient` wired to in-memory
 /// collectors, suitable for test assertions.
 ///
 /// ```swift
@@ -72,8 +73,8 @@ extension TelemetryClient {
     OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
 
     let tracer = tracerProvider.get(
-      instrumentationName: "ComposableOTel",
-      instrumentationVersion: "0.1.0"
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
     )
 
     // Build meter provider
@@ -83,9 +84,16 @@ extension TelemetryClient {
         .registerMetricReader(reader: metricReader)
         .build()
       OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
-      meter = meterProvider.get(name: "ComposableOTel")
+      meter =
+        meterProvider
+        .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+        .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+        .build()
     } else {
-      meter = DefaultMeterProvider.instance.get(name: "ComposableOTel")
+      meter = DefaultMeterProvider.instance
+        .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+        .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+        .build()
     }
 
     // Build logger provider

@@ -42,6 +42,7 @@ extension Effect {
   ///
   /// This is the preferred way to create traced effects. The operation is wrapped directly,
   /// providing accurate duration measurement, cancellation detection, and error recording.
+  /// Cancellation and other thrown errors terminate the effect and are not rethrown.
   ///
   /// ```swift
   /// return .tracedRun(name: "fetchGoals") { send in
@@ -167,7 +168,8 @@ extension Effect {
 
   /// Creates a traced long-lived effect with start/end marker spans.
   ///
-  /// Use for effects that run indefinitely (e.g., listeners, streams).
+  /// Use for effects that run indefinitely (e.g., listeners, streams). Cancellation is treated
+  /// as normal completion; other errors are logged and are not rethrown.
   public static func tracedLongLivedRun(
     name: String,
     priority: TaskPriority? = nil,

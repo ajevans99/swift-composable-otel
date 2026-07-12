@@ -2,9 +2,12 @@ import ComposableArchitecture
 import ComposableOTel
 import ComposableOTelTesting
 import Dependencies
+import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import Testing
+
+@testable import ComposableOTelExporters
 
 // MARK: - Test Reducer
 
@@ -298,6 +301,86 @@ struct ComposableOTelAllTests {
     func defaultRedacted() {
       let (client, _) = TelemetryClient.test()
       #expect(client.errorDetailPolicy.isRedacted == true)
+    }
+  }
+
+  // MARK: - Package Metadata Tests
+
+  @Suite("Package metadata")
+  struct PackageMetadataTests {
+    @Test("uses one instrumentation version for traces and logs")
+    func instrumentationScopes() throws {
+      let (client, collectors) = TelemetryClient.test()
+
+      let span = client.tracer.spanBuilder(spanName: "metadata").startSpan()
+      span.end()
+      client.info("metadata")
+
+      collectors.forceFlush()
+
+      let exportedSpan = try #require(collectors.spans.spans(named: "metadata").first)
+      #expect(
+        exportedSpan.instrumentationScope.name == ComposableOTelMetadata.instrumentationName
+      )
+      #expect(exportedSpan.instrumentationScope.version == ComposableOTelMetadata.version)
+
+      let exportedLog = try #require(collectors.logs.allRecords.first)
+      #expect(
+        exportedLog.instrumentationScopeInfo.name == ComposableOTelMetadata.instrumentationName
+      )
+      #expect(exportedLog.instrumentationScopeInfo.version == ComposableOTelMetadata.version)
+    }
+
+    @Test("uses package version in bootstrap resource")
+    func bootstrapResource() {
+      let resource = TelemetryBootstrap.makeResource(
+        serviceName: "metadata-test",
+        serviceVersion: "1",
+        environment: .production(endpoint: "https://unused.invalid")
+      )
+
+      #expect(
+        resource.attributes["telemetry.distro.name"]
+          == .string(ComposableOTelMetadata.packageName)
+      )
+      #expect(
+        resource.attributes["telemetry.distro.version"]
+          == .string(ComposableOTelMetadata.version)
+      )
+      #expect(resource.attributes["telemetry.sdk.name"] == .string("opentelemetry"))
+    }
+
+    @Test("keeps the release version in one source file")
+    func authoritativeVersionLiteral() throws {
+      let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+      let sourcesRoot = repositoryRoot.appendingPathComponent("Sources")
+      let expression = try NSRegularExpression(pattern: #"\b[0-9]+\.[0-9]+\.[0-9]+\b"#)
+      let fileManager = FileManager.default
+      let enumerator = try #require(
+        fileManager.enumerator(
+          at: sourcesRoot,
+          includingPropertiesForKeys: [.isRegularFileKey]
+        )
+      )
+      var occurrences: [String] = []
+
+      for case let fileURL as URL in enumerator where fileURL.pathExtension == "swift" {
+        let contents = try String(contentsOf: fileURL, encoding: .utf8)
+        let matches = expression.matches(
+          in: contents,
+          range: NSRange(contents.startIndex..., in: contents)
+        )
+        let relativePath = fileURL.path.replacingOccurrences(
+          of: sourcesRoot.path + "/",
+          with: ""
+        )
+        occurrences.append(contentsOf: repeatElement(relativePath, count: matches.count))
+      }
+
+      #expect(occurrences == ["ComposableOTel/ComposableOTelMetadata.swift"])
     }
   }
 

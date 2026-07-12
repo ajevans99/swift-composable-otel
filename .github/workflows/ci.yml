@@ -5,44 +5,87 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  macos:
-    name: macOS (Xcode ${{ matrix.xcode }})
-    runs-on: macos-15
+  baseline:
+    name: Metadata, docs, and format
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Validate package and documentation
+        run: bash Scripts/validate-baseline.sh
+
+      - name: Lint
+        run: xcrun swift-format lint --strict --recursive Sources/ Tests/ Package.swift
+
+  dependency-and-platform:
+    name: ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
-        xcode: ["16.3"]
+        include:
+          - name: Minimum dependencies (Xcode 16.4)
+            os: macos-15
+            xcode_path: /Applications/Xcode_16.4.app/Contents/Developer
+            dependency_set: minimum
+          - name: Latest dependencies (current Xcode)
+            os: macos-26
+            xcode_path: default
+            dependency_set: latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+        if: matrix.xcode_path != 'default'
+        run: sudo xcode-select -s "${{ matrix.xcode_path }}"
 
-      - name: Swift version
-        run: swift --version
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
-      - name: Resolve dependencies
-        run: swift package resolve
+      - name: Resolve ${{ matrix.dependency_set }} dependencies
+        run: bash Scripts/resolve-dependencies.sh "${{ matrix.dependency_set }}"
 
-      - name: Build
+      - name: Build for macOS
         run: swift build
 
-      - name: Test
+      - name: Test on macOS
         run: swift test
 
-  lint:
-    name: Lint (swift-format)
-    runs-on: macos-15
+      - name: Build all products for iOS
+        run: |
+          for scheme in ComposableOTel ComposableOTelExporters ComposableOTelTesting; do
+            xcodebuild \
+              -scheme "$scheme" \
+              -destination "generic/platform=iOS" \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO \
+              build
+          done
+
+  documentation:
+    name: DocC
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install swift-format
-        run: brew install swift-format
+      - name: Resolve latest dependencies
+        run: bash Scripts/resolve-dependencies.sh latest
 
-      - name: Lint
-        run: swift-format lint --strict --recursive Sources/ Tests/ Package.swift
+      - name: Build documentation catalogs
+        env:
+          DERIVED_DATA_PATH: ${{ runner.temp }}/DerivedData
+        run: bash Scripts/build-documentation.sh

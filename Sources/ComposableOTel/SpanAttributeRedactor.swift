@@ -1,11 +1,13 @@
 import OpenTelemetryApi
 
-/// Protocol for redacting sensitive span attributes before export.
+/// Contract for redacting sensitive span attributes in a future bounded export pipeline.
+///
+/// The current exporters do not invoke this protocol.
 public protocol SpanAttributeRedactor: Sendable {
   func redact(_ attributes: inout [String: AttributeValue])
 }
 
-/// Default no-op redactor that passes attributes through unchanged.
+/// No-op redactor that leaves attributes unchanged.
 public struct NoOpRedactor: SpanAttributeRedactor {
   public init() {}
   public func redact(_ attributes: inout [String: AttributeValue]) {}

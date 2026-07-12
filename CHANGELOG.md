@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - Central package and OpenTelemetry instrumentation metadata.
+- An explicit MIT repository license.
 - Explicit platform, dependency, versioning, deprecation, and release policies.
 - CI validation for supported Apple platforms, minimum/latest dependency sets, package metadata,
   and documentation.

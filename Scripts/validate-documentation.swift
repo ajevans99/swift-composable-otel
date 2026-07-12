@@ -32,10 +32,11 @@ func markdownFiles(in root: URL) -> [URL] {
   }
 }
 
-let rootMarkdown = (try? fileManager.contentsOfDirectory(
-  at: repositoryRoot,
-  includingPropertiesForKeys: [.isRegularFileKey]
-))?.filter { $0.pathExtension == "md" } ?? []
+let rootMarkdown =
+  (try? fileManager.contentsOfDirectory(
+    at: repositoryRoot,
+    includingPropertiesForKeys: [.isRegularFileKey]
+  ))?.filter { $0.pathExtension == "md" } ?? []
 let documentationMarkdown = markdownFiles(in: sourceRoot)
 let allMarkdown = rootMarkdown + documentationMarkdown
 let markdownLinkExpression = try NSRegularExpression(
@@ -93,10 +94,27 @@ for fileURL in allMarkdown {
   }
 }
 
-for requiredFile in ["CHANGELOG.md", "README.md", "RELEASING.md", "SUPPORT.md"] {
+for requiredFile in ["CHANGELOG.md", "LICENSE", "README.md", "RELEASING.md", "SUPPORT.md"] {
   if !fileManager.fileExists(atPath: repositoryRoot.appendingPathComponent(requiredFile).path) {
     failures.append("Missing required project document \(requiredFile)")
   }
+}
+
+let license = read("LICENSE")
+let expectedLicenseHeader = """
+  MIT License
+
+  Copyright (c) 2026 ajevans99
+  """
+if !license.hasPrefix(expectedLicenseHeader) {
+  failures.append("LICENSE must contain the approved MIT identifier and copyright line")
+}
+for requiredClause in [
+  "Permission is hereby granted, free of charge, to any person obtaining a copy",
+  "The above copyright notice and this permission notice shall be included in all",
+  "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR",
+] where !license.contains(requiredClause) {
+  failures.append("LICENSE is missing standard MIT text: \(requiredClause)")
 }
 
 let metadata = read("Sources/ComposableOTel/ComposableOTelMetadata.swift")
@@ -114,6 +132,9 @@ if let versionMatch, let range = Range(versionMatch.range(at: 1), in: metadata) 
 }
 
 let readme = read("README.md")
+if !readme.contains("[MIT License](LICENSE), SPDX identifier `MIT`") {
+  failures.append("README must reference the approved MIT license and SPDX identifier")
+}
 if let packageVersion {
   let expectedInstallation =
     #".package("# + "\n"
@@ -129,7 +150,8 @@ let forbiddenDocumentation = [
   "TelemetryClient.test(spanCollector:",
   "as! TracerProviderSdk",
 ]
-for forbidden in forbiddenDocumentation where allMarkdown.contains(where: {
+for forbidden in forbiddenDocumentation
+where allMarkdown.contains(where: {
   (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
 }) {
   failures.append("Documentation contains stale example text: \(forbidden)")

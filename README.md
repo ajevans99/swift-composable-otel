@@ -179,3 +179,7 @@ for release history, and [RELEASING.md](RELEASING.md) for versioning and release
 | `ComposableOTel` | Core TCA instrumentation APIs and package metadata |
 | `ComposableOTelExporters` | OpenTelemetry SDK bootstrap and stdout exporters |
 | `ComposableOTelTesting` | In-memory span, log, and metric helpers |
+
+## License
+
+swift-composable-otel is available under the [MIT License](LICENSE), SPDX identifier `MIT`.

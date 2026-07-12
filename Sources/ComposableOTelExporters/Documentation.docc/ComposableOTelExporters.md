@@ -1,28 +1,28 @@
 # ``ComposableOTelExporters``
 
-Bootstrap OpenTelemetry SDK providers with the exporters available in this release.
+Configure the package-owned privacy boundary and stdout exporters.
 
 ## Overview
 
-``TelemetryBootstrap`` serializes process-global tracer, meter, and logger provider registration
-on its first call and returns a `TelemetryClient` for TCA dependency injection. Repeated and
-concurrent calls return the first cached client without re-registering providers. The first
-configuration therefore owns process-wide bootstrap settings.
+``TelemetryBootstrap`` creates bounded tracer, meter, and logger providers once and returns the
+injected `TelemetryClient`. It does not replace process-global OpenTelemetry providers. Traces,
+logs, metrics, and resources are filtered before the underlying stdout exporters receive them.
 
-Instrumentation uses the providers cached in that returned client. The global registrations are a
-compatibility boundary for upstream OpenTelemetry code, not a provider lookup path for normal
-ComposableOTel spans, metrics, or logs. OpenTelemetry publishes the three provider globals through
-separate upstream setters, so start compatibility global readers only after `configure` returns.
+``PrivacyPreservingSpanExporter`` sanitizes names, attributes, events, links, status, and resources.
+``PrivacyPreservingLogRecordExporter`` rebuilds records from allowlisted bodies, attributes, event
+names, and resources. ``PrivacyPreservingMetricExporter`` drops unknown instruments and unsafe
+resources, sanitizes dimensions, and removes exemplars.
 
-Both `.debug` and `.production` configure `StdoutSpanExporter`, `StdoutMetricExporter`, and
-`StdoutLogExporter`. Production changes the default trace ratio from `1.0` to `0.1`, changes
-metric export from every 5 seconds to every 60 seconds, and disables debug formatting. The
-production endpoint and headers are reserved but unused.
+``ComposableOTelMetricConfiguration`` installs a catch-all drop view plus per-instrument views with
+dimension processors and duration histograms. It also creates instruments with stable descriptions
+and units.
 
-This module does not currently provide remote OTLP transport, TLS or authentication handling,
-retry or persistence, background lifecycle integration, or explicit flush and shutdown
-ownership. ``ConsoleSpanExporter`` is available separately and is not installed by
-``TelemetryBootstrap``.
+Both bootstrap environments remain stdout-only. Production endpoint and headers are unused. This
+module does not provide OTLP transport, TLS/authentication, retry, persistence, lifecycle ownership,
+or remote delivery.
+
+Custom SDK integrations must install all three wrappers, package metric views, and a resource
+sanitized by the same policy. Otherwise they are outside the package trust boundary.
 
 ## Topics
 
@@ -30,6 +30,13 @@ ownership. ``ConsoleSpanExporter`` is available separately and is not installed 
 
 - ``TelemetryBootstrap``
 
-### Exporters
+### Policy boundary
+
+- ``PrivacyPreservingSpanExporter``
+- ``PrivacyPreservingLogRecordExporter``
+- ``PrivacyPreservingMetricExporter``
+- ``ComposableOTelMetricConfiguration``
+
+### Console
 
 - ``ConsoleSpanExporter``

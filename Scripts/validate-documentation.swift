@@ -148,10 +148,23 @@ if let packageVersion {
 let forbiddenDocumentation = [
   "github.com/your-org/swift-composable-otel",
   "TelemetryClient.test(spanCollector:",
+  "TelemetryClient.test(metricReader:errorDetailPolicy:)",
+  "configureTestTelemetry",
+  "SpanAttributeRedactor",
+  "ErrorDetailPolicy",
+  "stateDiffs",
+  "tracedRun(name:",
+  "traceStart(name:",
+  #"tracedCall(""#,
+  #"named: "reducer/"#,
+  #"named: "effect/"#,
+  #"named: "dependency/"#,
+  "tca.action.type",
+  "tca.reducer.name",
   "as! TracerProviderSdk",
 ]
 for forbidden in forbiddenDocumentation
-where allMarkdown.contains(where: {
+where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkdown).contains(where: {
   (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
 }) {
   failures.append("Documentation contains stale example text: \(forbidden)")
@@ -159,6 +172,15 @@ where allMarkdown.contains(where: {
 
 if !readme.contains("no telemetry is sent remotely") {
   failures.append("README must state that current production export is not remote")
+}
+for requiredPrivacyClaim in [
+  "logs are disabled by default",
+  "deterministically aggregate to",
+  "PrivacyPreservingSpanExporter",
+  "unsafeCustomSDK",
+  "watchOS | Unsupported",
+] where !readme.contains(requiredPrivacyClaim) {
+  failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
 
 let manifest = read("Package.swift")

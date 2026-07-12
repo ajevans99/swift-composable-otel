@@ -15,6 +15,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Explicit platform, dependency, versioning, deprecation, and release policies.
 - CI validation for supported Apple platforms, minimum/latest dependency sets, package metadata,
   and documentation.
+- Task-local-safe reducer, effect, and dependency span activation with explicit
+  reducer-to-effect parenting.
+- Consistent success, cancelled, and error outcomes for one-shot and long-lived effects.
 
 ### Changed
 
@@ -22,6 +25,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   exporter documentation to match current behavior.
 - Identified package bootstrap metadata as an OpenTelemetry distribution without overwriting the
   SDK's own identity.
+- Effect tracing now preserves errors and cancellation, uses structured cleanup for balanced
+  active-effect accounting, and traces long-lived work with one lifecycle span.
+- Renamed marker-only effect instrumentation to `.traceStart()` and deprecated `.traced()`.
+- `TelemetryClient` now caches an injected logger and uses provider-independent no-op defaults.
+- Bootstrap is thread-safe and first-configuration-wins idempotent; test clients no longer mutate
+  global OpenTelemetry providers.
 
 ## [0.2.2] - 2026-04-15
 

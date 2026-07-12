@@ -43,7 +43,7 @@ dependencies: [
 
 ## Quick start
 
-Configure the SDK, retain the returned client in TCA dependencies, and instrument selected
+Configure the SDK once, retain the returned client in TCA dependencies, and instrument selected
 reducers:
 
 ```swift
@@ -107,25 +107,41 @@ try await tracedCall("myClient", method: "fetch") {
 
 ## Current behavior
 
-| Area | Release 0.2.2 behavior |
+The table describes the unreleased behavior on `main`; the tagged `0.2.2` release predates these
+corrections.
+
+| Area | Current behavior |
 | --- | --- |
-| Reducers | `.instrumented()` creates a synchronous span for reducer execution. It can emit an action log and records action-count and reducer-duration metrics. The span does not cover returned effects. |
+| Reducers | `.instrumented()` uses closure-based task-local activation for synchronous reduction. Traced effects created during reduction capture the reducer span as their explicit parent; the reducer span still ends before effect execution. |
 | State | `stateDiffs: true` compares pre/post `String(describing:)` snapshots only to set `tca.state.changed`. State values and diffs are not exported. With the option disabled, the attribute is currently always `true`. |
-| Effects | `.traced()` adds a merged start marker only. `.tracedRun()` records duration, completion, cancellation, and error signals. It catches cancellation and other thrown errors rather than rethrowing them. |
-| Long-lived effects | `.tracedLongLivedRun()` emits separate start/end marker spans and metrics. Cancellation is treated as completion; other errors are logged and consumed. |
-| Dependencies | `tracedCall` records a span, count, duration, and errors. Its throwing overload rethrows the original error. |
-| Logs | Logs use the globally registered OpenTelemetry logger provider, even when called through an injected `TelemetryClient`. |
-| Metrics | Reducer, effect, dependency, and active-effect instruments are registered lazily. Sampling does not suppress metrics. |
+| Effects | `.tracedRun()` uses one task-locally active span across suspension and inherited child tasks. It records exactly one `success`, `cancelled`, or `error` outcome and rethrows failures and cancellation to TCA's normal handling. |
+| Effect markers | `.traceStart()` adds only a merged initiation marker. The old `.traced()` spelling is deprecated because it never observed the wrapped effect lifecycle. |
+| Long-lived effects | `.tracedLongLivedRun()` uses one lifecycle span. Normal stream completion is `success`; cancellation and errors are distinct outcomes and are rethrown. |
+| Dependencies | `tracedCall` uses closure-based task-local activation and records a span, count, duration, and errors. Its throwing overload rethrows the original error. |
+| Logs | `TelemetryClient` stores an injected logger. Log calls never re-resolve the mutable global logger provider. |
+| Metrics | Reducer, effect, dependency, and active-effect instruments are registered lazily. Effect terminal counters are mutually exclusive, and active-effect increments/decrements are paired by structured cleanup. Sampling does not suppress metrics. |
 | Errors | `.redacted` is the default and omits `String(describing: error)` while retaining the error type. `SpanAttributeRedactor` is stored but is not applied by the current exporters. |
 | Sampling | Parent-based trace ID ratio sampling defaults to `1.0` in debug and `0.1` in production. It applies to traces only. |
 
-These semantics are documented so adopters can evaluate the prototype accurately. Context
-propagation, effect semantics, injected logging, privacy enforcement, OTLP transport, buffering,
-flush, and shutdown ownership belong to later roadmap work.
+Effects constructed during instrumented reduction explicitly inherit that reducer span. Effects
+constructed elsewhere intentionally start a root trace. While a traced operation runs, normal
+Swift child tasks inherit its OpenTelemetry task-local context; detached tasks do not.
+
+Tracing does not convert thrown failures into success. Handle and map a failure to an action inside
+the host operation when that is desired. Otherwise the error is rethrown to TCA, which reports an
+unhandled non-cancellation `Effect.run` error according to its standard behavior. TCA treats
+rethrowing `CancellationError` as normal effect cancellation.
 
 ## Exporters
 
-`TelemetryBootstrap.configure` currently behaves as follows:
+`TelemetryBootstrap.configure` is thread-safe and process-idempotent. The first call owns the
+process-wide OpenTelemetry providers and configuration; repeated or concurrent calls return the
+same cached `TelemetryClient` without registering providers again. Accessing the default no-op
+dependency before bootstrap does not snapshot or poison the later configured client.
+OpenTelemetry exposes its compatibility globals through separate setters, so call bootstrap before
+starting code that reads those globals. Normal ComposableOTel paths use the returned client only.
+
+Bootstrap currently behaves as follows:
 
 | Environment | Traces | Metrics | Logs | Default trace ratio | Metric interval |
 | --- | --- | --- | --- | --- | --- |
@@ -153,9 +169,11 @@ collectors.forceFlush()
 collectors.spans.assertSpanExists(named: "reducer/MyFeature")
 ```
 
-`TelemetryClient.test()` registers global OpenTelemetry providers. Telemetry test suites must run
-serially. The optional in-memory metric reader is provisional and is not part of the package's
-current regression coverage.
+`TelemetryClient.test()` owns its tracer, meter, and logger providers without replacing
+`OpenTelemetry.instance` globals, so independently injected test clients remain isolated under
+concurrency. `configureTestTelemetry` is the deprecated global-provider compatibility helper and
+still requires serialized use. The optional metric reader covers effect counters and balanced
+active-effect accounting in the package regression suite.
 
 ## Compatibility
 

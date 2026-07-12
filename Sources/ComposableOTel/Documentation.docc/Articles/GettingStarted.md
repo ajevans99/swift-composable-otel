@@ -15,7 +15,7 @@ Use the repository URL and current tagged release:
 
 Add `ComposableOTel` and `ComposableOTelExporters` to the application target.
 
-## Bootstrap telemetry
+## Bootstrap telemetry once
 
 Configure the OpenTelemetry SDK and inject the returned client into the root store:
 
@@ -36,7 +36,9 @@ let store = Store(initialState: AppFeature.State()) {
 }
 ```
 
-Both bootstrap environments currently use stdout exporters. A
+Bootstrap is thread-safe and idempotent: the first configuration owns the process-wide providers,
+and later calls return the same client. Both bootstrap environments currently use stdout
+exporters. A
 `.production(endpoint:headers:)` endpoint is not contacted, its headers are not used, and the
 package does not provide a remote OTLP runtime yet.
 
@@ -54,9 +56,10 @@ struct GoalFeature {
 }
 ```
 
-Each action creates a span covering synchronous reducer execution. Action logging and metrics are
-enabled by default. `stateDiffs: true` compares string snapshots only to set a changed boolean;
-it does not export state values or a diff. The span ends before any returned effect executes.
+Each action creates a task-locally active span covering synchronous reducer execution. Action
+logging and metrics are enabled by default. `stateDiffs: true` compares string snapshots only to
+set a changed boolean; it does not export state values or a diff. The span ends before any returned
+effect executes, but a traced effect created during reduction captures it as an explicit parent.
 
 ## Trace an effect
 
@@ -70,9 +73,13 @@ case .fetchGoals:
   }
 ```
 
-This records duration, completion, cancellation, and error telemetry. The current implementation
-catches cancellation and other thrown errors rather than rethrowing them. Use `.traced()` only
-when a start marker is sufficient; it does not observe the wrapped effect lifecycle.
+This records one `success`, `cancelled`, or `error` outcome, balances the active-effect metric, and
+keeps the effect span active across suspension and inherited child tasks. Failures and cancellation
+are rethrown to TCA's standard `Effect.run` handling. Catch and map an error inside the host
+operation when action mapping is desired.
+
+Use `.traceStart()` only when a start marker is sufficient; it does not observe the wrapped effect
+lifecycle. The old `.traced()` marker spelling is deprecated.
 
 ## Trace a dependency call
 
@@ -102,5 +109,5 @@ collectors.forceFlush()
 collectors.spans.assertSpanExists(named: "reducer/GoalFeature")
 ```
 
-The `ComposableOTelTesting` module documentation covers global-provider and serialization
-constraints.
+The `ComposableOTelTesting` module documentation covers isolated injected clients and the
+deprecated global-provider compatibility helper.

@@ -3,25 +3,40 @@ import Dependencies
 import Foundation
 import OpenTelemetryApi
 
-// MARK: - Traced Effect Modifier
+private enum EffectTraceOutcome: String {
+  case success
+  case cancelled
+  case error
+}
+
+// MARK: - Marker Modifier
 
 extension Effect {
-  /// Adds a lightweight tracing signal to an existing effect.
+  /// Adds a start marker to an existing effect without observing its lifecycle.
   ///
-  /// Because `Effect` internals are opaque, this modifier merges a signal effect
-  /// that records a span marking the effect was initiated. For full lifecycle tracing
-  /// (duration, error recording, cancellation), use ``tracedRun(name:priority:operation:)``
-  /// instead.
-  public func traced(name: String? = nil) -> Self {
+  /// The marker captures an instrumented reducer span as its explicit parent when this method is
+  /// called during reduction. Use ``tracedRun(name:priority:operation:)`` or
+  /// ``tracedLongLivedRun(name:priority:operation:)`` for duration and outcome tracing.
+  public func traceStart(name: String? = nil) -> Self {
     let effectName = name ?? "unnamed"
+    let parentContext = ReducerTraceContext.spanContext
     let signalEffect: Self = .run { _ in
       @Dependency(\.composableOTel) var telemetry
-      let span = telemetry.tracer.spanBuilder(spanName: "effect/\(effectName)")
+
+      let spanBuilder = telemetry.tracer.spanBuilder(spanName: "effect/\(effectName)")
         .setSpanKind(spanKind: .internal)
         .setAttribute(key: TCAAttributes.effectName, value: effectName)
-        .setActive(true)
-        .startSpan()
-      span.end()
+        .setAttribute(key: TCAAttributes.effectMarker, value: true)
+      if let parentContext {
+        spanBuilder.setParent(parentContext)
+      } else {
+        spanBuilder.setNoParent()
+      }
+
+      spanBuilder.withActiveSpan { span in
+        span.status = .ok
+        span.addEvent(name: "effect.started")
+      }
 
       var counter = telemetry.metrics.effectsStarted
       counter.add(
@@ -31,220 +46,171 @@ extension Effect {
         ]
       )
     }
-    return self.merge(with: signalEffect)
+    return merge(with: signalEffect)
+  }
+
+  @available(*, deprecated, renamed: "traceStart(name:)")
+  public func traced(name: String? = nil) -> Self {
+    traceStart(name: name)
   }
 }
 
-// MARK: - Factory for Traced Effects
+// MARK: - Traced Effect Factories
 
 extension Effect {
-  /// Creates a new traced `.run` effect with full OpenTelemetry lifecycle tracing.
+  /// Creates a one-shot `.run` effect with full OpenTelemetry lifecycle tracing.
   ///
-  /// This is the preferred way to create traced effects. The operation is wrapped directly,
-  /// providing accurate duration measurement, cancellation detection, and error recording.
-  /// Cancellation and other thrown errors terminate the effect and are not rethrown.
-  ///
-  /// ```swift
-  /// return .tracedRun(name: "fetchGoals") { send in
-  ///   let goals = try await database.fetchAllGoals()
-  ///   await send(.goalsLoaded(goals))
-  /// }
-  /// ```
+  /// The effect captures an instrumented reducer span as its explicit parent when constructed
+  /// during reduction. The operation runs with the effect span task-locally active, including
+  /// across suspension and inherited child tasks. Errors and cancellation are recorded and then
+  /// rethrown to TCA's normal `Effect.run` handling.
   public static func tracedRun(
     name: String,
     priority: TaskPriority? = nil,
     operation: @escaping @Sendable (Send<Action>) async throws -> Void
   ) -> Self {
-    .run(priority: priority) { send in
-      @Dependency(\.composableOTel) var telemetry
-
-      let span = telemetry.tracer.spanBuilder(spanName: "effect/\(name)")
-        .setSpanKind(spanKind: .internal)
-        .setAttribute(key: TCAAttributes.effectName, value: name)
-        .setAttribute(key: TCAAttributes.effectLongLived, value: false)
-        .setActive(true)
-        .startSpan()
-
-      var startedCounter = telemetry.metrics.effectsStarted
-      startedCounter.add(
-        value: 1,
-        attributes: [
-          TCAAttributes.effectName: .string(name)
-        ]
-      )
-      var activeUp = telemetry.metrics.activeEffects
-      activeUp.add(value: 1, attributes: [:])
-
-      let clock = ContinuousClock()
-      let startTime = clock.now
-
-      do {
-        try await operation(send)
-
-        let durationMs = durationMilliseconds(from: startTime, clock: clock)
-        span.end()
-
-        var completedCounter = telemetry.metrics.effectsCompleted
-        completedCounter.add(
-          value: 1,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(
-          value: durationMs,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var activeDown = telemetry.metrics.activeEffects
-        activeDown.add(value: -1, attributes: [:])
-      } catch is CancellationError {
-        let durationMs = durationMilliseconds(from: startTime, clock: clock)
-        span.addEvent(name: "effect.cancelled")
-        span.setAttribute(key: TCAAttributes.effectCancelled, value: true)
-        span.end()
-
-        var cancelledCounter = telemetry.metrics.effectsCancelled
-        cancelledCounter.add(
-          value: 1,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(
-          value: durationMs,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var activeDown = telemetry.metrics.activeEffects
-        activeDown.add(value: -1, attributes: [:])
-      } catch {
-        let durationMs = durationMilliseconds(from: startTime, clock: clock)
-        let policy = telemetry.errorDetailPolicy
-        let body = policy.errorBody(for: error, context: "Effect failed")
-
-        span.status = .error(description: body)
-        span.addEvent(
-          name: "exception",
-          attributes: [
-            TCAAttributes.errorType: .string(String(describing: type(of: error))),
-            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-          ]
-        )
-        span.end()
-
-        var erroredCounter = telemetry.metrics.effectsErrored
-        erroredCounter.add(
-          value: 1,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var durationHist = telemetry.metrics.effectDuration
-        durationHist.record(
-          value: durationMs,
-          attributes: [
-            TCAAttributes.effectName: .string(name)
-          ]
-        )
-        var activeDown = telemetry.metrics.activeEffects
-        activeDown.add(value: -1, attributes: [:])
-
-        telemetry.error(
-          body,
-          attributes: [
-            TCAAttributes.effectName: .string(name),
-            TCAAttributes.errorType: .string(String(describing: type(of: error))),
-            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-          ]
-        )
-      }
-    }
+    tracedRun(name: name, priority: priority, longLived: false, operation: operation)
   }
 
-  /// Creates a traced long-lived effect with start/end marker spans.
+  /// Creates a long-lived `.run` effect with full OpenTelemetry lifecycle tracing.
   ///
-  /// Use for effects that run indefinitely (e.g., listeners, streams). Cancellation is treated
-  /// as normal completion; other errors are logged and are not rethrown.
+  /// Normal stream completion is recorded as success. Cancellation and errors are distinct
+  /// outcomes and are rethrown to TCA's normal `Effect.run` handling.
   public static func tracedLongLivedRun(
     name: String,
     priority: TaskPriority? = nil,
     operation: @escaping @Sendable (Send<Action>) async throws -> Void
   ) -> Self {
-    .run(priority: priority) { send in
+    tracedRun(name: name, priority: priority, longLived: true, operation: operation)
+  }
+
+  private static func tracedRun(
+    name: String,
+    priority: TaskPriority?,
+    longLived: Bool,
+    operation: @escaping @Sendable (Send<Action>) async throws -> Void
+  ) -> Self {
+    let parentContext = ReducerTraceContext.spanContext
+    return .run(priority: priority, name: name) { send in
       @Dependency(\.composableOTel) var telemetry
-
-      let startSpan = telemetry.tracer.spanBuilder(spanName: "effect/\(name)/start")
-        .setSpanKind(spanKind: .internal)
-        .setAttribute(key: TCAAttributes.effectName, value: name)
-        .setAttribute(key: TCAAttributes.effectLongLived, value: true)
-        .startSpan()
-      startSpan.end()
-
-      var startedCounter = telemetry.metrics.effectsStarted
-      startedCounter.add(
-        value: 1,
-        attributes: [
-          TCAAttributes.effectName: .string(name)
-        ]
-      )
-      var activeUp = telemetry.metrics.activeEffects
-      activeUp.add(value: 1, attributes: [:])
-
-      let clock = ContinuousClock()
-      let startTime = clock.now
-
-      do {
+      try await telemetry.withEffectTrace(
+        name: name,
+        longLived: longLived,
+        parentContext: parentContext
+      ) {
         try await operation(send)
-      } catch is CancellationError {
-        // Expected for long-lived effects
-      } catch {
-        let policy = telemetry.errorDetailPolicy
-        let body = policy.errorBody(for: error, context: "Long-lived effect failed")
-        telemetry.error(
-          body,
-          attributes: [
-            TCAAttributes.effectName: .string(name),
-            TCAAttributes.errorType: .string(String(describing: type(of: error))),
-            TCAAttributes.errorRedacted: .bool(policy.isRedacted),
-          ]
-        )
       }
-
-      let durationMs = durationMilliseconds(from: startTime, clock: clock)
-
-      let endSpan = telemetry.tracer.spanBuilder(spanName: "effect/\(name)/end")
-        .setSpanKind(spanKind: .internal)
-        .setAttribute(key: TCAAttributes.effectName, value: name)
-        .setAttribute(key: TCAAttributes.effectLongLived, value: true)
-        .startSpan()
-      endSpan.end()
-
-      var completedCounter = telemetry.metrics.effectsCompleted
-      completedCounter.add(
-        value: 1,
-        attributes: [
-          TCAAttributes.effectName: .string(name)
-        ]
-      )
-      var durationHist = telemetry.metrics.effectDuration
-      durationHist.record(
-        value: durationMs,
-        attributes: [
-          TCAAttributes.effectName: .string(name)
-        ]
-      )
-      var activeDown = telemetry.metrics.activeEffects
-      activeDown.add(value: -1, attributes: [:])
     }
   }
 }
 
-// MARK: - Duration Helper
+// MARK: - Structured Effect Lifecycle
+
+extension TelemetryClient {
+  func withEffectTrace<T: Sendable>(
+    name: String,
+    longLived: Bool,
+    parentContext: SpanContext?,
+    operation: @escaping @Sendable () async throws -> T
+  ) async throws -> T {
+    let spanBuilder = tracer.spanBuilder(spanName: "effect/\(name)")
+      .setSpanKind(spanKind: .internal)
+      .setAttribute(key: TCAAttributes.effectName, value: name)
+      .setAttribute(key: TCAAttributes.effectLongLived, value: longLived)
+    if let parentContext {
+      spanBuilder.setParent(parentContext)
+    } else {
+      spanBuilder.setNoParent()
+    }
+
+    let attributes: [String: AttributeValue] = [
+      TCAAttributes.effectName: .string(name),
+      TCAAttributes.effectLongLived: .bool(longLived),
+    ]
+
+    var startedCounter = metrics.effectsStarted
+    startedCounter.add(value: 1, attributes: attributes)
+    var activeCounter = metrics.activeEffects
+    activeCounter.add(value: 1, attributes: attributes)
+
+    let clock = ContinuousClock()
+    let startTime = clock.now
+
+    return try await spanBuilder.withActiveSpan { span in
+      defer {
+        var durationHistogram = metrics.effectDuration
+        durationHistogram.record(
+          value: durationMilliseconds(from: startTime, clock: clock),
+          attributes: attributes
+        )
+        var activeCounter = metrics.activeEffects
+        activeCounter.add(value: -1, attributes: attributes)
+      }
+
+      do {
+        let result = try await operation()
+        recordEffectOutcome(.success, name: name, attributes: attributes, span: span)
+        return result
+      } catch {
+        if error is CancellationError {
+          recordEffectOutcome(.cancelled, name: name, attributes: attributes, span: span)
+        } else {
+          recordEffectError(error, name: name, attributes: attributes, span: span)
+        }
+        throw error
+      }
+    }
+  }
+
+  private func recordEffectOutcome(
+    _ outcome: EffectTraceOutcome,
+    name: String,
+    attributes: [String: AttributeValue],
+    span: any SpanBase
+  ) {
+    span.setAttribute(key: TCAAttributes.effectOutcome, value: outcome.rawValue)
+
+    switch outcome {
+    case .success:
+      span.status = .ok
+      span.addEvent(name: "effect.completed")
+      var completedCounter = metrics.effectsCompleted
+      completedCounter.add(value: 1, attributes: attributes)
+    case .cancelled:
+      span.status = .unset
+      span.setAttribute(key: TCAAttributes.effectCancelled, value: true)
+      span.addEvent(name: "effect.cancelled")
+      var cancelledCounter = metrics.effectsCancelled
+      cancelledCounter.add(value: 1, attributes: attributes)
+    case .error:
+      break
+    }
+  }
+
+  private func recordEffectError(
+    _ error: any Error,
+    name: String,
+    attributes: [String: AttributeValue],
+    span: any SpanBase
+  ) {
+    let body = errorDetailPolicy.errorBody(for: error, context: "Effect failed")
+    let errorAttributes: [String: AttributeValue] = [
+      TCAAttributes.errorType: .string(String(describing: type(of: error))),
+      TCAAttributes.errorRedacted: .bool(errorDetailPolicy.isRedacted),
+    ]
+
+    span.setAttribute(key: TCAAttributes.effectOutcome, value: EffectTraceOutcome.error.rawValue)
+    span.status = .error(description: body)
+    span.addEvent(name: "exception", attributes: errorAttributes)
+
+    var erroredCounter = metrics.effectsErrored
+    erroredCounter.add(value: 1, attributes: attributes)
+
+    var logAttributes = errorAttributes
+    logAttributes[TCAAttributes.effectName] = .string(name)
+    self.error(body, attributes: logAttributes)
+  }
+}
 
 private func durationMilliseconds(from start: ContinuousClock.Instant, clock: ContinuousClock)
   -> Double

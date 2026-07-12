@@ -8,9 +8,13 @@ Use ``ComposableOTel/TelemetryClient/test(metricReader:errorDetailPolicy:)`` to 
 and ``TestCollectors``. Inject the client through TCA dependencies, exercise the feature, call
 ``TestCollectors/forceFlush()``, and inspect spans or logs.
 
-The factory registers process-global OpenTelemetry providers. Telemetry tests must run serially.
-The optional in-memory metric reader is provisional in `0.2.2` and is not covered by the package
-regression suite.
+The factory owns its providers locally and does not replace `OpenTelemetry.instance` globals.
+Independently injected clients therefore retain isolated span, metric, and log pipelines. The
+deprecated `configureTestTelemetry` helper is the global-provider compatibility path and must be
+serialized.
+
+The optional in-memory metric reader is provisional in `0.2.2`, but package regression tests use it
+to verify effect outcomes and balanced active-effect accounting.
 
 ## Topics
 

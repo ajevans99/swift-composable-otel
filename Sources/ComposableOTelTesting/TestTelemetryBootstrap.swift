@@ -16,17 +16,20 @@ public struct TestCollectors: @unchecked Sendable {
 
   // TracerProviderSdk is thread-safe but not marked Sendable
   private let tracerProvider: TracerProviderSdk
+  private let meterProvider: MeterProviderSdk?
 
   init(
     spans: InMemorySpanCollector,
     logs: InMemoryLogCollector,
     metrics: InMemoryMetricReader?,
-    tracerProvider: TracerProviderSdk
+    tracerProvider: TracerProviderSdk,
+    meterProvider: MeterProviderSdk?
   ) {
     self.spans = spans
     self.logs = logs
     self.metrics = metrics
     self.tracerProvider = tracerProvider
+    self.meterProvider = meterProvider
   }
 
   /// Flush all pending spans to the in-memory collector.
@@ -34,6 +37,7 @@ public struct TestCollectors: @unchecked Sendable {
   /// Call this after exercising actions, before asserting on collected spans.
   public func forceFlush() {
     tracerProvider.forceFlush()
+    _ = meterProvider?.forceFlush()
   }
 }
 
@@ -53,9 +57,6 @@ public struct TestCollectors: @unchecked Sendable {
 extension TelemetryClient {
   /// Creates a test telemetry client backed by in-memory collectors.
   ///
-  /// Also registers OTel global providers so that any code still using
-  /// `OpenTelemetry.instance` sees the same providers.
-  ///
   /// - Parameters:
   ///   - metricReader: Optional in-memory metric reader.
   ///   - errorDetailPolicy: Error detail policy for tests (default: `.redacted`).
@@ -70,7 +71,6 @@ extension TelemetryClient {
     let tracerProvider = TracerProviderBuilder()
       .add(spanProcessor: spanProcessor)
       .build()
-    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
 
     let tracer = tracerProvider.get(
       instrumentationName: ComposableOTelMetadata.instrumentationName,
@@ -79,17 +79,23 @@ extension TelemetryClient {
 
     // Build meter provider
     let meter: any Meter
+    let meterProvider: MeterProviderSdk?
     if let metricReader {
-      let meterProvider = MeterProviderSdk.builder()
+      let provider = MeterProviderSdk.builder()
         .registerMetricReader(reader: metricReader)
+        .registerView(
+          selector: InstrumentSelectorBuilder().build(),
+          view: View.builder().build()
+        )
         .build()
-      OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
+      meterProvider = provider
       meter =
-        meterProvider
+        provider
         .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
         .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
         .build()
     } else {
+      meterProvider = nil
       meter = DefaultMeterProvider.instance
         .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
         .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
@@ -100,11 +106,16 @@ extension TelemetryClient {
     let logCollector = InMemoryLogCollector()
     let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logCollector)
     let loggerProvider = LoggerProviderSdk(logRecordProcessors: [logProcessor])
-    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
+    let logger =
+      loggerProvider
+      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(ComposableOTelMetadata.version)
+      .build()
 
     let client = TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter),
+      logger: logger,
       errorDetailPolicy: errorDetailPolicy
     )
 
@@ -112,7 +123,8 @@ extension TelemetryClient {
       spans: spanCollector,
       logs: logCollector,
       metrics: metricReader,
-      tracerProvider: tracerProvider
+      tracerProvider: tracerProvider,
+      meterProvider: meterProvider
     )
 
     return (client, collectors)

@@ -16,6 +16,8 @@ public enum TCAAttributes {
   public static let effectCancelled = "tca.effect.cancelled"
   public static let effectActionsEmitted = "tca.effect.actions_emitted"
   public static let effectLongLived = "tca.effect.long_lived"
+  public static let effectMarker = "tca.effect.marker"
+  public static let effectOutcome = "tca.effect.outcome"
 
   // MARK: - Dependency
 

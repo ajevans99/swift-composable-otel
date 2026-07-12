@@ -6,6 +6,24 @@ import StdoutExporter
 
 /// Configures OpenTelemetry providers for a TCA application.
 public enum TelemetryBootstrap {
+  private final class State: @unchecked Sendable {
+    private let lock = NSLock()
+    private var client: TelemetryClient?
+
+    func configure(_ makeClient: () -> TelemetryClient) -> TelemetryClient {
+      lock.lock()
+      defer { lock.unlock() }
+      if let client {
+        return client
+      }
+      let client = makeClient()
+      self.client = client
+      return client
+    }
+  }
+
+  private static let state = State()
+
   /// The deployment environment for telemetry configuration.
   public enum Environment: Sendable {
     /// Console output for development. Uses StdoutExporter.
@@ -19,8 +37,14 @@ public enum TelemetryBootstrap {
 
   /// Configure telemetry with environment-appropriate defaults.
   ///
-  /// Registers global OTel providers and returns a `TelemetryClient` suitable for
-  /// injecting into `DependencyValues.composableOTel`.
+  /// The first call serializes global OTel provider registration and returns a cached
+  /// `TelemetryClient` suitable for injecting into `DependencyValues.composableOTel`.
+  /// All later calls return that same client without rebuilding or re-registering providers;
+  /// therefore, the first configuration owns process-wide bootstrap settings.
+  ///
+  /// OpenTelemetry exposes its tracer, meter, and logger globals as separate writes. Call this
+  /// method before starting compatibility code that reads those globals; normal ComposableOTel
+  /// instrumentation uses only the returned client.
   ///
   /// Both environments export traces, metrics, and logs to standard output. Production OTLP
   /// transport and lifecycle management are not implemented in this release.
@@ -37,6 +61,24 @@ public enum TelemetryBootstrap {
     environment: Environment = .debug,
     samplingRatio: Double? = nil,
     errorDetailPolicy: ErrorDetailPolicy = .redacted
+  ) -> TelemetryClient {
+    state.configure {
+      makeClient(
+        serviceName: serviceName,
+        serviceVersion: serviceVersion,
+        environment: environment,
+        samplingRatio: samplingRatio,
+        errorDetailPolicy: errorDetailPolicy
+      )
+    }
+  }
+
+  private static func makeClient(
+    serviceName: String,
+    serviceVersion: String?,
+    environment: Environment,
+    samplingRatio: Double?,
+    errorDetailPolicy: ErrorDetailPolicy
   ) -> TelemetryClient {
     // --- Resource ---
 
@@ -77,8 +119,6 @@ public enum TelemetryBootstrap {
       .add(spanProcessor: spanProcessor)
       .build()
 
-    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
-
     // --- Metrics ---
 
     let metricExporter: StdoutMetricExporter
@@ -103,9 +143,11 @@ public enum TelemetryBootstrap {
     let meterProvider = MeterProviderSdk.builder()
       .setResource(resource: resource)
       .registerMetricReader(reader: metricReader)
+      .registerView(
+        selector: InstrumentSelectorBuilder().build(),
+        view: View.builder().build()
+      )
       .build()
-
-    OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
 
     // --- Logs ---
 
@@ -123,8 +165,6 @@ public enum TelemetryBootstrap {
       logRecordProcessors: [logProcessor]
     )
 
-    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
-
     // --- Return a TelemetryClient for dependency injection ---
 
     let tracer = tracerProvider.get(
@@ -136,10 +176,22 @@ public enum TelemetryBootstrap {
       .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
       .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
       .build()
+    let logger =
+      loggerProvider
+      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(ComposableOTelMetadata.version)
+      .build()
+
+    // OpenTelemetry exposes separate global setters, so publish them together only after every
+    // provider and the injected client components are ready.
+    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+    OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
+    OpenTelemetry.registerLoggerProvider(loggerProvider: loggerProvider)
 
     return TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter),
+      logger: logger,
       errorDetailPolicy: errorDetailPolicy
     )
   }

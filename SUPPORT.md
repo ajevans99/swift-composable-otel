@@ -7,8 +7,8 @@ This document defines the supported platform, toolchain, and dependency posture 
 
 | Platform | Minimum | Status | Required verification |
 | --- | --- | --- | --- |
-| iOS | 17.0 | Supported | All products compile for a generic iOS device in CI. |
-| macOS | 14.0 | Supported | `swift build` and `swift test` pass in CI. |
+| iOS | 17.0 | Supported | All products compile for a generic device and the package tests on the current hosted simulator. |
+| macOS | 14.0 | Supported | Minimum and latest dependency endpoint builds and tests pass in CI. |
 | watchOS | 10.0 intended | Unsupported | The watchOS support gate below must pass before support is declared. |
 
 The package does not currently make a Linux, tvOS, or visionOS support commitment.
@@ -25,6 +25,14 @@ watchOS remains unsupported until one change:
 4. Documents lifecycle, exporter, and background-execution limits specific to watchOS.
 
 A successful ad hoc build alone does not satisfy this gate.
+
+The 2026-07-12 reference probe temporarily added `.watchOS(.v10)` and built `ComposableOTel` for
+`generic/platform=watchOS` with Xcode 27 beta 3 and Swift 6.4. It failed in the inherited
+`swift-composable-architecture` graph at
+`Sources/ComposableArchitecture/Internal/NotificationName.swift:27:12` with
+`main actor-isolated default value in a nonisolated context`. Because even the core product did not
+compile, the exporter products and meaningful platform tests were not claimable. The named
+**watchOS support gate** above, tracked by issue #6, remains the only route to declaring support.
 
 ## Swift toolchain
 
@@ -53,11 +61,23 @@ CI resolves and tests two dependency sets:
 - **Minimum:** pins each direct dependency to the lower bound above, then builds and tests on
   macOS with Xcode 16.3.
 - **Latest:** resolves the newest versions allowed by `Package.swift`, then builds and tests on
-  macOS and builds every product for a generic iOS device with the current Xcode.
+  macOS, builds every product for a generic iOS device, and runs package tests on the current hosted
+  iOS simulator with the current Xcode.
 
 The GitHub-hosted macOS 15 image does not install Xcode 16.3's iOS 18.4 platform, so that
 lane cannot select a generic iOS destination. The current-Xcode lane remains the required iOS
-build gate; the unavailable historical SDK is not treated as a package source failure.
+build/test gate; the unavailable historical SDK is not treated as a package source failure.
+
+The two lanes are supported endpoints rather than an unsupported four-way cross-product:
+
+| Toolchain | Minimum dependencies | Latest compatible dependencies |
+| --- | --- | --- |
+| Xcode 16.3 | Required macOS build/test. Its hosted image lacks the Xcode 16.3 iOS 18.4 platform. | Not claimed; newer resolved packages may require a newer compiler. |
+| Current Xcode | Not claimed; the local Swift 6.4 probe fails TCA 1.25's `PresentsMacro.swift:225` because SwiftSyntax 600's `GenericArgumentSyntax` has no member `Argument`. | Required macOS build/test, generic iOS builds, and current iOS simulator tests. |
+
+Package deployment targets remain iOS 17 and macOS 14 even when hosted runners no longer offer those
+exact simulator/runtime versions. Generic builds compile against the declared deployment floors;
+runtime tests execute on the hosted SDKs actually listed by CI.
 
 The minimum job catches accidental use of newer APIs. The latest job catches upstream
 compatibility regressions. A dependency update that fails either set is not supported until the
@@ -68,6 +88,21 @@ final release before 2.9 enabled cross-package traits on `swift-dependencies`. A
 root selects the dependency's 6.0 compatibility manifest, which does not declare those traits. The
 constraint keeps the published package graph coherent; it can be removed when the supported tools
 version can consume those traits.
+
+## Quality support gates
+
+- Thread Sanitizer runs the full macOS suite on the current toolchain. iOS simulator TSan is not
+  claimed by this package matrix.
+- Coverage floors are 90% for `ComposableOTel`, 80% for `ComposableOTelExporters`, 50% for
+  `ComposableOTelTesting`, and 80% for `TelemetryRuntime*` delivery paths.
+- `API/PublicAPI.json` blocks public symbol removal or signature change until the reviewed baseline
+  deliberately changes. Additions are reported.
+- `API/SemanticConventions.lock` binds package convention sources to the reviewed OpenTelemetry
+  semantic conventions v1.43.0 snapshot. Convention changes require a lock and documentation review.
+- Release performance, memory, batching, and queue ceilings are documented in `PERFORMANCE.md`.
+
+Default-branch protection and required-check configuration are repository administration evidence,
+not package code. They must be reviewed separately before a stable release.
 
 ## `Package.resolved`
 

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   baseline:
-    name: Metadata, docs, and format
+    name: Metadata, docs, format, and semantics
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -20,13 +20,24 @@ jobs:
       - name: Toolchain
         run: |
           xcodebuild -version
-          swift --version
+          xcrun swift --version
+
+      - name: Cache pinned swift-format
+        uses: actions/cache@v4
+        with:
+          path: .build/tools
+          key: swift-format-${{ runner.os }}-${{ runner.arch }}-d54c5be7afba3e5f52ae29e2371e444a3c2a49c1
 
       - name: Validate package and documentation
         run: bash Scripts/validate-baseline.sh
 
-      - name: Lint
-        run: xcrun swift-format lint --strict --recursive Sources/ Tests/ Package.swift
+      - name: Review semantic convention lock
+        run: bash Scripts/check-semantic-conventions.sh
+
+      - name: Lint with pinned swift-format
+        run: |
+          bash Scripts/run-swift-format.sh lint --strict --recursive \
+            Sources/ Tests/ Benchmarks/ Scripts/*.swift Package.swift
 
   dependency-and-platform:
     name: ${{ matrix.name }}
@@ -38,10 +49,12 @@ jobs:
             os: macos-15
             xcode_path: /Applications/Xcode_16.3.app/Contents/Developer
             dependency_set: minimum
+            ios: false
           - name: Latest dependencies (current Xcode)
             os: macos-26
             xcode_path: default
             dependency_set: latest
+            ios: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -50,27 +63,27 @@ jobs:
         if: matrix.xcode_path != 'default'
         run: sudo xcode-select -s "${{ matrix.xcode_path }}"
 
-      - name: Toolchain
+      - name: Toolchain and SDKs
         run: |
           xcodebuild -version
-          swift --version
+          xcrun swift --version
+          xcodebuild -showsdks
 
       - name: Resolve ${{ matrix.dependency_set }} dependencies
         run: bash Scripts/resolve-dependencies.sh "${{ matrix.dependency_set }}"
 
       - name: Build for macOS
-        run: swift build
+        run: xcrun swift build
 
       - name: Test on macOS
-        run: swift test
+        run: xcrun swift test
 
-      # The macOS 15 image does not install Xcode 16.3's iOS 18.4 platform.
-      # The latest lane remains the generic iOS build gate.
       - name: Build all products for iOS
-        if: matrix.dependency_set == 'latest'
+        if: matrix.ios
         run: |
           for scheme in ComposableOTel ComposableOTelExporters ComposableOTelTesting; do
             xcodebuild \
+              -quiet \
               -skipMacroValidation \
               -scheme "$scheme" \
               -destination "generic/platform=iOS" \
@@ -78,6 +91,66 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               build
           done
+
+      - name: Test on current iOS simulator
+        if: matrix.ios
+        run: bash Scripts/test-ios.sh
+
+  coverage:
+    name: Target coverage floors
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest dependencies
+        run: bash Scripts/resolve-dependencies.sh latest
+
+      - name: Test with coverage
+        run: xcrun swift test --enable-code-coverage
+
+      - name: Enforce target and runtime floors
+        run: bash Scripts/check-coverage.sh
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-coverage
+          path: .build/out/Products/Debug/codecov/*.json
+
+  thread-sanitizer:
+    name: Thread Sanitizer (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest dependencies
+        run: bash Scripts/resolve-dependencies.sh latest
+
+      - name: Test concurrent paths with TSan
+        run: xcrun swift test --sanitize=thread
+
+  compatibility-and-performance:
+    name: API compatibility and performance budgets
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest dependencies
+        run: bash Scripts/resolve-dependencies.sh latest
+
+      - name: Check public API compatibility
+        run: bash Scripts/check-api.sh
+
+      - name: Run release benchmarks
+        env:
+          BENCHMARK_OUTPUT_PATH: ${{ runner.temp }}/benchmark-results.json
+        run: bash Scripts/run-benchmarks.sh
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-benchmarks
+          path: ${{ runner.temp }}/benchmark-results.json
 
   documentation:
     name: DocC

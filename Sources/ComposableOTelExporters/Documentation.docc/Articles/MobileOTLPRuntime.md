@@ -122,3 +122,6 @@ drops, persisted bytes/items, attempts, successes, retryable/non-retryable failu
 corruption recovery, and flush/discard outcomes. Diagnostics bypass OpenTelemetry and contain only
 bounded categories and counts, so exporter failures cannot recursively generate more exporter
 telemetry.
+
+Use <doc:OperationalRunbook> for failure response and <doc:ProductionReadiness> for the package,
+platform, pilot, and release gates that must pass before stable production use.

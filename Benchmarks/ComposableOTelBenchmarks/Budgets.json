@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "benchmarks": {
+    "batching": 200000,
+    "dependency": 200000,
+    "effect": 500000,
+    "logging": 50000,
+    "metrics": 50000,
+    "reducer": 150000,
+    "reducerDisabled": 25000,
+    "sampledSpan": 100000,
+    "stateChange": 175000,
+    "unsampledSpan": 50000
+  },
+  "maximumSampledToUnsampledRatio": 5.0,
+  "queue": {
+    "items": 2048,
+    "maximumResidentDeltaBytes": 67108864
+  }
+}

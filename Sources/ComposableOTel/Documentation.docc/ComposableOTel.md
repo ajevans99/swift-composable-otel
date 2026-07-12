@@ -1,29 +1,30 @@
 # ``ComposableOTel``
 
-OpenTelemetry instrumentation for The Composable Architecture.
+Instrument The Composable Architecture with OpenTelemetry signals.
 
 ## Overview
 
-ComposableOTel provides deep, structured observability for TCA applications
-using the [OpenTelemetry](https://opentelemetry.io) standard. It wraps the
-[opentelemetry-swift](https://github.com/open-telemetry/opentelemetry-swift-core)
-SDK and exposes TCA-idiomatic APIs for tracing reducers, effects, and
-dependency calls.
+ComposableOTel provides dependency-injected APIs for reducer spans, effect lifecycle signals,
+dependency-call spans, structured logs, and metrics.
 
-All telemetry is accessed through a single `@Dependency(\.composableOTel)`
-value, making it fully testable and consistent with TCA's dependency
-injection patterns.
+The current release is a pre-1.0 instrumentation prototype. Reducer spans cover synchronous
+reducer execution only. ``ComposableArchitecture/Effect/traced(name:)`` emits an initiation
+marker, while ``ComposableArchitecture/Effect/tracedRun(name:priority:operation:)`` wraps an
+operation but consumes cancellation and other thrown errors after recording telemetry. Logs
+resolve through the global OpenTelemetry logger provider. ``SpanAttributeRedactor`` is not yet
+invoked.
 
-### Incremental Adoption
+`ComposableOTelExporters` configures stdout export only. Its production endpoint and headers do
+not send remote OTLP telemetry in this release.
 
-You can adopt instrumentation incrementally:
+### Incremental adoption
 
-- **Level 1** — Add `.instrumented()` to a reducer for automatic action
-  spans and metrics.
-- **Level 2** — Use ``Effect/tracedRun(name:priority:operation:)`` for
-  full effect lifecycle tracing.
-- **Level 3** — Wrap dependency calls with ``tracedCall(_:method:operation:)-8f2j0``
-  for per-method span and error tracking.
+- Add ``ComposableArchitecture/Reducer/instrumented(name:options:)`` for reducer spans, optional
+  action logs, and metrics.
+- Use ``ComposableArchitecture/Effect/tracedRun(name:priority:operation:)`` when its current error
+  behavior is acceptable.
+- Wrap dependency methods with `tracedCall` for per-call spans and metrics.
+- Override `@Dependency(\.composableOTel)` with a test client from `ComposableOTelTesting`.
 
 ## Topics
 
@@ -31,20 +32,19 @@ You can adopt instrumentation incrementally:
 
 - ``TelemetryClient``
 - ``SendableTracer``
+- ``ComposableOTelMetadata``
 - ``InstrumentationOptions``
 
-### Reducer Instrumentation
+### Reducer instrumentation
 
 - ``InstrumentedReducer``
+- ``ComposableArchitecture/Reducer/instrumented(name:options:)``
 
-### Effect Tracing
+### Effect tracing
 
-- ``Effect``
-
-### Dependency Call Tracing
-
-- ``tracedCall(_:method:operation:)-8f2j0``
-- ``tracedCall(_:method:operation:)-9rj4e``
+- ``ComposableArchitecture/Effect/traced(name:)``
+- ``ComposableArchitecture/Effect/tracedRun(name:priority:operation:)``
+- ``ComposableArchitecture/Effect/tracedLongLivedRun(name:priority:operation:)``
 
 ### Configuration
 
@@ -57,4 +57,3 @@ You can adopt instrumentation incrementally:
 ### Articles
 
 - <doc:GettingStarted>
-- <doc:TestingGuide>

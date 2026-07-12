@@ -10,14 +10,20 @@ public enum TelemetryBootstrap {
   public enum Environment: Sendable {
     /// Console output for development. Uses StdoutExporter.
     case debug
-    /// Production configuration with OTLP endpoint.
+    /// Production-tuned sampling and intervals, still using StdoutExporter in this release.
+    ///
+    /// The endpoint and headers are reserved for the later OTLP runtime. They are not read and
+    /// no telemetry is sent remotely by the current implementation.
     case production(endpoint: String, headers: [String: String] = [:])
   }
 
   /// Configure telemetry with environment-appropriate defaults.
   ///
-  /// Registers global OTel providers and returns a ``TelemetryClient`` suitable for
+  /// Registers global OTel providers and returns a `TelemetryClient` suitable for
   /// injecting into `DependencyValues.composableOTel`.
+  ///
+  /// Both environments export traces, metrics, and logs to standard output. Production OTLP
+  /// transport and lifecycle management are not implemented in this release.
   ///
   /// ```swift
   /// // In App init:
@@ -34,26 +40,11 @@ public enum TelemetryBootstrap {
   ) -> TelemetryClient {
     // --- Resource ---
 
-    let version =
-      serviceVersion
-      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-      ?? "unknown"
-
-    let deploymentEnv: String
-    switch environment {
-    case .debug: deploymentEnv = "debug"
-    case .production: deploymentEnv = "production"
-    }
-
-    let resource = Resource(attributes: [
-      "service.name": .string(serviceName),
-      "service.version": .string(version),
-      "deployment.environment": .string(deploymentEnv),
-      "telemetry.sdk.name": .string("swift-composable-otel"),
-      "telemetry.sdk.version": .string("0.1.0"),
-      "os.type": .string("darwin"),
-      "os.version": .string(ProcessInfo.processInfo.operatingSystemVersionString),
-    ])
+    let resource = makeResource(
+      serviceName: serviceName,
+      serviceVersion: serviceVersion,
+      environment: environment
+    )
 
     // --- Sampler ---
 
@@ -137,15 +128,47 @@ public enum TelemetryBootstrap {
     // --- Return a TelemetryClient for dependency injection ---
 
     let tracer = tracerProvider.get(
-      instrumentationName: "ComposableOTel",
-      instrumentationVersion: "0.1.0"
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
     )
-    let meter = meterProvider.get(name: "ComposableOTel")
+    let meter =
+      meterProvider
+      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+      .build()
 
     return TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter),
       errorDetailPolicy: errorDetailPolicy
     )
+  }
+
+  static func makeResource(
+    serviceName: String,
+    serviceVersion: String?,
+    environment: Environment
+  ) -> Resource {
+    let version =
+      serviceVersion
+      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+      ?? "unknown"
+
+    let deploymentEnvironment: String
+    switch environment {
+    case .debug: deploymentEnvironment = "debug"
+    case .production: deploymentEnvironment = "production"
+    }
+
+    let packageResource = Resource(attributes: [
+      "service.name": .string(serviceName),
+      "service.version": .string(version),
+      "deployment.environment": .string(deploymentEnvironment),
+      "telemetry.distro.name": .string(ComposableOTelMetadata.packageName),
+      "telemetry.distro.version": .string(ComposableOTelMetadata.version),
+      "os.type": .string("darwin"),
+      "os.version": .string(ProcessInfo.processInfo.operatingSystemVersionString),
+    ])
+    return Resource().merging(other: packageResource)
   }
 }

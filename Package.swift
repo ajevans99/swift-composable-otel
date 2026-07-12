@@ -16,15 +16,15 @@ let package = Package(
   dependencies: [
     .package(
       url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
-      from: "2.3.0"
+      from: "2.4.1"
     ),
     .package(
       url: "https://github.com/pointfreeco/swift-composable-architecture",
-      from: "1.17.0"
+      from: "1.25.0"
     ),
     .package(
       url: "https://github.com/pointfreeco/swift-dependencies",
-      from: "1.4.0"
+      from: "1.5.1"
     ),
     .package(
       url: "https://github.com/pointfreeco/xctest-dynamic-overlay",

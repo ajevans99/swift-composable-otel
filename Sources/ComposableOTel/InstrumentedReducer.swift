@@ -5,7 +5,10 @@ import OpenTelemetryApi
 
 /// Options controlling what telemetry an instrumented reducer emits.
 public struct InstrumentationOptions: Sendable {
-  /// Emit state diff log records after each action (default: false).
+  /// Compare pre/post `String(describing:)` snapshots for `tca.state.changed` (default: false).
+  ///
+  /// State contents and diffs are never emitted. When disabled, the current implementation
+  /// records `tca.state.changed` as `true` without comparing state.
   public var stateDiffs: Bool
 
   /// Emit action dispatch log records (default: true).
@@ -139,7 +142,8 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
 extension Reducer {
   /// Wraps this reducer with OpenTelemetry instrumentation.
   ///
-  /// Each action processed produces a span, increments counters, and records duration histograms.
+  /// Each action produces a synchronous reducer span and, when enabled, action logs and metrics.
+  /// Reducer effects are not covered by the reducer span.
   ///
   /// ```swift
   /// Reduce { state, action in

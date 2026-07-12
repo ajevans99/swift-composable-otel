@@ -1,63 +1,66 @@
 # Getting Started
 
-Integrate OpenTelemetry into a TCA feature in under five minutes.
+Add the current ComposableOTel instrumentation prototype to a TCA application.
 
-## Overview
+## Install the package
 
-This guide walks you through adding observability to an existing TCA
-feature, from basic reducer instrumentation to full dependency tracing.
-
-### Step 1: Bootstrap Telemetry
-
-In your app's entry point, configure the SDK and inject the telemetry
-client into your store's dependencies:
+Use the repository URL and current tagged release:
 
 ```swift
+.package(
+  url: "https://github.com/ajevans99/swift-composable-otel.git",
+  from: "0.2.2"
+)
+```
+
+Add `ComposableOTel` and `ComposableOTelExporters` to the application target.
+
+## Bootstrap telemetry
+
+Configure the OpenTelemetry SDK and inject the returned client into the root store:
+
+```swift
+import ComposableArchitecture
 import ComposableOTel
 import ComposableOTelExporters
 
-@main
-struct MyApp: App {
-  let store: StoreOf<AppFeature>
+let telemetry = TelemetryBootstrap.configure(
+  serviceName: "my-app",
+  environment: .debug
+)
 
-  init() {
-    let client = TelemetryBootstrap.configure(
-      serviceName: "my-app",
-      environment: .debug
-    )
-
-    self.store = Store(initialState: AppFeature.State()) {
-      AppFeature()
-    } withDependencies: {
-      $0.composableOTel = client
-    }
-  }
+let store = Store(initialState: AppFeature.State()) {
+  AppFeature()
+} withDependencies: {
+  $0.composableOTel = telemetry
 }
 ```
 
-### Step 2: Instrument a Reducer
+Both bootstrap environments currently use stdout exporters. A
+`.production(endpoint:headers:)` endpoint is not contacted, its headers are not used, and the
+package does not provide a remote OTLP runtime yet.
 
-Add `.instrumented()` to any reducer's body:
+## Instrument a reducer
 
 ```swift
 @Reducer
 struct GoalFeature {
-  // ...
   var body: some ReducerOf<Self> {
     Reduce { state, action in
-      // ...
+      // Feature logic.
     }
     .instrumented(name: "GoalFeature")
   }
 }
 ```
 
-This automatically creates a span for every dispatched action, records
-reducer duration, and increments action counters.
+Each action creates a span covering synchronous reducer execution. Action logging and metrics are
+enabled by default. `stateDiffs: true` compares string snapshots only to set a changed boolean;
+it does not export state values or a diff. The span ends before any returned effect executes.
 
-### Step 3: Trace Effects
+## Trace an effect
 
-Use `.tracedRun(name:)` instead of `.run` for effect lifecycle tracing:
+Use `.tracedRun(name:)` to wrap the operation:
 
 ```swift
 case .fetchGoals:
@@ -67,34 +70,37 @@ case .fetchGoals:
   }
 ```
 
-### Step 4: Trace Dependency Calls
+This records duration, completion, cancellation, and error telemetry. The current implementation
+catches cancellation and other thrown errors rather than rethrowing them. Use `.traced()` only
+when a start marker is sufficient; it does not observe the wrapped effect lifecycle.
 
-Wrap individual dependency methods with `tracedCall`:
+## Trace a dependency call
 
 ```swift
-extension GoalDatabaseClient: DependencyKey {
-  static let liveValue = GoalDatabaseClient(
-    fetchAll: {
-      try await tracedCall("goalDB", method: "fetchAll") {
-        try await db.fetchAllGoals()
-      }
-    }
-  )
+let goals = try await tracedCall("goalDatabase", method: "fetchAll") {
+  try await database.fetchAllGoals()
 }
 ```
 
-### Testing
+The throwing overload records an error and rethrows the original error. The nonthrowing overload
+records successful call telemetry.
 
-In tests, use `TelemetryClient.test()` with `withDependencies`:
+## Test instrumentation
 
 ```swift
-let (client, collector) = TelemetryClient.test()
-let store = TestStore(initialState: MyFeature.State()) {
-  MyFeature()
+import ComposableOTelTesting
+
+let (telemetry, collectors) = TelemetryClient.test()
+let store = TestStore(initialState: GoalFeature.State()) {
+  GoalFeature()
 } withDependencies: {
-  $0.composableOTel = client
+  $0.composableOTel = telemetry
 }
-// assert on collector.spans(named:)
+
+await store.send(.refresh)
+collectors.forceFlush()
+collectors.spans.assertSpanExists(named: "reducer/GoalFeature")
 ```
 
-See <doc:TestingGuide> for more detail.
+The `ComposableOTelTesting` module documentation covers global-provider and serialization
+constraints.

@@ -155,10 +155,11 @@ public struct SendableTracer: @unchecked Sendable {
 ///
 /// The `liveValue` reads from `OpenTelemetry.instance` globals. Override in tests:
 /// ```swift
+/// let (client, collectors) = TelemetryClient.test()
 /// let store = TestStore(...) {
 ///   MyFeature()
 /// } withDependencies: {
-///   $0.composableOTel = .test(spanCollector: collector)
+///   $0.composableOTel = client
 /// }
 /// ```
 public struct TelemetryClient: Sendable {
@@ -171,7 +172,10 @@ public struct TelemetryClient: Sendable {
   /// How error details are exported in telemetry.
   public var errorDetailPolicy: ErrorDetailPolicy
 
-  /// Attribute redactor applied before export.
+  /// Redactor reserved for the bounded export pipeline.
+  ///
+  /// Current instrumentation stores this value but does not apply it. Do not rely on it
+  /// to sanitize telemetry until the export pipeline explicitly integrates redaction.
   public var redactor: any SpanAttributeRedactor
 
   public init(
@@ -193,8 +197,8 @@ extension TelemetryClient {
   /// Emit a structured log record.
   public func log(severity: Severity, body: String, attributes: [String: AttributeValue] = [:]) {
     let logger = OpenTelemetry.instance.loggerProvider
-      .loggerBuilder(instrumentationScopeName: "ComposableOTel")
-      .setInstrumentationVersion("0.1.0")
+      .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
     logger.logRecordBuilder()
       .setSeverity(severity)
@@ -217,10 +221,13 @@ extension TelemetryClient {
 private enum TelemetryClientKey: DependencyKey {
   static let liveValue: TelemetryClient = {
     let tracer = OpenTelemetry.instance.tracerProvider.get(
-      instrumentationName: "ComposableOTel",
-      instrumentationVersion: "0.1.0"
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
     )
-    let meter = OpenTelemetry.instance.meterProvider.get(name: "ComposableOTel")
+    let meter = OpenTelemetry.instance.meterProvider
+      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+      .build()
     return TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter)
@@ -230,10 +237,13 @@ private enum TelemetryClientKey: DependencyKey {
   static let testValue: TelemetryClient = {
     // Default test value uses no-op providers (DefaultTracer, DefaultMeter)
     let tracer = DefaultTracerProvider.instance.get(
-      instrumentationName: "ComposableOTel",
-      instrumentationVersion: "0.1.0"
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
     )
-    let meter = DefaultMeterProvider.instance.get(name: "ComposableOTel")
+    let meter = DefaultMeterProvider.instance
+      .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+      .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+      .build()
     return TelemetryClient(
       tracer: tracer,
       metrics: MetricInstruments(meter: meter)
@@ -246,7 +256,8 @@ extension DependencyValues {
   ///
   /// Override in tests:
   /// ```swift
-  /// $0.composableOTel = .test(spanCollector: collector)
+  /// let (client, _) = TelemetryClient.test()
+  /// $0.composableOTel = client
   /// ```
   public var composableOTel: TelemetryClient {
     get { self[TelemetryClientKey.self] }

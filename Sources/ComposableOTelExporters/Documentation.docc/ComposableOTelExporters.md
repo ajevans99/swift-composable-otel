@@ -1,12 +1,16 @@
 # ``ComposableOTelExporters``
 
-Configure the package-owned privacy boundary and stdout exporters.
+Configure the package-owned privacy boundary, development stdout, and production mobile OTLP.
 
 ## Overview
 
-``TelemetryBootstrap`` creates bounded tracer, meter, and logger providers once and returns the
-injected `TelemetryClient`. It does not replace process-global OpenTelemetry providers. Traces,
-logs, metrics, and resources are filtered before the underlying stdout exporters receive them.
+``TelemetryRuntime`` owns isolated tracer, meter, and logger providers; bounded processors and
+readers; official OTLP/HTTP encoders; request delivery; optional persistence; and lifecycle state.
+It validates TLS endpoints, applies host-supplied short-lived authentication on every attempt, and
+exposes only its feature-facing `TelemetryClient`.
+
+``TelemetryBootstrap`` remains an explicit development-only stdout path. Neither path replaces
+process-global OpenTelemetry providers.
 
 ``PrivacyPreservingSpanExporter`` sanitizes names, attributes, events, links, status, and resources.
 ``PrivacyPreservingLogRecordExporter`` rebuilds records from allowlisted bodies, attributes, event
@@ -17,9 +21,8 @@ resources, sanitizes dimensions, and removes exemplars.
 dimension processors and duration histograms. It also creates instruments with stable descriptions
 and units.
 
-Both bootstrap environments remain stdout-only. Production endpoint and headers are unused. This
-module does not provide OTLP transport, TLS/authentication, retry, persistence, lifecycle ownership,
-or remote delivery.
+Read <doc:MobileOTLPRuntime> before enabling remote export. Mobile delivery remains best-effort:
+suspension and termination can interrupt every queue, retry, persistence, or flush strategy.
 
 Custom SDK integrations must install all three wrappers, package metric views, and a resource
 sanitized by the same policy. Otherwise they are outside the package trust boundary.
@@ -29,6 +32,24 @@ sanitized by the same policy. Otherwise they are outside the package trust bound
 ### Bootstrap
 
 - ``TelemetryBootstrap``
+- ``TelemetryRuntime``
+- ``OTLPEndpoints``
+- ``TelemetryHTTPTransport``
+- ``TelemetryRequestAuthenticator``
+- ``TelemetryBatchConfiguration``
+- ``TelemetryDeliveryConfiguration``
+- ``TelemetryPersistenceConfiguration``
+
+### Lifecycle and diagnostics
+
+- ``TelemetryRuntimeOperationResult``
+- ``TelemetryRuntimeDiagnostics``
+- ``TelemetryRuntimeDiagnosticEvent``
+- ``TelemetryExportCondition``
+
+### Articles
+
+- <doc:MobileOTLPRuntime>
 
 ### Policy boundary
 

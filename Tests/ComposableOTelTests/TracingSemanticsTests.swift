@@ -393,7 +393,7 @@ struct TracingSemanticsTests {
         group.addTask {
           TelemetryBootstrap.configure(
             serviceName: ServiceID(validating: "bootstrap-\(index)")!,
-            environment: .production(endpoint: "https://unused.invalid"),
+            environment: .debug,
             policy: testPolicy()
           )
         }

@@ -170,15 +170,16 @@ where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkd
   failures.append("Documentation contains stale example text: \(forbidden)")
 }
 
-if !readme.contains("no telemetry is sent remotely") {
-  failures.append("README must state that current production export is not remote")
-}
 for requiredPrivacyClaim in [
   "logs are disabled by default",
   "deterministically aggregate to",
   "PrivacyPreservingSpanExporter",
   "unsafeCustomSDK",
   "watchOS | Unsupported",
+  "best-effort",
+  "short-lived",
+  "`TelemetryRuntime`",
+  "never persisted",
 ] where !readme.contains(requiredPrivacyClaim) {
   failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
@@ -189,6 +190,29 @@ if !manifest.contains(".iOS(.v17)") || !manifest.contains(".macOS(.v14)") {
 }
 if manifest.contains(".watchOS(") {
   failures.append("Do not declare watchOS until the documented watchOS support gate passes")
+}
+if !manifest.contains("open-telemetry/opentelemetry-swift.git")
+  || !manifest.contains("OpenTelemetryProtocolExporterHTTP")
+{
+  failures.append("Package.swift must include the official OTLP/HTTP exporter product")
+}
+
+let bootstrap = read("Sources/ComposableOTelExporters/TelemetryBootstrap.swift")
+if bootstrap.contains("case production") || bootstrap.contains("StdoutSpanExporter(isDebug: false)") {
+  failures.append("Production stdout must remain impossible through TelemetryBootstrap")
+}
+
+let runtime = read("Sources/ComposableOTelExporters/TelemetryRuntime.swift")
+for requiredRuntimeBoundary in [
+  "OtlpHttpTraceExporter",
+  "OtlpHttpMetricExporter",
+  "OtlpHttpLogExporter",
+  "deploymentEnvironment: \"production\"",
+] where !runtime.contains(requiredRuntimeBoundary) {
+  failures.append("TelemetryRuntime is missing production boundary: \(requiredRuntimeBoundary)")
+}
+if runtime.contains("Stdout") {
+  failures.append("TelemetryRuntime must not reference stdout exporters")
 }
 
 if failures.isEmpty {

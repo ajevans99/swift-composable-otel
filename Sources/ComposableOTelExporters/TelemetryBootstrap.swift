@@ -27,13 +27,9 @@ public enum TelemetryBootstrap {
   public enum Environment: Sendable {
     /// Privacy-preserving stdout export with full trace sampling.
     case debug
-    /// Privacy-preserving stdout export with reduced trace sampling.
-    ///
-    /// Endpoint and headers remain reserved for issue #5 and are not read or contacted.
-    case production(endpoint: String, headers: [String: String] = [:])
   }
 
-  /// Configures bounded stdout telemetry once for the process.
+  /// Configures development-only, bounded stdout telemetry once for the process.
   ///
   /// The first call owns the cached package client; OpenTelemetry process globals remain untouched.
   /// The policy controls each signal independently, and logs are disabled by default. Values
@@ -64,29 +60,22 @@ public enum TelemetryBootstrap {
     samplingRatio: Double?,
     policy: TelemetryPolicy
   ) -> TelemetryClient {
+    let deploymentEnvironment =
+      switch environment {
+      case .debug:
+        "debug"
+      }
     let resource = makeResource(
       serviceName: serviceName,
       serviceVersion: serviceVersion,
-      environment: environment,
+      deploymentEnvironment: deploymentEnvironment,
       policy: policy
     )
 
-    let ratio: Double
-    switch environment {
-    case .debug:
-      ratio = samplingRatio ?? 1
-    case .production:
-      ratio = samplingRatio ?? 0.1
-    }
+    let ratio = samplingRatio ?? 1
     let sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: ratio))
 
-    let rawSpanExporter: any SpanExporter
-    switch environment {
-    case .debug:
-      rawSpanExporter = StdoutSpanExporter(isDebug: true)
-    case .production:
-      rawSpanExporter = StdoutSpanExporter(isDebug: false)
-    }
+    let rawSpanExporter: any SpanExporter = StdoutSpanExporter(isDebug: true)
     let spanExporter = PrivacyPreservingSpanExporter(
       exporter: rawSpanExporter,
       policy: policy
@@ -108,26 +97,13 @@ public enum TelemetryBootstrap {
       .add(spanProcessor: spanProcessor)
       .build()
 
-    let rawMetricExporter: any MetricExporter
-    switch environment {
-    case .debug:
-      rawMetricExporter = StdoutMetricExporter(isDebug: true)
-    case .production:
-      rawMetricExporter = StdoutMetricExporter(isDebug: false)
-    }
+    let rawMetricExporter: any MetricExporter = StdoutMetricExporter(isDebug: true)
     let metricExporter = PrivacyPreservingMetricExporter(
       exporter: rawMetricExporter,
       policy: policy
     )
-    let metricInterval: TimeInterval
-    switch environment {
-    case .debug:
-      metricInterval = 5
-    case .production:
-      metricInterval = 60
-    }
     let metricReader = PeriodicMetricReaderBuilder(exporter: metricExporter)
-      .setInterval(timeInterval: metricInterval)
+      .setInterval(timeInterval: 5)
       .build()
     let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
@@ -135,13 +111,7 @@ public enum TelemetryBootstrap {
     ComposableOTelMetricConfiguration.registerViews(on: meterBuilder, policy: policy)
     let meterProvider = meterBuilder.build()
 
-    let rawLogExporter: any LogRecordExporter
-    switch environment {
-    case .debug:
-      rawLogExporter = StdoutLogExporter(isDebug: true)
-    case .production:
-      rawLogExporter = StdoutLogExporter(isDebug: false)
-    }
+    let rawLogExporter: any LogRecordExporter = StdoutLogExporter(isDebug: true)
     let logExporter = PrivacyPreservingLogRecordExporter(
       exporter: rawLogExporter,
       policy: policy
@@ -178,17 +148,9 @@ public enum TelemetryBootstrap {
   static func makeResource(
     serviceName: ServiceID,
     serviceVersion: ServiceVersionID?,
-    environment: Environment,
+    deploymentEnvironment: String,
     policy: TelemetryPolicy
   ) -> Resource {
-    let deploymentEnvironment: String
-    switch environment {
-    case .debug:
-      deploymentEnvironment = "debug"
-    case .production:
-      deploymentEnvironment = "production"
-    }
-
     var attributes: [String: AttributeValue] = [
       "service.name": .string(serviceName.rawValue),
       "deployment.environment.name": .string(deploymentEnvironment),

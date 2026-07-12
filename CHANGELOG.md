@@ -24,6 +24,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   units, histograms, and explicit series limits.
 - Independent trace, metric, and log controls with logs disabled by default.
 - Stable package semantic conventions and navigation transition telemetry.
+- A lifecycle-owning production `TelemetryRuntime` for traces, metrics, and logs with validated
+  OTLP/HTTP TLS endpoints and per-attempt host authentication.
+- Bounded off-main batching, retry/backoff/jitter, request timeouts, reachability hints, structured
+  flush/shutdown results, lifecycle hooks, and non-recursive exporter diagnostics.
+- Optional atomic OTLP persistence with age/size limits, Apple file protection, backup exclusion,
+  relaunch recovery, and corruption removal.
 
 ### Changed
 
@@ -48,6 +54,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   process globals and affecting unrelated instrumentation.
 - The published manifest constrains `swift-sharing` to the final tools-6.0-compatible release
   before cross-package dependency traits.
+- Production composition now uses an owned `TelemetryRuntime`; `TelemetryBootstrap` is an explicit
+  development-only stdout helper.
 
 ### Removed
 
@@ -55,12 +63,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `String(describing:)` comparison, arbitrary `TelemetryClient` log bodies/attributes, and the
   unenforced `ErrorDetailPolicy`/`SpanAttributeRedactor` APIs.
 - The deprecated global `configureTestTelemetry` helper and marker-only `.traced()` spelling.
+- The unused `.production(endpoint:headers:)` stdout bootstrap placeholder. Production callers
+  migrate to `TelemetryRuntime` with a host transport and short-lived request authenticator.
 
 ### Security
 
 - Allowlist-first filtering now covers span names/attributes/events/links/status, log
   bodies/attributes/event names, metric instruments/dimensions/exemplars, and resource attributes
   before package-owned exporters receive data.
+- Production endpoints reject non-TLS URLs and embedded credentials. Authorization is acquired for
+  each attempt and is never persisted; sanitized telemetry is enforced before queues, disk, and
+  network delivery.
 
 ## [0.2.2] - 2026-04-15
 

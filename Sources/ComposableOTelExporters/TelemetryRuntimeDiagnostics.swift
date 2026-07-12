@@ -13,6 +13,8 @@ public struct TelemetryRuntimeDiagnosticEvent: Sendable {
     case corruptionRecovered
     case flushCompleted
     case flushTimedOut
+    case discardCompleted
+    case discardFailed
   }
 
   public let kind: Kind
@@ -47,6 +49,8 @@ public struct TelemetryRuntimeDiagnostics: Equatable, Sendable {
   public let recoveredCorruptFiles: Int
   public let completedFlushes: Int
   public let timedOutFlushes: Int
+  public let completedDiscards: Int
+  public let failedDiscards: Int
 
   public func signal(_ signal: TelemetryRuntimeSignal) -> TelemetrySignalDiagnostics {
     switch signal {
@@ -80,6 +84,7 @@ public struct TelemetryRuntimeOperationResult: Equatable, Sendable {
     case forceFlush
     case background
     case shutdown
+    case disableAndDiscardPending
   }
 
   public let operation: Operation
@@ -89,9 +94,11 @@ public struct TelemetryRuntimeOperationResult: Equatable, Sendable {
   public let persistedItems: Int
 
   public var succeeded: Bool {
-    [traces, metrics, logs].allSatisfy {
+    let signalsSucceeded = [traces, metrics, logs].allSatisfy {
       $0.status == .success || $0.status == .disabled
     }
+    return signalsSucceeded
+      && (operation != .disableAndDiscardPending || persistedItems == 0)
   }
 }
 
@@ -115,6 +122,8 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
   private var recoveredCorruptFiles = 0
   private var completedFlushes = 0
   private var timedOutFlushes = 0
+  private var completedDiscards = 0
+  private var failedDiscards = 0
   private let emitter: RuntimeDiagnosticEmitter
 
   init(handler: (@Sendable (TelemetryRuntimeDiagnosticEvent) -> Void)?) {
@@ -195,6 +204,17 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
     emitter.emit(.init(kind: completed ? .flushCompleted : .flushTimedOut))
   }
 
+  func recordDiscard(completed: Bool) {
+    lock.withLock {
+      if completed {
+        completedDiscards += 1
+      } else {
+        failedDiscards += 1
+      }
+    }
+    emitter.emit(.init(kind: completed ? .discardCompleted : .discardFailed))
+  }
+
   func snapshot() -> TelemetryRuntimeDiagnostics {
     lock.withLock {
       TelemetryRuntimeDiagnostics(
@@ -205,7 +225,9 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
         persistedBytes: persistedBytes,
         recoveredCorruptFiles: recoveredCorruptFiles,
         completedFlushes: completedFlushes,
-        timedOutFlushes: timedOutFlushes
+        timedOutFlushes: timedOutFlushes,
+        completedDiscards: completedDiscards,
+        failedDiscards: failedDiscards
       )
     }
   }

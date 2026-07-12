@@ -73,6 +73,14 @@ struct PersistenceSaveResult {
   var saved: Bool
 }
 
+struct PersistencePurgeResult: Sendable {
+  var discardedBySignal: [TelemetryRuntimeSignal: Int]
+  var failedBySignal: [TelemetryRuntimeSignal: Int]
+  var failedFiles: Int
+  var remainingItems: Int
+  var remainingBytes: Int
+}
+
 final class RuntimePersistenceStore: @unchecked Sendable {
   private let configuration: TelemetryPersistenceConfiguration
   private let fileSystem: TelemetryRuntimeFileSystem
@@ -172,8 +180,59 @@ final class RuntimePersistenceStore: @unchecked Sendable {
     updateDiagnostics()
   }
 
+  func removeAll() -> PersistencePurgeResult {
+    var candidates = Dictionary(
+      uniqueKeysWithValues: stored.values.map {
+        (normalizedPath($0.url), $0.url)
+      }
+    )
+    let listingFailed: Bool
+    do {
+      for url in try fileSystem.listFiles(configuration.directory) {
+        candidates[normalizedPath(url)] = url
+      }
+      listingFailed = false
+    } catch {
+      listingFailed = true
+    }
+
+    var discardedBySignal: [TelemetryRuntimeSignal: Int] = [:]
+    var failedBySignal: [TelemetryRuntimeSignal: Int] = [:]
+    var failedFiles = listingFailed ? 1 : 0
+
+    for (path, url) in candidates {
+      let storedItem = stored.first { normalizedPath($0.value.url) == path }
+      do {
+        try fileSystem.remove(url)
+        if let storedItem {
+          stored.removeValue(forKey: storedItem.key)
+          discardedBySignal[storedItem.value.batch.signal, default: 0] += 1
+        }
+      } catch {
+        failedFiles += 1
+        if let storedItem {
+          failedBySignal[storedItem.value.batch.signal, default: 0] += 1
+        }
+      }
+    }
+
+    let remainingItems = max(stored.count, failedFiles)
+    diagnostics.setPersistence(items: remainingItems, bytes: totalBytes)
+    return PersistencePurgeResult(
+      discardedBySignal: discardedBySignal,
+      failedBySignal: failedBySignal,
+      failedFiles: failedFiles,
+      remainingItems: remainingItems,
+      remainingBytes: totalBytes
+    )
+  }
+
   private var totalBytes: Int {
     stored.values.reduce(into: 0) { $0 += $1.bytes }
+  }
+
+  private func normalizedPath(_ url: URL) -> String {
+    url.resolvingSymlinksInPath().standardizedFileURL.path
   }
 
   private func fileURL(for batch: PendingOTLPBatch) -> URL {

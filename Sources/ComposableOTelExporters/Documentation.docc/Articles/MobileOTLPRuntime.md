@@ -93,6 +93,23 @@ The host owns `UIApplication.beginBackgroundTask`, `BGTaskScheduler` registratio
 macOS termination coordination. Pass only the remaining budget. ``TelemetryRuntimeOperationResult``
 reports per-signal success, failure, timeout, pending, and drop state. Shutdown is idempotent.
 
+## Revoke consent and discard unsent data
+
+Graceful shutdown attempts a final bounded flush and retains timed-out persistence for relaunch.
+Consent revocation requires different behavior. Swap the host facade or dependency to
+`TelemetryClient.noop` first so no feature can start new instrumentation, then call:
+
+```swift
+telemetryFacade.replaceClient(with: .noop)
+let result = await runtime.disableAndDiscardPending()
+```
+
+``TelemetryRuntime/disableAndDiscardPending()`` does not flush. It permanently rejects new signal
+data, cancels in-flight delivery and retry work, deletes its in-memory queues and every spool file,
+and shuts down its providers. Later active-lifecycle or export-condition calls cannot resume it.
+Concurrent calls are idempotent. Deletion failures are returned without escaping into application
+behavior and can be retried by calling the operation again.
+
 ## Treat delivery as best-effort
 
 iOS can suspend or terminate the process before a schedule fires, a retry completes, an atomic write
@@ -102,5 +119,6 @@ relaunch; it is not a delivery guarantee.
 
 Use ``TelemetryRuntimeDiagnostics`` or the optional structured diagnostic handler for queue depth,
 drops, persisted bytes/items, attempts, successes, retryable/non-retryable failures, last success,
-corruption recovery, and flush outcomes. Diagnostics bypass OpenTelemetry and contain only bounded
-categories and counts, so exporter failures cannot recursively generate more exporter telemetry.
+corruption recovery, and flush/discard outcomes. Diagnostics bypass OpenTelemetry and contain only
+bounded categories and counts, so exporter failures cannot recursively generate more exporter
+telemetry.

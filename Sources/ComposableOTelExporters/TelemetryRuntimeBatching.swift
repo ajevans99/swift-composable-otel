@@ -131,6 +131,40 @@ final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
     }
   }
 
+  func disableAndDiscardPending() async -> Int {
+    var waiters: [CheckedContinuation<Void, Never>] = []
+    let state = lock.withLock {
+      accepting = false
+      cancelScheduleLocked()
+      let discarded = items.count
+      items.removeAll()
+      flushRequested = false
+      waiters = flushWaiters
+      flushWaiters.removeAll()
+      let shouldShutdown = !exporterWasShutdown
+      exporterWasShutdown = true
+      return (discarded, shouldShutdown)
+    }
+
+    if state.0 > 0 {
+      diagnostics.adjustQueueDepth(by: -state.0, signal: signal)
+      diagnostics.recordDrop(signal: signal, count: state.0)
+    }
+    for waiter in waiters {
+      waiter.resume()
+    }
+    guard state.1 else { return state.0 }
+
+    let timeout = configuration.exportTimeout.runtimeSeconds
+    await withCheckedContinuation { continuation in
+      workerQueue.async { [shutdownExporter] in
+        shutdownExporter(timeout)
+        continuation.resume()
+      }
+    }
+    return state.0
+  }
+
   func stopAccepting() {
     lock.withLock {
       accepting = false

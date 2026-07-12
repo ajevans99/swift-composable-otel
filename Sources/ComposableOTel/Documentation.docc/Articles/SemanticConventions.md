@@ -13,6 +13,12 @@ behavioral compatibility change.
 The conventions are package-generic. Application-specific product names, flows, data
 classifications, consent rules, and retention rules do not belong in this package.
 
+The package-specific `tca.*` namespace was reviewed against OpenTelemetry semantic conventions
+v1.43.0 on 2026-07-12. `API/SemanticConventions.lock` binds the source declarations to that review.
+Adding or renaming a convention requires updating the DocC contract, changelog or migration notes,
+the lock, cardinality analysis, API baseline where applicable, and release review. CI fails when the
+source changes without that explicit lock update.
+
 ## Identifier contract
 
 Every identifier domain has a distinct Swift type and a finite ``TelemetrySchema`` allowlist.

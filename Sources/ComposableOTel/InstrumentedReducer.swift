@@ -39,6 +39,7 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
     let startTime = clock.now
 
     let effect: Effect<Base.Action>
+    let duration: Double
     if telemetry.policy.signals.tracesEnabled {
       let oldToken = stateChangeToken?(state)
       let spanBuilder = telemetry.tracer
@@ -46,25 +47,28 @@ public struct InstrumentedReducer<Base: Reducer>: Reducer {
         .setSpanKind(spanKind: .internal)
         .setAttributes(telemetry.policy.sanitizedSpanAttributes(attributes))
 
-      effect = spanBuilder.withActiveSpan { span in
+      let traced = spanBuilder.withActiveSpan { span in
         let effect = ReducerTraceContext.$spanContext.withValue(span.context) {
           base._reduce(into: &state, action: action)
         }
         if let oldToken, let newToken = stateChangeToken?(state) {
           span.setAttribute(key: TCAAttributes.stateChanged, value: oldToken != newToken)
         }
+        let duration = durationMilliseconds(from: startTime, clock: clock)
         span.setAttribute(
           key: TCAAttributes.reducerDurationMs,
-          value: durationMilliseconds(from: startTime, clock: clock)
+          value: duration
         )
         span.status = .ok
-        return effect
+        return (effect: effect, duration: duration)
       }
+      effect = traced.effect
+      duration = traced.duration
     } else {
       effect = base._reduce(into: &state, action: action)
+      duration = durationMilliseconds(from: startTime, clock: clock)
     }
 
-    let duration = durationMilliseconds(from: startTime, clock: clock)
     if telemetry.policy.signals.metricsEnabled {
       let metricAttributes = telemetry.policy.sanitizedMetricAttributes(
         attributes,

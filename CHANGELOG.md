@@ -30,6 +30,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   flush/shutdown results, lifecycle hooks, and non-recursive exporter diagnostics.
 - Optional atomic OTLP persistence with age/size limits, Apple file protection, backup exclusion,
   relaunch recovery, and corruption removal.
+- Deterministic concurrency stress, target/runtime coverage floors, TSan, public API compatibility,
+  semantic-convention review, and release performance/memory/queue gates.
+- Current iOS simulator testing plus migration, privacy, security, operations, pilot-evidence, and
+  explicit 1.0 go/no-go guidance.
 
 ### Changed
 
@@ -56,6 +60,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   before cross-package dependency traits.
 - Production composition now uses an owned `TelemetryRuntime`; `TelemetryBootstrap` is an explicit
   development-only stdout helper.
+- Reducer duration is measured once and reused across its span, metric, and log.
+
+### Migration
+
+The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md). In summary:
+
+- replace reflection-derived names with typed schema identifiers;
+- replace `.traced()` with `.traceStart(effect:)` or a lifecycle-traced effect;
+- replace `configureTestTelemetry` with `TelemetryClient.test(metricReader:policy:)`;
+- replace `ErrorDetailPolicy` and `SpanAttributeRedactor` with bounded
+  `TelemetryPolicy.classifyError`; and
+- replace production bootstrap headers with a retained `TelemetryRuntime` and per-attempt
+  authenticator.
 
 ### Removed
 

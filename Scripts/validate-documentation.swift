@@ -94,7 +94,19 @@ for fileURL in allMarkdown {
   }
 }
 
-for requiredFile in ["CHANGELOG.md", "LICENSE", "README.md", "RELEASING.md", "SUPPORT.md"] {
+for requiredFile in [
+  "CHANGELOG.md",
+  "LICENSE",
+  "MIGRATION.md",
+  "PERFORMANCE.md",
+  "PILOT.md",
+  "PRIVACY.md",
+  "README.md",
+  "RELEASE_NOTES.md",
+  "RELEASING.md",
+  "SECURITY.md",
+  "SUPPORT.md",
+] {
   if !fileManager.fileExists(atPath: repositoryRoot.appendingPathComponent(requiredFile).path) {
     failures.append("Missing required project document \(requiredFile)")
   }
@@ -164,9 +176,11 @@ let forbiddenDocumentation = [
   "as! TracerProviderSdk",
 ]
 for forbidden in forbiddenDocumentation
-where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkdown).contains(where: {
-  (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
-}) {
+where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkdown).contains(
+  where: {
+    (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
+  })
+{
   failures.append("Documentation contains stale example text: \(forbidden)")
 }
 
@@ -198,7 +212,8 @@ if !manifest.contains("open-telemetry/opentelemetry-swift.git")
 }
 
 let bootstrap = read("Sources/ComposableOTelExporters/TelemetryBootstrap.swift")
-if bootstrap.contains("case production") || bootstrap.contains("StdoutSpanExporter(isDebug: false)") {
+if bootstrap.contains("case production") || bootstrap.contains("StdoutSpanExporter(isDebug: false)")
+{
   failures.append("Production stdout must remain impossible through TelemetryBootstrap")
 }
 

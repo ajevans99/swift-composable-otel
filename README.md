@@ -395,6 +395,24 @@ as bootstrap. They do not replace process globals.
 See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
 [RELEASING.md](RELEASING.md).
 
+## Release evidence
+
+The unreleased package quality layer includes:
+
+- 60 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
+  `TelemetryRuntime*` delivery paths;
+- a checked public API baseline and an explicit semantic-convention review lock;
+- release benchmarks for reducers, effects, dependencies, logs, metrics, sampled/unsampled spans,
+  state tokens, batching, memory, and queue pressure; and
+- current iOS simulator tests, generic iOS product builds, minimum/latest dependency endpoints, and
+  all-product DocC builds.
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
+[PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
+[consumer pilot evidence contract](PILOT.md). No 1.0 tag or release exists. The external pilot and
+repository protection evidence remain required no-go items.
+
 ## License
 
 swift-composable-otel is available under the [MIT License](LICENSE), SPDX identifier `MIT`.

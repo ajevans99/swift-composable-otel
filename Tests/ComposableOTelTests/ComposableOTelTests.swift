@@ -17,7 +17,7 @@ let testSchema = try! TelemetrySchema(
     "cancellation", "recovered-cancellation", "translated-cancellation", "success",
     "long-lived-success", "error", "cancelled",
   ],
-  dependencies: ["test-dependency", "cache", "awaited", "child-task"],
+  dependencies: ["test-dependency", "cache", "awaited", "child-task", "detached"],
   operations: ["get-value", "failing", "load"],
   routes: ["settings"],
   errorTypes: ["test-error"],
@@ -234,6 +234,36 @@ struct ComposableOTelAllTests {
       await store.send(.increment) { $0.count = 1 }
       #expect(collectors.logs.allRecords.isEmpty)
     }
+
+    @Test("action logs contain only bounded identifiers and one measured duration")
+    @MainActor
+    func actionDispatchLog() async throws {
+      let (client, collectors) = TelemetryClient.test(
+        policy: testPolicy(
+          signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: true)
+        )
+      )
+      let store = TestStore(initialState: CounterFeature.State()) {
+        CounterFeature()
+      } withDependencies: {
+        $0.composableOTel = client
+      }
+
+      await store.send(.increment) { $0.count = 1 }
+      collectors.forceFlush()
+
+      let record = try #require(collectors.logs.allRecords.first)
+      let span = try #require(
+        collectors.spans.spans(named: ComposableOTelSemantics.Spans.reducer).first
+      )
+      #expect(record.body == .string(ComposableOTelSemantics.LogBodies.actionDispatched))
+      #expect(record.attributes[TCAAttributes.featureName] == .string("counter"))
+      #expect(record.attributes[TCAAttributes.actionName] == .string("increment"))
+      #expect(
+        record.attributes[TCAAttributes.reducerDurationMs]
+          == span.attributes[TCAAttributes.reducerDurationMs]
+      )
+    }
   }
 
   @Suite("Signal controls")
@@ -395,6 +425,86 @@ struct ComposableOTelAllTests {
         collectors.logs.allRecords.first?.attributes[TCAAttributes.operationName]
           == .string("failing")
       )
+    }
+
+    @Test("numeric and enumerated attributes reject unsafe values")
+    func boundedScalarAttributes() {
+      let policy = testPolicy()
+      let invalid = policy.sanitizedSpanAttributes([
+        TCAAttributes.reducerDurationMs: .double(.nan),
+        TCAAttributes.effectOutcome: .string(sentinelSecret),
+        TCAAttributes.navigationOperation: .string(sentinelSecret),
+      ])
+      #expect(invalid.isEmpty)
+
+      #expect(
+        policy.sanitizedSpanAttributes([
+          TCAAttributes.reducerDurationMs: .double(-1)
+        ]).isEmpty
+      )
+      #expect(
+        policy.sanitizedSpanAttributes([
+          TCAAttributes.reducerDurationMs: .double(.infinity)
+        ]).isEmpty
+      )
+      #expect(
+        policy.sanitizedSpanAttributes([
+          TCAAttributes.reducerDurationMs: .double(86_400_001)
+        ])[TCAAttributes.reducerDurationMs] == .double(86_400_000)
+      )
+      #expect(
+        policy.sanitizedSpanAttributes([
+          TCAAttributes.effectOutcome: .string("success"),
+          TCAAttributes.navigationOperation: .string("push"),
+        ]).count == 2
+      )
+    }
+
+    @Test("error classifier output is bounded by the configured schema")
+    func errorClassificationBounding() async throws {
+      struct ClassifiedFailure: Error {}
+
+      let schema = try TelemetrySchema(
+        dependencies: ["test-dependency"],
+        operations: ["failing"]
+      )
+      let policy = TelemetryPolicy(
+        schema: schema,
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false),
+        classifyError: { _ in
+          TelemetryErrorMetadata(
+            type: "unconfigured-type",
+            category: "unconfigured-category",
+            code: "unconfigured-code",
+            handled: true,
+            retryable: true
+          )
+        }
+      )
+      let (client, collectors) = TelemetryClient.test(policy: policy)
+
+      do {
+        let _: Void = try await withDependencies {
+          $0.composableOTel = client
+        } operation: {
+          try await tracedCall(dependency: "test-dependency", operation: "failing") {
+            throw ClassifiedFailure()
+          }
+        }
+        Issue.record("Expected error")
+      } catch is ClassifiedFailure {
+      }
+      collectors.forceFlush()
+
+      let event = try #require(
+        collectors.spans.spans(named: ComposableOTelSemantics.Spans.dependency)
+          .first?.events.first
+      )
+      #expect(event.attributes[TCAAttributes.errorType] == .string("other"))
+      #expect(event.attributes[TCAAttributes.errorCategory] == .string("other"))
+      #expect(event.attributes[TCAAttributes.errorCode] == .string("other"))
+      #expect(event.attributes[TCAAttributes.errorHandled] == .bool(true))
+      #expect(event.attributes[TCAAttributes.errorRetryable] == .bool(true))
     }
   }
 

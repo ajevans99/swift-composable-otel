@@ -53,6 +53,58 @@ private struct LifecycleFeature {
   }
 }
 
+@Reducer
+private struct MarkerFeature {
+  struct State: Equatable {}
+  enum Action: Equatable {
+    case start
+  }
+
+  var body: some ReducerOf<Self> {
+    Reduce { _, action in
+      switch action {
+      case .start:
+        return Effect<Action>.run { _ in
+          try await Task.sleep(for: .milliseconds(1))
+        }
+        .traceStart(effect: "fetch-count")
+      }
+    }
+    .instrumented(feature: "counter", action: { _ in "fetch-and-set" })
+  }
+}
+
+@Reducer
+private struct CatchFeature {
+  struct State: Equatable {
+    var handled = false
+  }
+
+  enum Action: Equatable {
+    case start
+    case errorHandled
+  }
+
+  var body: some ReducerOf<Self> {
+    Reduce { state, action in
+      switch action {
+      case .start:
+        return .tracedRun(effect: "failure") { send in
+          do {
+            throw ExpectedError.failed
+          } catch {
+            await send(.errorHandled)
+          }
+        }
+      case .errorHandled:
+        state.handled = true
+        return .none
+      }
+    }
+    .instrumented(feature: "counter", action: { _ in "fetch-and-set" })
+  }
+}
+
 @Suite("Tracing semantics", .serialized)
 struct TracingSemanticsTests {
   @Test("reducer span is the explicit parent of its traced effect")
@@ -130,6 +182,39 @@ struct TracingSemanticsTests {
     #expect(awaitedSpan.parentSpanId == effectSpan.spanId)
     #expect(childTaskSpan.traceId == effectSpan.traceId)
     #expect(childTaskSpan.parentSpanId == effectSpan.spanId)
+  }
+
+  @Test("detached tasks require explicit dependency injection and do not inherit span context")
+  func detachedTaskContextBoundary() async throws {
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+
+    try await withDependencies {
+      $0.composableOTel = client
+    } operation: {
+      try await client.withEffectTrace(
+        effect: "propagation",
+        longLived: false,
+        parentContext: nil
+      ) {
+        _ = await Task.detached {
+          await withDependencies {
+            $0.composableOTel = client
+          } operation: {
+            await tracedCall(dependency: "detached", operation: "load") { 1 }
+          }
+        }.value
+      }
+    }
+    collectors.forceFlush()
+
+    let effectSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
+    )
+    let detachedSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.dependency).first
+    )
+    #expect(detachedSpan.traceId != effectSpan.traceId)
+    #expect(detachedSpan.parentSpanId != effectSpan.spanId)
   }
 
   @Test("effect tracing records and rethrows failures")
@@ -293,6 +378,92 @@ struct TracingSemanticsTests {
     )
     #expect(span.attributes[TCAAttributes.effectOutcome] == .string("cancelled"))
     #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.effectCancelled])
+  }
+
+  @Test("long-lived failures emit one error terminal outcome")
+  func longLivedError() async throws {
+    let metricReader = InMemoryMetricReader()
+    let (client, collectors) = TelemetryClient.test(
+      metricReader: metricReader,
+      policy: testPolicy()
+    )
+    do {
+      let _: Void = try await client.withEffectTrace(
+        effect: "long-lived-success",
+        longLived: true,
+        parentContext: nil
+      ) {
+        throw ExpectedError.failed
+      }
+      Issue.record("Expected error")
+    } catch is ExpectedError {
+    }
+    collectors.forceFlush()
+
+    let span = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
+    )
+    #expect(span.attributes[TCAAttributes.effectLongLived] == .bool(true))
+    #expect(span.attributes[TCAAttributes.effectOutcome] == .string("error"))
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.exception])
+    #expect(
+      sumLongPoints(named: ComposableOTelSemantics.Metrics.effectsErrored, in: metricReader.metrics)
+        == 1
+    )
+    #expect(
+      longPoints(named: ComposableOTelSemantics.Metrics.activeEffects, in: metricReader.metrics)
+        .allSatisfy { $0.value == 0 }
+    )
+  }
+
+  @Test("traceStart marker is parented to the reducer span")
+  @MainActor
+  func traceStartParentage() async throws {
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let store = TestStore(initialState: MarkerFeature.State()) {
+      MarkerFeature()
+    } withDependencies: {
+      $0.composableOTel = client
+    }
+
+    await store.send(.start)
+    await store.finish()
+    collectors.forceFlush()
+
+    let reducerSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.reducer).first
+    )
+    let markerSpan = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first {
+        $0.attributes[TCAAttributes.effectMarker] == .bool(true)
+      }
+    )
+    #expect(markerSpan.traceId == reducerSpan.traceId)
+    #expect(markerSpan.parentSpanId == reducerSpan.spanId)
+    #expect(markerSpan.attributes[TCAAttributes.effectLongLived] == .bool(false))
+  }
+
+  @Test("catch-to-action is opt-in and records the observed successful completion")
+  @MainActor
+  func catchToActionYieldsSuccess() async throws {
+    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let store = TestStore(initialState: CatchFeature.State()) {
+      CatchFeature()
+    } withDependencies: {
+      $0.composableOTel = client
+    }
+
+    await store.send(.start)
+    await store.receive(.errorHandled) { $0.handled = true }
+    await store.finish()
+    collectors.forceFlush()
+
+    let span = try #require(
+      collectors.spans.spans(named: ComposableOTelSemantics.Spans.effect).first
+    )
+    #expect(span.attributes[TCAAttributes.effectOutcome] == .string("success"))
+    #expect(span.status == .ok)
+    #expect(span.events.map(\.name) == [ComposableOTelSemantics.Events.effectCompleted])
   }
 
   @Test("effect counters and active accounting are balanced exactly once")

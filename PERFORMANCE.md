@@ -21,9 +21,9 @@ checked budget in `Benchmarks/ComposableOTelBenchmarks/Budgets.json`.
 | Sampled versus unsampled | At most 5.0× |
 | Queue high-water growth | At most 64 MiB while accounting for 4,096 offered spans |
 
-The queue scenario requires every offered item to be represented by either current queue depth or a
-drop, requires both accepted and dropped work under pressure, and enforces the configured 2,048-item
-delivery ceiling. Results are uploaded from CI as a deterministic JSON report.
+The queue scenario requires every offered item to be represented by current queue depth, successful
+delivery, or a drop; requires both accepted and dropped work under pressure; and enforces the
+configured 2,048-item delivery ceiling. Results are uploaded from CI as a deterministic JSON report.
 
 ## Baseline and interpretation
 

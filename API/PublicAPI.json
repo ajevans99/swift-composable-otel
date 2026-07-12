@@ -196,6 +196,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC18setExportConditionyyAA0dgH0OYaF"
   },
   {
+    "declaration" : "func disableAndDiscardPending() async -> TelemetryRuntimeOperationResult",
+    "kind" : "swift.method",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntime.disableAndDiscardPending()",
+    "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC24disableAndDiscardPendingAA0dE15OperationResultVyYaF"
+  },
+  {
     "declaration" : "func applicationDidBecomeActive() async",
     "kind" : "swift.method",
     "module" : "ComposableOTelExporters",
@@ -553,6 +560,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryRuntimeDiagnosticsV"
   },
   {
+    "declaration" : "let failedDiscards: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeDiagnostics.failedDiscards",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryRuntimeDiagnosticsV14failedDiscardsSivp"
+  },
+  {
     "declaration" : "let persistedBytes: Int",
     "kind" : "swift.property",
     "module" : "ComposableOTelExporters",
@@ -579,6 +593,13 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryRuntimeDiagnostics.completedFlushes",
     "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryRuntimeDiagnosticsV16completedFlushesSivp"
+  },
+  {
+    "declaration" : "let completedDiscards: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeDiagnostics.completedDiscards",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryRuntimeDiagnosticsV17completedDiscardsSivp"
   },
   {
     "declaration" : "let recoveredCorruptFiles: Int",
@@ -966,6 +987,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeDiagnosticEventV4KindO10queueDepthyA2EmF"
   },
   {
+    "declaration" : "case discardFailed",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeDiagnosticEvent.Kind.discardFailed",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeDiagnosticEventV4KindO13discardFailedyA2EmF"
+  },
+  {
     "declaration" : "case flushTimedOut",
     "kind" : "swift.enum.case",
     "module" : "ComposableOTelExporters",
@@ -978,6 +1006,13 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryRuntimeDiagnosticEvent.Kind.flushCompleted",
     "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeDiagnosticEventV4KindO14flushCompletedyA2EmF"
+  },
+  {
+    "declaration" : "case discardCompleted",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeDiagnosticEvent.Kind.discardCompleted",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeDiagnosticEventV4KindO16discardCompletedyA2EmF"
   },
   {
     "declaration" : "case retryableFailure",
@@ -1083,6 +1118,13 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryRuntimeOperationResult.Operation.forceFlush",
     "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeOperationResultV0F0O10forceFlushyA2EmF"
+  },
+  {
+    "declaration" : "case disableAndDiscardPending",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeOperationResult.Operation.disableAndDiscardPending",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryRuntimeOperationResultV0F0O24disableAndDiscardPendingyA2EmF"
   },
   {
     "declaration" : "case shutdown",

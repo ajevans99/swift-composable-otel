@@ -34,6 +34,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   semantic-convention review, and release performance/memory/queue gates.
 - Current iOS simulator testing plus migration, privacy, security, operations, pilot-evidence, and
   explicit 1.0 go/no-go guidance.
+- An idempotent consent-revocation operation that skips flush, cancels delivery, permanently stops
+  the runtime, and deletes all unsent in-memory and persisted telemetry.
 
 ### Changed
 
@@ -91,6 +93,8 @@ The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md).
 - Production endpoints reject non-TLS URLs and embedded credentials. Authorization is acquired for
   each attempt and is never persisted; sanitized telemetry is enforced before queues, disk, and
   network delivery.
+- Hosts can swap to `TelemetryClient.noop` and atomically disable/discard a production runtime;
+  filesystem deletion failures are surfaced and retryable without resuming export.
 
 ## [0.2.2] - 2026-04-15
 

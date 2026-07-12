@@ -175,9 +175,13 @@ private enum ComposableOTelBenchmarks {
     }
     let expectedQueueAccounting = budgets.queue.items * 2
     let queueDeadline = ContinuousClock().now.advanced(by: .seconds(10))
-    while queueRuntime.diagnostics.traces.queueDepth
-      + queueRuntime.diagnostics.traces.droppedItems < expectedQueueAccounting
-    {
+    while true {
+      let diagnostics = queueRuntime.diagnostics.traces
+      if diagnostics.queueDepth + diagnostics.droppedItems + diagnostics.successes
+        >= expectedQueueAccounting
+      {
+        break
+      }
       guard ContinuousClock().now < queueDeadline else {
         throw BenchmarkFailure.regression("Queue accounting did not settle before the deadline")
       }
@@ -189,12 +193,14 @@ private enum ComposableOTelBenchmarks {
       queueDiagnostics.queueDepth <= budgets.queue.items,
       queueDiagnostics.queueDepth > 0,
       queueDiagnostics.droppedItems > 0,
-      queueDiagnostics.queueDepth + queueDiagnostics.droppedItems == expectedQueueAccounting,
+      queueDiagnostics.queueDepth + queueDiagnostics.droppedItems + queueDiagnostics.successes
+        == expectedQueueAccounting,
       memoryDelta <= budgets.queue.maximumResidentDeltaBytes
     else {
       throw BenchmarkFailure.regression(
         "Queue budget failed: depth=\(queueDiagnostics.queueDepth), "
-          + "drops=\(queueDiagnostics.droppedItems), memoryDelta=\(memoryDelta)"
+          + "drops=\(queueDiagnostics.droppedItems), successes=\(queueDiagnostics.successes), "
+          + "memoryDelta=\(memoryDelta)"
       )
     }
 
@@ -335,6 +341,7 @@ private enum ComposableOTelBenchmarks {
     print(String(format: "sampled/unsampled ratio: %.2f", ratio))
     print(
       "queue: depth \(queueDiagnostics.queueDepth), drops \(queueDiagnostics.droppedItems), "
+        + "successes \(queueDiagnostics.successes), "
         + "resident high-water delta \(memoryDelta) bytes"
     )
 

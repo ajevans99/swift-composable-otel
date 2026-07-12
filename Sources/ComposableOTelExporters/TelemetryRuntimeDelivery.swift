@@ -6,6 +6,13 @@ public protocol TelemetryRetryClassifyingError: Error {
   var telemetryRetryable: Bool { get }
 }
 
+struct RuntimeDiscardOutcome: Sendable {
+  var discardedBySignal: [TelemetryRuntimeSignal: Int]
+  var failedBySignal: [TelemetryRuntimeSignal: Int]
+  var failedPersistedFiles: Int
+  var remainingPersistedItems: Int
+}
+
 actor RuntimeDeliveryEngine {
   private let configuration: TelemetryDeliveryConfiguration
   private let transport: TelemetryHTTPTransport
@@ -20,6 +27,7 @@ actor RuntimeDeliveryEngine {
   private var condition = TelemetryExportCondition.available
   private var worker: Task<Void, Never>?
   private var isShutdown = false
+  private var discardOutcome: RuntimeDiscardOutcome?
 
   init(
     configuration: TelemetryDeliveryConfiguration,
@@ -147,6 +155,47 @@ actor RuntimeDeliveryEngine {
     }
   }
 
+  func disableAndDiscardPending() -> RuntimeDiscardOutcome {
+    if let discardOutcome {
+      return discardOutcome
+    }
+
+    isShutdown = true
+    worker?.cancel()
+    worker = nil
+
+    let pending = queue + [inFlight].compactMap { $0 }
+    queue.removeAll()
+    inFlight = nil
+    var discardedBySignal: [TelemetryRuntimeSignal: Int] = [:]
+    for batch in pending {
+      diagnostics.adjustQueueDepth(by: -1, signal: batch.signal)
+      diagnostics.recordDrop(signal: batch.signal)
+      discardedBySignal[batch.signal, default: 0] += 1
+    }
+
+    let purge =
+      persistence?.removeAll()
+      ?? PersistencePurgeResult(
+        discardedBySignal: [:],
+        failedBySignal: [:],
+        failedFiles: 0,
+        remainingItems: 0,
+        remainingBytes: 0
+      )
+    diagnostics.recordDiscard(completed: purge.failedFiles == 0 && purge.remainingItems == 0)
+    let outcome = RuntimeDiscardOutcome(
+      discardedBySignal: discardedBySignal,
+      failedBySignal: purge.failedBySignal,
+      failedPersistedFiles: purge.failedFiles,
+      remainingPersistedItems: purge.remainingItems
+    )
+    if purge.failedFiles == 0 && purge.remainingItems == 0 {
+      discardOutcome = outcome
+    }
+    return outcome
+  }
+
   func pendingBySignal() -> [TelemetryRuntimeSignal: Int] {
     var result = Dictionary(
       uniqueKeysWithValues: TelemetryRuntimeSignal.allCases.map { ($0, 0) }
@@ -189,7 +238,9 @@ actor RuntimeDeliveryEngine {
       diagnostics.recordAttempt(signal: batch.signal)
       let outcome = await attempt(batch)
       if Task.isCancelled || isShutdown {
-        inFlight = batch
+        if !isShutdown {
+          inFlight = batch
+        }
         break
       }
 
@@ -211,7 +262,9 @@ actor RuntimeDeliveryEngine {
         do {
           try await clock.sleep(backoff(after: batch.attempt))
         } catch {
-          inFlight = batch
+          if !isShutdown {
+            inFlight = batch
+          }
           break
         }
         inFlight = nil

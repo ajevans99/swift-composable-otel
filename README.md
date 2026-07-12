@@ -200,10 +200,25 @@ macOS termination integration and passes only the available time budget. `forceF
 return per-signal success, failure, timeout, pending, and drop information. Shutdown is idempotent;
 persisted timed-out batches remain for relaunch, while memory-only batches are dropped.
 
+For consent revocation or a privacy kill switch, first swap the host facade or TCA dependency to
+`TelemetryClient.noop`, then invoke the terminal discard operation:
+
+```swift
+telemetryFacade.replaceClient(with: .noop)
+let discard = await runtime.disableAndDiscardPending()
+```
+
+`disableAndDiscardPending()` never flushes. It permanently stops this runtime from accepting signal
+data, cancels delivery and retry work, deletes queued and persisted telemetry, shuts down its
+providers, and cannot be reversed by an active-lifecycle or export-condition update. Concurrent
+calls share one idempotent result. A filesystem deletion failure is isolated into the structured
+result and diagnostics; a later call retries the deletion. Graceful `shutdown()` intentionally keeps
+its separate retain-for-relaunch behavior.
+
 The synchronous `diagnostics` snapshot reports queue depth, drops, persisted items/bytes, attempts,
 successes, retryable and non-retryable failures, last success, corruption recovery, and flush
-outcomes. An optional structured diagnostic handler receives the same bounded categories directly,
-not through OpenTelemetry, preventing recursive exporter telemetry.
+and discard outcomes. An optional structured diagnostic handler receives the same bounded categories
+directly, not through OpenTelemetry, preventing recursive exporter telemetry.
 
 > [!WARNING]
 > Mobile delivery is best-effort. A bounded background flush may help while execution time remains,
@@ -399,7 +414,7 @@ See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
 
 The unreleased package quality layer includes:
 
-- 60 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- 68 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;

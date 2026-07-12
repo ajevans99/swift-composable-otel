@@ -313,11 +313,21 @@ private enum AttemptOutcome: Sendable {
 
 private final class RuntimeAttemptRace: @unchecked Sendable {
   private let lock = NSLock()
-  private var continuation: CheckedContinuation<AttemptOutcome, Never>?
-  private var bufferedResult: AttemptOutcome?
+  private let stream: AsyncStream<AttemptOutcome>
+  private let continuation: AsyncStream<AttemptOutcome>.Continuation
   private var operation: Task<Void, Never>?
   private var timeout: Task<Void, Never>?
   private var resolved = false
+
+  init() {
+    let pair = Self.makeStream()
+    stream = pair.stream
+    continuation = pair.continuation
+  }
+
+  deinit {
+    continuation.finish()
+  }
 
   func install(operation: Task<Void, Never>, timeout: Task<Void, Never>) {
     let shouldCancel = lock.withLock {
@@ -332,35 +342,37 @@ private final class RuntimeAttemptRace: @unchecked Sendable {
   }
 
   func value() async -> AttemptOutcome {
-    await withCheckedContinuation { continuation in
-      let result = lock.withLock { () -> AttemptOutcome? in
-        if let bufferedResult {
-          self.bufferedResult = nil
-          return bufferedResult
-        }
-        self.continuation = continuation
-        return nil
-      }
-      if let result {
-        continuation.resume(returning: result)
-      }
+    for await result in stream {
+      return result
     }
+    return .nonRetryable
   }
 
   func resolve(_ result: AttemptOutcome) {
-    let continuation = lock.withLock { () -> CheckedContinuation<AttemptOutcome, Never>? in
+    let accepted: (Task<Void, Never>?, Task<Void, Never>?)? = lock.withLock {
       guard !resolved else { return nil }
       resolved = true
-      operation?.cancel()
-      timeout?.cancel()
-      if let continuation {
-        self.continuation = nil
-        return continuation
-      }
-      bufferedResult = result
-      return nil
+      return (operation, timeout)
     }
-    continuation?.resume(returning: result)
+    guard let accepted else { return }
+    accepted.0?.cancel()
+    accepted.1?.cancel()
+    continuation.yield(result)
+    continuation.finish()
+  }
+
+  private static func makeStream() -> (
+    stream: AsyncStream<AttemptOutcome>,
+    continuation: AsyncStream<AttemptOutcome>.Continuation
+  ) {
+    var continuation: AsyncStream<AttemptOutcome>.Continuation?
+    let stream = AsyncStream(
+      AttemptOutcome.self,
+      bufferingPolicy: .bufferingNewest(1)
+    ) {
+      continuation = $0
+    }
+    return (stream, continuation!)
   }
 }
 

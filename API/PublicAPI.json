@@ -672,7 +672,7 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters29PrivacyPreservingSpanExporterC6export5spans15explicitTimeout16OpenTelemetrySdk0fG10ResultCodeOSayAG0F4DataVG_SdSgtYaF"
   },
   {
-    "declaration" : "init(exporter: any SpanExporter, policy: TelemetryPolicy)",
+    "declaration" : "init(exporter: SpanExporter, policy: TelemetryPolicy)",
     "kind" : "swift.init",
     "module" : "ComposableOTelExporters",
     "path" : "PrivacyPreservingSpanExporter.init(exporter:policy:)",
@@ -945,7 +945,7 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters31PrivacyPreservingMetricExporterC6export7metrics16OpenTelemetrySdk12ExportResultOSayAF0F4DataVG_tYaF"
   },
   {
-    "declaration" : "init(exporter: any MetricExporter, policy: TelemetryPolicy)",
+    "declaration" : "init(exporter: MetricExporter, policy: TelemetryPolicy)",
     "kind" : "swift.init",
     "module" : "ComposableOTelExporters",
     "path" : "PrivacyPreservingMetricExporter.init(exporter:policy:)",
@@ -1274,7 +1274,7 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters34PrivacyPreservingLogRecordExporterC6export10logRecords15explicitTimeout16OpenTelemetrySdk12ExportResultOSayAG08ReadablefG0VG_SdSgtYaF"
   },
   {
-    "declaration" : "init(exporter: any LogRecordExporter, policy: TelemetryPolicy)",
+    "declaration" : "init(exporter: LogRecordExporter, policy: TelemetryPolicy)",
     "kind" : "swift.init",
     "module" : "ComposableOTelExporters",
     "path" : "PrivacyPreservingLogRecordExporter.init(exporter:policy:)",
@@ -1629,13 +1629,6 @@
     "module" : "ComposableOTelTesting",
     "path" : "InMemorySpanCollector.init()",
     "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorCACycfc"
-  },
-  {
-    "declaration" : "extension TelemetryClient",
-    "kind" : "swift.extension",
-    "module" : "ComposableOTelTesting",
-    "path" : "TelemetryClient",
-    "preciseIdentifier" : "s:e:s:14ComposableOTel15TelemetryClientV0aB7TestingE4test12metricReader6policyAC6client_AD14TestCollectorsV10collectorstAD014InMemoryMetricH0CSg_AA0C6PolicyVtFZ"
   },
   {
     "declaration" : "var composableOTel: TelemetryClient { get set }",
@@ -2107,7 +2100,7 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV"
   },
   {
-    "declaration" : "static func unsafeCustomSDK(tracer: any Tracer, metrics: MetricInstruments, logger: any Logger, policy: TelemetryPolicy) -> TelemetryClient",
+    "declaration" : "static func unsafeCustomSDK(tracer: Tracer, metrics: MetricInstruments, logger: Logger, policy: TelemetryPolicy) -> TelemetryClient",
     "kind" : "swift.type.method",
     "module" : "ComposableOTel",
     "path" : "TelemetryClient.unsafeCustomSDK(tracer:metrics:logger:policy:)",
@@ -2142,7 +2135,7 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV"
   },
   {
-    "declaration" : "func errorMetadata(for error: any Error) -> TelemetryErrorMetadata",
+    "declaration" : "func errorMetadata(for error: Error) -> TelemetryErrorMetadata",
     "kind" : "swift.method",
     "module" : "ComposableOTel",
     "path" : "TelemetryPolicy.errorMetadata(for:)",
@@ -2198,7 +2191,7 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV27sanitizedResourceAttributesySDySS04OpenC3Api14AttributeValueOGAHF"
   },
   {
-    "declaration" : "init(schema: TelemetrySchema = .denyAll, signals: TelemetrySignalConfiguration = .init(), classifyError: @escaping @Sendable (any Error) -> TelemetryErrorMetadata = { _ in .init() })",
+    "declaration" : "init(schema: TelemetrySchema = .denyAll, signals: TelemetrySignalConfiguration = .init(), classifyError: @escaping @Sendable (Error) -> TelemetryErrorMetadata = { _ in .init() })",
     "kind" : "swift.init",
     "module" : "ComposableOTel",
     "path" : "TelemetryPolicy.init(schema:signals:classifyError:)",
@@ -2562,7 +2555,7 @@
     "preciseIdentifier" : "s:14ComposableOTel17MetricInstrumentsC"
   },
   {
-    "declaration" : "static func unsafeCustomSDK(actionsDispatched: any LongCounter, effectsStarted: any LongCounter, effectsCompleted: any LongCounter, effectsCancelled: any LongCounter, effectsErrored: any LongCounter, dependenciesCalled: any LongCounter, dependenciesErrored: any LongCounter, navigationTransitions: any LongCounter, reducerDuration: any DoubleHistogram, effectDuration: any DoubleHistogram, dependencyDuration: any DoubleHistogram, activeEffects: any LongUpDownCounter) -> MetricInstruments",
+    "declaration" : "static func unsafeCustomSDK(actionsDispatched: LongCounter, effectsStarted: LongCounter, effectsCompleted: LongCounter, effectsCancelled: LongCounter, effectsErrored: LongCounter, dependenciesCalled: LongCounter, dependenciesErrored: LongCounter, navigationTransitions: LongCounter, reducerDuration: DoubleHistogram, effectDuration: DoubleHistogram, dependencyDuration: DoubleHistogram, activeEffects: LongUpDownCounter) -> MetricInstruments",
     "kind" : "swift.type.method",
     "module" : "ComposableOTel",
     "path" : "MetricInstruments.unsafeCustomSDK(actionsDispatched:effectsStarted:effectsCompleted:effectsCancelled:effectsErrored:dependenciesCalled:dependenciesErrored:navigationTransitions:reducerDuration:effectDuration:dependencyDuration:activeEffects:)",
@@ -2660,7 +2653,7 @@
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierV13stringLiteralACyxGSS_tcfc"
   },
   {
-    "declaration" : "static var other: `Self` { get }",
+    "declaration" : "static var other: Self { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.other",
@@ -2973,33 +2966,5 @@
     "module" : "ComposableOTel",
     "path" : "Reducer.instrumented(feature:action:stateChangeToken:)",
     "preciseIdentifier" : "s:22ComposableArchitecture7ReducerP0A4OTelE12instrumented7feature6action16stateChangeTokenAD012InstrumentedC0VyxGAD19TelemetryIdentifierVyAD07FeatureM4KindOG_AMyAD06ActionmO0OG0P0QzYbcAD05StateiJ0V0Q0QzYbcSgtF"
-  },
-  {
-    "declaration" : "extension DependencyValues",
-    "kind" : "swift.extension",
-    "module" : "ComposableOTel",
-    "path" : "DependencyValues",
-    "preciseIdentifier" : "s:e:s:12Dependencies16DependencyValuesV14ComposableOTelE010composableE0AD15TelemetryClientVvp"
-  },
-  {
-    "declaration" : "extension Effect",
-    "kind" : "swift.extension",
-    "module" : "ComposableOTel",
-    "path" : "Effect",
-    "preciseIdentifier" : "s:e:s:22ComposableArchitecture6EffectV0A4OTelE10traceStart6effectACyxGAD19TelemetryIdentifierVyAD0cI4KindOG_tF"
-  },
-  {
-    "declaration" : "extension Effect",
-    "kind" : "swift.extension",
-    "module" : "ComposableOTel",
-    "path" : "Effect",
-    "preciseIdentifier" : "s:e:s:22ComposableArchitecture6EffectV0A4OTelE9tracedRun6effect8priority9operationACyxGAD19TelemetryIdentifierVyAD0cK4KindOG_ScPSgyAA4SendVyxGYaYbKctFZ"
-  },
-  {
-    "declaration" : "extension Reducer",
-    "kind" : "swift.extension",
-    "module" : "ComposableOTel",
-    "path" : "Reducer",
-    "preciseIdentifier" : "s:e:s:22ComposableArchitecture7ReducerP0A4OTelE12instrumented7feature6action16stateChangeTokenAD012InstrumentedC0VyxGAD19TelemetryIdentifierVyAD07FeatureM4KindOG_AMyAD06ActionmO0OG0P0QzYbcAD05StateiJ0V0Q0QzYbcSgtF"
   }
 ]

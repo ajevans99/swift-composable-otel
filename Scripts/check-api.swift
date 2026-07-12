@@ -17,6 +17,27 @@ struct APISymbol: Codable, Comparable {
   }
 }
 
+func normalizedDeclaration(_ declaration: String, path: String) -> String {
+  var result = declaration.replacingOccurrences(of: "any ", with: "")
+  for qualification in [
+    "Self.",
+    "TelemetryBootstrap.",
+    "TelemetryDeliveryConfiguration.",
+    "TelemetryPersistenceConfiguration.",
+    "TelemetryRuntime.",
+    "TelemetryRuntimeDiagnosticEvent.",
+    "TelemetryRuntimeOperationResult.",
+    "TelemetrySchema.",
+    "TelemetrySignalOperationResult.",
+  ] {
+    result = result.replacingOccurrences(of: qualification, with: "")
+  }
+  if path.hasSuffix(".other"), result.hasPrefix("static var other:") {
+    return "static var other: Self { get }"
+  }
+  return result
+}
+
 func argument(after name: String) -> String? {
   guard let index = CommandLine.arguments.firstIndex(of: name) else { return nil }
   let valueIndex = CommandLine.arguments.index(after: index)
@@ -66,18 +87,23 @@ for file in graphFiles {
       let precise = identifier["precise"] as? String,
       let kindObject = symbol["kind"] as? [String: Any],
       let kind = kindObject["identifier"] as? String,
+      kind != "swift.extension",
       let pathComponents = symbol["pathComponents"] as? [String],
       let fragments = symbol["declarationFragments"] as? [[String: Any]]
     else {
       continue
     }
-    let declaration = fragments.compactMap { $0["spelling"] as? String }.joined()
+    let path = pathComponents.joined(separator: ".")
+    let declaration = normalizedDeclaration(
+      fragments.compactMap { $0["spelling"] as? String }.joined(),
+      path: path
+    )
     current.append(
       APISymbol(
         module: moduleName,
         preciseIdentifier: precise,
         kind: kind,
-        path: pathComponents.joined(separator: "."),
+        path: path,
         declaration: declaration
       )
     )

@@ -37,7 +37,6 @@ route parameters. Values absent from the schema aggregate to `other`.
 ```swift
 let telemetry = try TelemetryBootstrap.configure(
   serviceName: "example-app",
-  environment: .debug,
   policy: policy
 )
 

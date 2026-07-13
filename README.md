@@ -120,7 +120,6 @@ The explicit debug bootstrap writes privacy-filtered telemetry to stdout:
 let telemetry = try TelemetryBootstrap.configure(
   serviceName: "example-app",
   serviceVersion: "1.2.3",
-  environment: .debug,
   policy: policy
 )
 

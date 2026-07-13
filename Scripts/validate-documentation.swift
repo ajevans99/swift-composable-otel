@@ -164,6 +164,7 @@ let forbiddenDocumentation = [
   "configureTestTelemetry",
   "SpanAttributeRedactor",
   "ErrorDetailPolicy",
+  "environment: .debug",
   "stateDiffs",
   "tracedRun(name:",
   "traceStart(name:",

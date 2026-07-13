@@ -366,6 +366,28 @@ struct TelemetryContractCatalogTests {
     #expect(diagnostics.snapshot().metrics.droppedItems == 51)
   }
 
+  @Test("decoded captures reject mismatched severity and extra resource keys")
+  func decodedCapturesValidateActualWireData() {
+    #expect(decodedContractLogSeverity(.info) == .info)
+    #expect(decodedContractLogSeverity(.error) == .error)
+    #expect(decodedContractLogSeverity(.warn) == nil)
+
+    let expectedKeys: Set<String> = ["service.namespace"]
+    let exact: [String: AttributeValue] = [
+      "service.namespace": .string("sample-app"),
+      TelemetryContractCatalog.contractVersionKey: .int(7),
+    ]
+    #expect(
+      decodeContractResourceAttributes(exact, expectedFieldKeys: expectedKeys)?.version == 7
+    )
+
+    var withExtra = exact
+    withExtra["telemetry.sdk.name"] = .string("opentelemetry")
+    #expect(
+      decodeContractResourceAttributes(withExtra, expectedFieldKeys: expectedKeys) == nil
+    )
+  }
+
   @Test("emits exact typed resource, span, bodyless logs, and delta counter")
   func exactWireContracts() async throws {
     let fixture = try ContractFixture.make()

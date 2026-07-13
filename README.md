@@ -422,8 +422,8 @@ process globals, so unrelated SDK traffic is not rewritten or dropped by this pa
 | `TelemetryRuntime` | validated OTLP/HTTP over TLS | `0.1` | 60 seconds |
 
 The removed `.production(endpoint:headers:)` bootstrap placeholder never sent remotely and has no
-direct replacement. Migrate production composition to `TelemetryRuntime`; keep `.debug` only for
-explicit local stdout inspection.
+direct replacement. Migrate production composition to `TelemetryRuntime`; use
+`TelemetryBootstrap.configure` only for explicit local stdout inspection.
 
 ## Testing
 

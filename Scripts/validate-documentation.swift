@@ -165,6 +165,7 @@ let forbiddenDocumentation = [
   "SpanAttributeRedactor",
   "ErrorDetailPolicy",
   "environment: .debug",
+  "`.debug`",
   "stateDiffs",
   "tracedRun(name:",
   "traceStart(name:",

@@ -72,6 +72,43 @@ Schema construction rejects limits above 32 features, 128 actions, 64 effects, 6
 128 operations, 64 routes, 32 error types, 32 error categories, 64 error codes, 8 services, or 16
 service versions. Rejected values are never printed.
 
+## Typed exact-wire contracts
+
+Applications that need stable external wire fields can register an immutable
+`TelemetryContractCatalog` at bootstrap. Generic typed definitions cover custom spans, fixed
+EventName logs, monotonic delta counters, and exact resources. Each definition fixes its name, field
+keys, scalar types, finite enum/range values, optionality, conditional validation, unit/severity/body
+policy, and series limit. Recording accepts only the registered definition and its typed payload:
+
+```swift
+let catalog = try TelemetryContractCatalog(
+  contractVersion: .init(1),
+  spans: [.init(flowSpan)],
+  logs: [.init(flowCompletedLog)],
+  counters: [.init(flowCounter)],
+  resources: [.init(resourceDefinition)]
+)
+let policy = TelemetryPolicy(schema: schema, catalog: catalog)
+
+try await telemetry.withSpan(flowSpan, payload: payload) {
+  try telemetry.record(flowCompletedLog, payload: payload)
+  try telemetry.add(flowCounter, delta: .init(1), payload: payload)
+}
+```
+
+Every registered signal injects one integer `telemetry.contract.version`. Record-time names,
+attribute dictionaries, and raw SDK handles are not exposed. Counter dimensions must have finite
+declared cardinality.
+
+`TelemetryRuntime.Configuration` accepts a finite `TelemetryDeploymentEnvironment`
+(`development`, `test`, `staging`, or `production`) and an immutable schema-matched
+`TelemetryResourceValue`. Extra keys, wrong scalar types, and a resource from another catalog are
+rejected before providers are created.
+
+Registered bodyless logs preserve EventName, severity, `body == nil`, and typed fields. The supported
+OpenTelemetry Swift log model has no severity-text field, so exact empty `severity_text` remains an
+upstream limitation; this package does not add a raw OTLP bypass.
+
 ## Development quick start
 
 The explicit debug bootstrap writes privacy-filtered telemetry to stdout:
@@ -152,17 +189,33 @@ Default limits are finite and configurable:
 | Boundary | Default |
 | --- | --- |
 | Span/log queue | 2,048 items; 512-item batch; 5-second schedule; drop oldest |
-| Encoded request queue | 256 batches; drop oldest |
-| Request | 10-second timeout |
+| Encoded request queue | 256 batches; 64 KiB body ceiling; drop oldest |
+| Request | 10-second timeout; gateway profiles can lower it |
 | Retry | 4 total attempts; 1-to-30-second exponential backoff; 20% symmetric jitter |
 | Metrics | 60-second periodic collection |
 | Flush | 10 seconds; 5 seconds when backgrounding |
 | Persistence | Optional; 5 MiB and 24-hour maximum |
 
 Retryable outcomes are transport timeouts and transient connectivity failures plus HTTP 408, 425,
-429, 502, 503, and 504. Other HTTP responses and unclassified host errors are non-retryable.
+429, 502, 503, and 504. A host-parsed numeric `Retry-After` on ``TelemetryHTTPResponse`` is honored
+for retryable responses and clamped to the configured maximum backoff. Other HTTP responses,
+including 401 and 413, and unclassified host errors are non-retryable.
 `TelemetryRetryClassifyingError` lets a host transport or authenticator classify its own errors.
-Retries stop at the attempt budget, observe cancellation, and reacquire authorization every time.
+Retries stop at the attempt budget, observe cancellation, and reacquire authorization every time. A
+custom transport can invalidate its host credential after a 401 before returning the response, so a
+later independent request obtains fresh authorization.
+
+`maximumEncodedRequestBytes` defaults to 64 KiB. Sanitized signal arrays are officially encoded and
+recursively split in order before persistence/transport until every request fits. A single record
+that cannot fit is dropped and increments both `oversizedRequests` and `droppedItems`. For a gateway
+capped at 64 KiB, 50 signal items, and 5 seconds, the reviewed conservative profile uses 25-item
+trace/log batches, a 64 KiB encoded ceiling, and a 5-second request timeout. Metric arrays are split
+by `MetricData`; one metric containing too many points remains a single-record limit that the pilot
+must prove or route elsewhere.
+
+The package's official OTLP exporters do not enable compression, so the encoded ceiling bounds the
+decoded protobuf body. A custom transport that adds compression remains responsible for enforcing
+its compressed-body ceiling as well.
 
 `setExportCondition(_:)` accepts reachability or policy hints. `.unavailable` pauses new attempts;
 `.available` and `.constrained` permit them. Reachability never proves that DNS, TLS, authentication,
@@ -409,6 +462,24 @@ as bootstrap. They do not replace process globals.
 
 See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
 [RELEASING.md](RELEASING.md).
+
+## Release evidence
+
+The unreleased package quality layer includes:
+
+- 82 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
+  `TelemetryRuntime*` delivery paths;
+- a checked public API baseline and an explicit semantic-convention review lock;
+- release benchmarks for reducers, effects, dependencies, logs, metrics, sampled/unsampled spans,
+  state tokens, batching, memory, and queue pressure; and
+- current iOS simulator tests, generic iOS product builds, minimum/latest dependency endpoints, and
+  all-product DocC builds.
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
+[PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
+[consumer pilot evidence contract](PILOT.md). No 1.0 tag or release exists. The external pilot and
+repository protection evidence remain required no-go items.
 
 ## License
 

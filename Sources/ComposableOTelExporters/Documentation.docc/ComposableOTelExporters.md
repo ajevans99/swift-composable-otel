@@ -21,8 +21,9 @@ resources, sanitizes dimensions, and removes exemplars.
 dimension processors and duration histograms. It also creates instruments with stable descriptions
 and units.
 
-Read <doc:MobileOTLPRuntime> before enabling remote export. Mobile delivery remains best-effort:
-suspension and termination can interrupt every queue, retry, persistence, or flush strategy.
+Read <doc:MobileOTLPRuntime>, <doc:OperationalRunbook>, and <doc:ProductionReadiness> before enabling
+remote export. Mobile delivery remains best-effort: suspension and termination can interrupt every
+queue, retry, persistence, or flush strategy.
 
 Custom SDK integrations must install all three wrappers, package metric views, and a resource
 sanitized by the same policy. Otherwise they are outside the package trust boundary.
@@ -50,6 +51,8 @@ sanitized by the same policy. Otherwise they are outside the package trust bound
 ### Articles
 
 - <doc:MobileOTLPRuntime>
+- <doc:OperationalRunbook>
+- <doc:ProductionReadiness>
 
 ### Policy boundary
 

@@ -3,33 +3,41 @@ import ComposableOTelExporters
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
-/// In-memory collectors returned by ``ComposableOTel/TelemetryClient/test(metricReader:policy:)``.
+/// In-memory collectors returned by
+/// ``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:deploymentEnvironment:resource:policy:)``.
 public struct TestCollectors: @unchecked Sendable {
   public let spans: InMemorySpanCollector
   public let logs: InMemoryLogCollector
   public let metrics: InMemoryMetricReader?
+  public let contractMetrics: InMemoryMetricReader?
 
   private let tracerProvider: TracerProviderSdk
   private let meterProvider: MeterProviderSdk
+  private let contractMeterProvider: MeterProviderSdk?
 
   init(
     spans: InMemorySpanCollector,
     logs: InMemoryLogCollector,
     metrics: InMemoryMetricReader?,
+    contractMetrics: InMemoryMetricReader?,
     tracerProvider: TracerProviderSdk,
-    meterProvider: MeterProviderSdk
+    meterProvider: MeterProviderSdk,
+    contractMeterProvider: MeterProviderSdk?
   ) {
     self.spans = spans
     self.logs = logs
     self.metrics = metrics
+    self.contractMetrics = contractMetrics
     self.tracerProvider = tracerProvider
     self.meterProvider = meterProvider
+    self.contractMeterProvider = contractMeterProvider
   }
 
   /// Flushes pending spans and metrics before assertions.
   public func forceFlush() {
     tracerProvider.forceFlush()
     _ = meterProvider.forceFlush()
+    _ = contractMeterProvider?.forceFlush()
   }
 }
 
@@ -37,12 +45,17 @@ extension TelemetryClient {
   /// Creates an isolated test client with the same privacy boundary and metric views as bootstrap.
   public static func test(
     metricReader: InMemoryMetricReader? = nil,
+    contractMetricReader: InMemoryMetricReader? = nil,
+    deploymentEnvironment: TelemetryDeploymentEnvironment = .test,
+    resource: TelemetryResourceValue? = nil,
     policy: TelemetryPolicy = .init()
   ) -> (client: TelemetryClient, collectors: TestCollectors) {
-    let resource = Resource(
-      attributes: policy.sanitizedResourceAttributes([
-        "service.name": .string("test-suite")
-      ])
+    let resource = TelemetryBootstrap.makeResource(
+      serviceName: "test-suite",
+      serviceVersion: nil,
+      deploymentEnvironment: deploymentEnvironment,
+      resource: resource,
+      policy: policy
     )
 
     let spanCollector = InMemorySpanCollector()
@@ -57,7 +70,7 @@ extension TelemetryClient {
         spanLimits: SpanLimits()
           .settingAttributeCountLimit(16)
           .settingAttributeValueLengthLimit(
-            UInt(TelemetryIdentifier<FeatureIdentifierKind>.maximumLength)
+            UInt(TelemetryStringValue.maximumLength)
           )
           .settingEventCountLimit(4)
           .settingLinkCountLimit(0)
@@ -83,6 +96,33 @@ extension TelemetryClient {
       .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
       .build()
 
+    let resolvedContractReader: InMemoryMetricReader?
+    let contractMeterProvider: MeterProviderSdk?
+    let contractCounters: [TelemetryContractIdentity: any LongCounter]
+    if policy.catalog.counters.isEmpty {
+      resolvedContractReader = nil
+      contractMeterProvider = nil
+      contractCounters = [:]
+    } else {
+      let reader = contractMetricReader ?? InMemoryMetricReader(temporality: .delta)
+      let contractBuilder = MeterProviderSdk.builder()
+        .setResource(resource: resource)
+        .registerMetricReader(reader: reader)
+      ComposableOTelMetricConfiguration.registerViews(on: contractBuilder, policy: policy)
+      let provider = contractBuilder.build()
+      let contractMeter =
+        provider
+        .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+        .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+        .build()
+      resolvedContractReader = reader
+      contractMeterProvider = provider
+      contractCounters = ComposableOTelMetricConfiguration.makeContractInstruments(
+        meter: contractMeter,
+        catalog: policy.catalog
+      )
+    }
+
     let logCollector = InMemoryLogCollector()
     let logExporter = PrivacyPreservingLogRecordExporter(
       exporter: logCollector,
@@ -99,11 +139,13 @@ extension TelemetryClient {
       .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
 
-    let client = TelemetryClient.unsafeCustomSDK(
+    let client = TelemetryClient.packageSDK(
       tracer: tracer,
       metrics: ComposableOTelMetricConfiguration.makeInstruments(meter: meter),
       logger: logger,
-      policy: policy
+      policy: policy,
+      contractCounters: contractCounters,
+      contractProviderRetention: contractMeterProvider
     )
     return (
       client,
@@ -111,8 +153,10 @@ extension TelemetryClient {
         spans: spanCollector,
         logs: logCollector,
         metrics: metricReader,
+        contractMetrics: resolvedContractReader,
         tracerProvider: tracerProvider,
-        meterProvider: meterProvider
+        meterProvider: meterProvider,
+        contractMeterProvider: contractMeterProvider
       )
     )
   }

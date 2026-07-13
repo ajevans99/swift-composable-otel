@@ -113,7 +113,6 @@ extension TelemetryClient {
 
     let clock = ContinuousClock()
     let startTime = clock.now
-    let run: (any SpanBase)? = nil
 
     if policy.signals.tracesEnabled {
       let spanBuilder =
@@ -144,7 +143,7 @@ extension TelemetryClient {
       attributes: metricAttributes,
       startTime: startTime,
       clock: clock,
-      span: run
+      span: nil
     )
   }
 

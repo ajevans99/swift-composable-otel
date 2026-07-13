@@ -46,6 +46,22 @@ actor RuntimeDeliveryEngine {
     self.persistence = persistence
     queue = persistence?.load(now: dependencies.clock.now()) ?? []
 
+    let oversized = queue.filter {
+      !Self.accepts(
+        request: $0.request,
+        maximumEncodedRequestBytes: configuration.maximumEncodedRequestBytes
+      )
+    }
+    if !oversized.isEmpty {
+      let oversizedIDs = Set(oversized.map(\.id))
+      queue.removeAll { oversizedIDs.contains($0.id) }
+      for batch in oversized {
+        persistence?.remove(batch.id)
+        diagnostics.recordEncodedRequestTooLarge(signal: batch.signal)
+        diagnostics.recordDrop(signal: batch.signal)
+      }
+    }
+
     if queue.count > configuration.maximumPendingBatches {
       let overflow = queue.count - configuration.maximumPendingBatches
       let removed: [PendingOTLPBatch]
@@ -74,6 +90,16 @@ actor RuntimeDeliveryEngine {
   @discardableResult
   func enqueue(request: URLRequest, signal: TelemetryRuntimeSignal) -> Bool {
     guard !isShutdown else {
+      diagnostics.recordDrop(signal: signal)
+      return false
+    }
+    guard
+      Self.accepts(
+        request: request,
+        maximumEncodedRequestBytes: configuration.maximumEncodedRequestBytes
+      )
+    else {
+      diagnostics.recordEncodedRequestTooLarge(signal: signal)
       diagnostics.recordDrop(signal: signal)
       return false
     }
@@ -252,7 +278,7 @@ actor RuntimeDeliveryEngine {
         diagnostics.recordFailure(signal: batch.signal, retryable: false)
         diagnostics.recordDrop(signal: batch.signal)
         finish(batch)
-      case .retryable:
+      case .retryable(let retryAfter):
         diagnostics.recordFailure(signal: batch.signal, retryable: true)
         guard batch.attempt < configuration.retry.maximumAttempts else {
           diagnostics.recordDrop(signal: batch.signal)
@@ -260,7 +286,7 @@ actor RuntimeDeliveryEngine {
           continue
         }
         do {
-          try await clock.sleep(backoff(after: batch.attempt))
+          try await clock.sleep(retryDelay(after: batch.attempt, retryAfter: retryAfter))
         } catch {
           if !isShutdown {
             inFlight = batch
@@ -290,7 +316,7 @@ actor RuntimeDeliveryEngine {
         var request = try await authenticator.authorize(batch.request)
         request.timeoutInterval = configuration.requestTimeout.runtimeSeconds
         let response = try await transport.send(request)
-        race.resolve(Self.classify(statusCode: response.statusCode))
+        race.resolve(Self.classify(response: response))
       } catch {
         race.resolve(Self.classify(error: error))
       }
@@ -298,7 +324,7 @@ actor RuntimeDeliveryEngine {
     let timeout = Task { [clock, configuration] in
       do {
         try await clock.sleep(configuration.requestTimeout)
-        race.resolve(.retryable)
+        race.resolve(.retryable(retryAfter: nil))
       } catch {
       }
     }
@@ -322,21 +348,32 @@ actor RuntimeDeliveryEngine {
     return .runtimeSeconds(max(0, base * multiplier))
   }
 
-  private static func classify(statusCode: Int) -> AttemptOutcome {
-    if (200..<300).contains(statusCode) {
+  private func retryDelay(after attempt: Int, retryAfter: Duration?) -> Duration {
+    guard let retryAfter else {
+      return backoff(after: attempt)
+    }
+    let seconds = retryAfter.runtimeSeconds
+    guard seconds.isFinite, seconds >= 0 else {
+      return backoff(after: attempt)
+    }
+    return .runtimeSeconds(min(seconds, configuration.retry.maximumBackoff.runtimeSeconds))
+  }
+
+  private static func classify(response: TelemetryHTTPResponse) -> AttemptOutcome {
+    if (200..<300).contains(response.statusCode) {
       return .success
     }
-    if statusCode == 408 || statusCode == 425 || statusCode == 429
-      || statusCode == 502 || statusCode == 503 || statusCode == 504
+    if response.statusCode == 408 || response.statusCode == 425 || response.statusCode == 429
+      || response.statusCode == 502 || response.statusCode == 503 || response.statusCode == 504
     {
-      return .retryable
+      return .retryable(retryAfter: response.retryAfter)
     }
     return .nonRetryable
   }
 
   private static func classify(error: any Error) -> AttemptOutcome {
     if let error = error as? any TelemetryRetryClassifyingError {
-      return error.telemetryRetryable ? .retryable : .nonRetryable
+      return error.telemetryRetryable ? .retryable(retryAfter: nil) : .nonRetryable
     }
     guard let error = error as? URLError else {
       return .nonRetryable
@@ -351,16 +388,24 @@ actor RuntimeDeliveryEngine {
       .internationalRoamingOff,
       .callIsActive,
       .dataNotAllowed:
-      return .retryable
+      return .retryable(retryAfter: nil)
     default:
       return .nonRetryable
     }
+  }
+
+  private static func accepts(
+    request: URLRequest,
+    maximumEncodedRequestBytes: Int
+  ) -> Bool {
+    request.httpBodyStream == nil
+      && (request.httpBody?.count ?? 0) <= maximumEncodedRequestBytes
   }
 }
 
 private enum AttemptOutcome: Sendable {
   case success
-  case retryable
+  case retryable(retryAfter: Duration?)
   case nonRetryable
 }
 

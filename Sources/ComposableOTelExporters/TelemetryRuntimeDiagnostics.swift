@@ -15,6 +15,7 @@ public struct TelemetryRuntimeDiagnosticEvent: Sendable {
     case flushTimedOut
     case discardCompleted
     case discardFailed
+    case encodedRequestTooLarge
   }
 
   public let kind: Kind
@@ -36,6 +37,7 @@ public struct TelemetrySignalDiagnostics: Equatable, Sendable {
   public let successes: Int
   public let retryableFailures: Int
   public let nonRetryableFailures: Int
+  public let oversizedRequests: Int
   public let lastSuccess: Date?
 }
 
@@ -110,6 +112,7 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
     var successes = 0
     var retryableFailures = 0
     var nonRetryableFailures = 0
+    var oversizedRequests = 0
     var lastSuccess: Date?
   }
 
@@ -178,6 +181,13 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
     )
   }
 
+  func recordEncodedRequestTooLarge(signal: TelemetryRuntimeSignal) {
+    lock.withLock {
+      signals[signal]?.oversizedRequests += 1
+    }
+    emitter.emit(.init(kind: .encodedRequestTooLarge, signal: signal))
+  }
+
   func setPersistence(items: Int, bytes: Int) {
     lock.withLock {
       persistedItems = max(0, items)
@@ -241,6 +251,7 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
       successes: value.successes,
       retryableFailures: value.retryableFailures,
       nonRetryableFailures: value.nonRetryableFailures,
+      oversizedRequests: value.oversizedRequests,
       lastSuccess: value.lastSuccess
     )
   }

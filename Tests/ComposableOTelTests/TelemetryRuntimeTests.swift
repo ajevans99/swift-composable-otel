@@ -1,4 +1,6 @@
+import Dependencies
 import Foundation
+import OpenTelemetryApi
 import OpenTelemetrySdk
 import Testing
 
@@ -57,12 +59,29 @@ struct TelemetryRuntimeTests {
       }
 
       configuration = runtimeConfiguration()
+      configuration.delivery.maximumEncodedRequestBytes = 0
+      #expect(throws: TelemetryRuntimeConfigurationError.invalidDeliveryLimits) {
+        _ = try makeRuntime(configuration: configuration)
+      }
+
+      configuration = runtimeConfiguration()
       configuration.persistence = .init(
         directory: URL(string: "https://gateway.example.test/spool")!
       )
       #expect(throws: TelemetryRuntimeConfigurationError.invalidPersistenceLimits) {
         _ = try makeRuntime(configuration: configuration)
       }
+    }
+
+    @Test("parses only bounded numeric Retry-After metadata")
+    func numericRetryAfter() {
+      #expect(TelemetryHTTPTransport.numericRetryAfter("60") == .seconds(60))
+      #expect(TelemetryHTTPTransport.numericRetryAfter("-1") == nil)
+      #expect(TelemetryHTTPTransport.numericRetryAfter("not-a-number") == nil)
+      #expect(
+        TelemetryHTTPTransport.numericRetryAfter("10000000000000000")
+          == .seconds(Int32.max)
+      )
     }
   }
 
@@ -113,7 +132,7 @@ struct TelemetryRuntimeTests {
         export: { values, _ in
           if values == [1, 2] {
             firstExportStarted.signal()
-            _ = releaseFirstExport.wait(timeout: .now() + 2)
+            _ = releaseFirstExport.wait(timeout: .now() + 30)
           }
           capture.append(values)
           return true
@@ -123,7 +142,7 @@ struct TelemetryRuntimeTests {
 
       queue.offer(1)
       queue.offer(2)
-      #expect(await wait(for: firstExportStarted, timeout: 1) == .success)
+      #expect(await wait(for: firstExportStarted, timeout: 10) == .success)
       queue.offer(3)
       queue.offer(4)
       queue.offer(5)
@@ -131,6 +150,129 @@ struct TelemetryRuntimeTests {
       await queue.forceFlush()
 
       #expect(capture.values == [[1, 2], [4, 5]])
+      await queue.shutdown()
+    }
+
+    @Test("dropNewest preserves queued items and records the rejected item")
+    func dropNewestOverflow() async throws {
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let capture = BatchCapture<Int>()
+      let firstExportStarted = DispatchSemaphore(value: 0)
+      let releaseFirstExport = DispatchSemaphore(value: 0)
+      let queue = RuntimeBatchQueue<Int>(
+        configuration: .init(
+          maximumQueueSize: 2,
+          maximumBatchSize: 2,
+          scheduledDelay: .seconds(60),
+          overflowPolicy: .dropNewest
+        ),
+        signal: .traces,
+        diagnostics: diagnostics,
+        clock: .live,
+        export: { values, _ in
+          if values == [1, 2] {
+            firstExportStarted.signal()
+            _ = releaseFirstExport.wait(timeout: .now() + 30)
+          }
+          capture.append(values)
+          return true
+        },
+        shutdownExporter: { _ in }
+      )
+
+      queue.offer(1)
+      queue.offer(2)
+      #expect(await wait(for: firstExportStarted, timeout: 10) == .success)
+      queue.offer(3)
+      queue.offer(4)
+      queue.offer(5)
+      releaseFirstExport.signal()
+      await queue.forceFlush()
+
+      #expect(capture.values == [[1, 2], [3, 4]])
+      #expect(diagnostics.snapshot().traces.droppedItems == 1)
+      await queue.shutdown()
+    }
+
+    @Test("forceFlush drains every batch and reports exporter failure drops")
+    func forceFlushAndExporterFailure() async {
+      let successfulCapture = BatchCapture<Int>()
+      let successfulQueue = RuntimeBatchQueue<Int>(
+        configuration: .init(
+          maximumQueueSize: 8,
+          maximumBatchSize: 2,
+          scheduledDelay: .seconds(60)
+        ),
+        signal: .metrics,
+        diagnostics: RuntimeDiagnosticsState(handler: nil),
+        clock: .live,
+        export: { values, _ in
+          successfulCapture.append(values)
+          return true
+        },
+        shutdownExporter: { _ in }
+      )
+      for value in 1...5 {
+        successfulQueue.offer(value)
+      }
+      await successfulQueue.forceFlush()
+      #expect(successfulCapture.values == [[1, 2], [3, 4], [5]])
+      await successfulQueue.shutdown()
+
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let failingQueue = RuntimeBatchQueue<Int>(
+        configuration: .init(maximumQueueSize: 1, maximumBatchSize: 1),
+        signal: .logs,
+        diagnostics: diagnostics,
+        clock: .live,
+        export: { _, _ in false },
+        shutdownExporter: { _ in }
+      )
+      failingQueue.offer(1)
+      await failingQueue.forceFlush()
+      #expect(diagnostics.snapshot().logs.droppedItems == 1)
+      await failingQueue.shutdown()
+    }
+
+    @Test("concurrent producers preserve bounded accounting without duplication")
+    func concurrentOfferStress() async {
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let capture = BatchCapture<Int>()
+      let queue = RuntimeBatchQueue<Int>(
+        configuration: .init(
+          maximumQueueSize: 64,
+          maximumBatchSize: 16,
+          scheduledDelay: .seconds(60),
+          overflowPolicy: .dropOldest
+        ),
+        signal: .traces,
+        diagnostics: diagnostics,
+        clock: .live,
+        export: { values, _ in
+          capture.append(values)
+          return true
+        },
+        shutdownExporter: { _ in }
+      )
+
+      await withTaskGroup(of: Void.self) { group in
+        for producer in 0..<8 {
+          group.addTask {
+            for offset in 0..<100 {
+              queue.offer(producer * 100 + offset)
+            }
+          }
+        }
+      }
+      async let firstFlush: Void = queue.forceFlush()
+      async let secondFlush: Void = queue.forceFlush()
+      _ = await (firstFlush, secondFlush)
+
+      let exported = capture.values.flatMap { $0 }
+      let dropped = diagnostics.snapshot().traces.droppedItems
+      #expect(exported.count + dropped == 800)
+      #expect(Set(exported).count == exported.count)
+      #expect(queue.pendingCount == 0)
       await queue.shutdown()
     }
   }
@@ -172,6 +314,376 @@ struct TelemetryRuntimeTests {
       #expect(await auth.headers == ["Bearer token-1", "Bearer token-2"])
     }
 
+    @Test("retry exhaustion honors the capped backoff and records every failure")
+    func retryExhaustionAndBackoffCap() async throws {
+      let clock = TestRuntimeClock()
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let transport = ScriptedTransport([.status(503), .status(503), .status(503)])
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        delivery: .init(
+          requestTimeout: .seconds(20),
+          retry: .init(
+            maximumAttempts: 3,
+            initialBackoff: .seconds(2),
+            maximumBackoff: .seconds(3),
+            jitterRatio: 0
+          )
+        ),
+        diagnostics: diagnostics
+      )
+
+      await engine.start()
+      #expect(await engine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually { clock.pendingDurations.contains(.seconds(2)) }
+      clock.advance(by: .seconds(2))
+      try await eventually { clock.pendingDurations.contains(.seconds(3)) }
+      clock.advance(by: .seconds(3))
+      try await eventually { await engine.pendingBySignal()[.traces] == 0 }
+
+      let snapshot = diagnostics.snapshot().traces
+      #expect(await transport.requestCount == 3)
+      #expect(snapshot.retryableFailures == 3)
+      #expect(snapshot.droppedItems == 1)
+    }
+
+    @Test("transport and authenticator errors follow explicit retry classification")
+    func errorClassification() async throws {
+      let retryClock = TestRuntimeClock()
+      let retryDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let retryTransport = ScriptedTransport([
+        .urlError(.networkConnectionLost), .status(202),
+      ])
+      let retryEngine = makeDeliveryEngine(
+        clock: retryClock,
+        transport: retryTransport.transport,
+        delivery: .init(
+          requestTimeout: .seconds(20),
+          retry: .init(
+            maximumAttempts: 2,
+            initialBackoff: .seconds(1),
+            maximumBackoff: .seconds(1),
+            jitterRatio: 0
+          )
+        ),
+        diagnostics: retryDiagnostics
+      )
+      await retryEngine.start()
+      #expect(await retryEngine.enqueue(request: testRequest(), signal: .logs))
+      try await eventually("retryable transport entered backoff") {
+        retryClock.pendingDurations.contains(.seconds(1))
+      }
+      retryClock.advance(by: .seconds(1))
+      try await eventually("retryable transport eventually succeeded") {
+        await retryEngine.pendingBySignal()[.logs] == 0
+      }
+      #expect(retryDiagnostics.snapshot().logs.retryableFailures == 1)
+      #expect(retryDiagnostics.snapshot().logs.successes == 1)
+
+      let failureClock = TestRuntimeClock()
+      let failureDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let failureTransport = ScriptedTransport([.classifiedError(retryable: false)])
+      let failureEngine = makeDeliveryEngine(
+        clock: failureClock,
+        transport: failureTransport.transport,
+        delivery: .init(retry: .init(maximumAttempts: 3)),
+        diagnostics: failureDiagnostics
+      )
+      await failureEngine.start()
+      #expect(await failureEngine.enqueue(request: testRequest(), signal: .metrics))
+      try await eventually("custom non-retryable failure was classified") {
+        failureDiagnostics.snapshot().metrics.nonRetryableFailures == 1
+      }
+      #expect(await failureTransport.requestCount == 1)
+      #expect(failureDiagnostics.snapshot().metrics.nonRetryableFailures == 1)
+      #expect(await failureEngine.pendingBySignal()[.metrics] == 0)
+
+      let authClock = TestRuntimeClock()
+      let authDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let authEngine = makeDeliveryEngine(
+        clock: authClock,
+        transport: ScriptedTransport([.status(202)]).transport,
+        authenticator: .init { _ in throw RuntimeTestError.unclassified },
+        delivery: .init(retry: .init(maximumAttempts: 3)),
+        diagnostics: authDiagnostics
+      )
+      await authEngine.start()
+      #expect(await authEngine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually("authenticator failure was classified") {
+        authDiagnostics.snapshot().traces.nonRetryableFailures == 1
+      }
+      #expect(authDiagnostics.snapshot().traces.nonRetryableFailures == 1)
+      #expect(authDiagnostics.snapshot().traces.droppedItems == 1)
+      #expect(await authEngine.pendingBySignal()[.traces] == 0)
+    }
+
+    @Test("delivery overflow policies and shutdown keep exact drop accounting")
+    func deliveryOverflowAndShutdown() async {
+      let clock = TestRuntimeClock()
+      let transport = ScriptedTransport([])
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        delivery: .init(maximumPendingBatches: 2, overflowPolicy: .dropNewest),
+        diagnostics: diagnostics
+      )
+      await engine.setCondition(.unavailable)
+      #expect(await engine.enqueue(request: testRequest(), signal: .traces))
+      #expect(await engine.enqueue(request: testRequest(), signal: .logs))
+      #expect(await engine.enqueue(request: testRequest(), signal: .metrics) == false)
+      await engine.shutdown(retainPersisted: false)
+
+      #expect(diagnostics.snapshot().metrics.droppedItems == 1)
+      #expect(diagnostics.snapshot().traces.droppedItems == 1)
+      #expect(diagnostics.snapshot().logs.droppedItems == 1)
+      #expect(diagnostics.snapshot().traces.queueDepth == 0)
+      #expect(diagnostics.snapshot().logs.queueDepth == 0)
+    }
+
+    @Test("encoded request cap drops before persistence or transport")
+    func encodedRequestCap() async throws {
+      let clock = TestRuntimeClock()
+      let transport = ScriptedTransport([.status(202)])
+      let fileSystem = TestRuntimeFileSystem()
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let persistence = try RuntimePersistenceStore(
+        configuration: .init(
+          directory: URL(fileURLWithPath: "/runtime-spool"),
+          maximumBytes: 64 * 1_024
+        ),
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: diagnostics
+      )
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        delivery: .init(
+          maximumPendingBatches: 2,
+          maximumEncodedRequestBytes: 8
+        ),
+        persistence: persistence,
+        diagnostics: diagnostics
+      )
+      await engine.setCondition(.unavailable)
+
+      #expect(
+        await engine.enqueue(
+          request: testRequest(body: Data(repeating: 1, count: 8)),
+          signal: .traces
+        )
+      )
+      #expect(
+        await engine.enqueue(
+          request: testRequest(body: Data(repeating: 2, count: 9)),
+          signal: .traces
+        ) == false
+      )
+
+      let snapshot = diagnostics.snapshot()
+      #expect(snapshot.persistedItems == 1)
+      #expect(snapshot.traces.oversizedRequests == 1)
+      #expect(snapshot.traces.droppedItems == 1)
+      #expect(fileSystem.fileCount == 1)
+      #expect(await transport.requestCount == 0)
+      await engine.shutdown(retainPersisted: true)
+    }
+
+    @Test("splitter attempts the second partition after a first-part encoding failure")
+    func splitEncodingFailureIsolation() async throws {
+      let clock = TestRuntimeClock()
+      let transport = ScriptedTransport([.status(202)])
+      let engine = makeDeliveryEngine(clock: clock, transport: transport.transport)
+      let deliveryClient = RuntimeOTLPHTTPClient(signal: .traces, delivery: engine)
+      let dispatcher = RuntimeEncodedRequestDispatcher<Int>(
+        maximumEncodedRequestBytes: 1,
+        deliveryClient: deliveryClient
+      )
+      var encoded: [[Int]] = []
+
+      let succeeded = dispatcher.dispatch([1, 2]) { values in
+        encoded.append(values)
+        if values == [1] {
+          return nil
+        }
+        return testRequest(body: Data(repeating: 1, count: values.count))
+      }
+
+      #expect(succeeded == false)
+      #expect(encoded == [[1, 2], [1], [2]])
+      try await eventually { await transport.requestCount == 1 }
+    }
+
+    @Test("429 Retry-After is honored and clamped to maximum backoff")
+    func retryAfterClamping() async throws {
+      let clock = TestRuntimeClock()
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let transport = ScriptedTransport([
+        .response(.init(statusCode: 429, retryAfter: .seconds(120))),
+        .status(202),
+      ])
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        delivery: .init(
+          requestTimeout: .seconds(20),
+          retry: .init(
+            maximumAttempts: 2,
+            initialBackoff: .seconds(1),
+            maximumBackoff: .seconds(30),
+            jitterRatio: 0
+          )
+        ),
+        diagnostics: diagnostics
+      )
+
+      await engine.start()
+      #expect(await engine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually("Retry-After entered bounded backoff") {
+        clock.pendingDurations.contains(.seconds(30))
+      }
+      clock.advance(by: .seconds(30))
+      try await eventually { await engine.pendingBySignal()[.traces] == 0 }
+
+      #expect(await transport.requestCount == 2)
+      #expect(diagnostics.snapshot().traces.retryableFailures == 1)
+      #expect(diagnostics.snapshot().traces.successes == 1)
+    }
+
+    @Test("401 and 413 are non-retryable and later requests can refresh auth")
+    func gatewayTerminalResponses() async throws {
+      let authClock = TestRuntimeClock()
+      let auth = AuthRecorder()
+      let invalidatingTransport = AuthInvalidatingTransport()
+      let authDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let authEngine = makeDeliveryEngine(
+        clock: authClock,
+        transport: invalidatingTransport.transport,
+        authenticator: .init { request in
+          await auth.authorize(request)
+        },
+        delivery: .init(retry: .init(maximumAttempts: 3)),
+        diagnostics: authDiagnostics
+      )
+      await authEngine.start()
+
+      #expect(await authEngine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually("401 was classified without retry") {
+        authDiagnostics.snapshot().traces.nonRetryableFailures == 1
+      }
+      #expect(await invalidatingTransport.requestCount == 1)
+      #expect(await invalidatingTransport.invalidationCount == 1)
+      #expect(await auth.requestCount == 1)
+
+      #expect(await authEngine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually("later request succeeded with refreshed auth") {
+        authDiagnostics.snapshot().traces.successes == 1
+      }
+      #expect(await invalidatingTransport.requestCount == 2)
+      #expect(await auth.requestCount == 2)
+
+      let rejectionClock = TestRuntimeClock()
+      let rejectionTransport = ScriptedTransport([.status(413)])
+      let rejectionDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let rejectionEngine = makeDeliveryEngine(
+        clock: rejectionClock,
+        transport: rejectionTransport.transport,
+        delivery: .init(retry: .init(maximumAttempts: 3)),
+        diagnostics: rejectionDiagnostics
+      )
+      await rejectionEngine.start()
+      #expect(await rejectionEngine.enqueue(request: testRequest(), signal: .logs))
+      try await eventually("413 was classified without retry") {
+        rejectionDiagnostics.snapshot().logs.nonRetryableFailures == 1
+      }
+      #expect(await rejectionTransport.requestCount == 1)
+      #expect(rejectionDiagnostics.snapshot().logs.droppedItems == 1)
+    }
+
+    @Test("worst-case bounded span batch fits conservative gateway limits")
+    func worstCaseEncodedBatch() async throws {
+      let maximumIdentifier = String(repeating: "a", count: 48)
+      let schema = try TelemetrySchema(
+        features: [FeatureID(validating: maximumIdentifier)!],
+        actions: [ActionID(validating: maximumIdentifier)!],
+        effects: [EffectID(validating: maximumIdentifier)!],
+        dependencies: [DependencyID(validating: maximumIdentifier)!],
+        operations: [OperationID(validating: maximumIdentifier)!],
+        routes: [RouteID(validating: maximumIdentifier)!],
+        errorTypes: [ErrorTypeID(validating: maximumIdentifier)!],
+        errorCategories: [ErrorCategoryID(validating: maximumIdentifier)!],
+        errorCodes: [ErrorCodeID(validating: maximumIdentifier)!]
+      )
+      let signals = TelemetrySignalConfiguration(
+        tracesEnabled: true,
+        metricsEnabled: false,
+        logsEnabled: false
+      )
+      var configuration = runtimeConfiguration(signals: signals)
+      configuration.policy = TelemetryPolicy(schema: schema, signals: signals)
+      configuration.traces = .init(
+        maximumQueueSize: 25,
+        maximumBatchSize: 25,
+        scheduledDelay: .seconds(60)
+      )
+      configuration.delivery.maximumEncodedRequestBytes = 64 * 1_024
+      configuration.delivery.requestTimeout = .seconds(5)
+      let transport = ScriptedTransport([.status(202)])
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport
+      )
+      let attributes: [String: AttributeValue] = [
+        TCAAttributes.featureName: .string(maximumIdentifier),
+        TCAAttributes.actionName: .string(maximumIdentifier),
+        TCAAttributes.effectName: .string(maximumIdentifier),
+        TCAAttributes.dependencyName: .string(maximumIdentifier),
+        TCAAttributes.operationName: .string(maximumIdentifier),
+        TCAAttributes.navigationRoute: .string(maximumIdentifier),
+        TCAAttributes.errorType: .string(maximumIdentifier),
+        TCAAttributes.errorCategory: .string(maximumIdentifier),
+        TCAAttributes.errorCode: .string(maximumIdentifier),
+        TCAAttributes.stateChanged: .bool(true),
+        TCAAttributes.effectCancelled: .bool(true),
+        TCAAttributes.effectLongLived: .bool(true),
+        TCAAttributes.effectMarker: .bool(true),
+        TCAAttributes.dependencyError: .bool(true),
+        TCAAttributes.errorHandled: .bool(true),
+        TCAAttributes.errorRetryable: .bool(true),
+      ]
+      let eventAttributes: [String: AttributeValue] = [
+        TCAAttributes.errorType: .string(maximumIdentifier),
+        TCAAttributes.errorCategory: .string(maximumIdentifier),
+        TCAAttributes.errorCode: .string(maximumIdentifier),
+        TCAAttributes.errorHandled: .bool(true),
+        TCAAttributes.errorRetryable: .bool(true),
+      ]
+
+      for _ in 0..<25 {
+        let span = runtime.client.tracer
+          .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
+          .setAttributes(attributes)
+          .startSpan()
+        for _ in 0..<4 {
+          span.addEvent(
+            name: ComposableOTelSemantics.Events.exception,
+            attributes: eventAttributes
+          )
+        }
+        span.status = .error(description: "Operation failed")
+        span.end()
+      }
+      let result = await runtime.forceFlush(timeout: .seconds(5))
+
+      let sizes = await transport.requestBodySizes
+      #expect(result.traces.status == .success)
+      #expect(sizes.count == 1)
+      #expect(try #require(sizes.first) <= 64 * 1_024)
+      #expect(runtime.diagnostics.traces.oversizedRequests == 0)
+      _ = await runtime.shutdown(timeout: .seconds(1))
+    }
+
     @Test("times out a cancelled transport without exceeding its retry budget")
     func requestTimeout() async throws {
       let clock = TestRuntimeClock()
@@ -187,7 +699,10 @@ struct TelemetryRuntimeTests {
 
       await engine.start()
       #expect(await engine.enqueue(request: testRequest(), signal: .metrics))
-      try await eventually { await transport.requestCount == 1 }
+      try await eventually {
+        await transport.requestCount == 1
+          && clock.pendingDurations.contains(.seconds(4))
+      }
       clock.advance(by: .seconds(4))
       try await eventually { await engine.pendingBySignal()[.metrics] == 0 }
     }
@@ -196,7 +711,12 @@ struct TelemetryRuntimeTests {
     func backgroundDeadline() async throws {
       let clock = TestRuntimeClock()
       let transport = ScriptedTransport([.status(202)])
-      let engine = makeDeliveryEngine(clock: clock, transport: transport.transport)
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        diagnostics: diagnostics
+      )
       await engine.setCondition(.unavailable)
       #expect(await engine.enqueue(request: testRequest(), signal: .logs))
 
@@ -207,6 +727,60 @@ struct TelemetryRuntimeTests {
       clock.advance(by: .seconds(5))
       #expect(await flush.value == false)
       #expect(await transport.requestCount == 0)
+      #expect(diagnostics.snapshot().timedOutFlushes == 1)
+    }
+
+    @Test("successful flush records completion time and disabled signal results")
+    func successfulFlushDiagnosticsAndDisabledSignals() async throws {
+      let clock = TestRuntimeClock()
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let transport = ScriptedTransport([.status(202)])
+      let engine = makeDeliveryEngine(
+        clock: clock,
+        transport: transport.transport,
+        diagnostics: diagnostics
+      )
+      await engine.start()
+      #expect(await engine.enqueue(request: testRequest(), signal: .traces))
+      try await eventually { await engine.pendingBySignal()[.traces] == 0 }
+      #expect(await engine.flush(timeout: .seconds(1)))
+      #expect(diagnostics.snapshot().completedFlushes == 1)
+      #expect(diagnostics.snapshot().traces.lastSuccess == clock.currentDate)
+
+      let runtime = try makeRuntime(
+        configuration: runtimeConfiguration(
+          signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: false)
+        )
+      )
+      let result = await runtime.forceFlush(timeout: .seconds(1))
+      #expect(result.traces.status == .disabled)
+      #expect(result.metrics.status == .disabled)
+      #expect(result.logs.status == .disabled)
+      _ = await runtime.shutdown()
+    }
+
+    @Test("one failed signal does not change another signal's successful result")
+    func crossSignalFailureIsolation() async throws {
+      let transport = TelemetryHTTPTransport { request in
+        let status = request.url?.path.hasSuffix("/v1/traces") == true ? 400 : 202
+        return TelemetryHTTPResponse(statusCode: status)
+      }
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: true)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.logs = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.delivery.retry.maximumAttempts = 1
+      let runtime = try makeRuntime(configuration: configuration, transport: transport)
+
+      runtime.client.recordNavigation(.push, route: "settings")
+      let result = await runtime.forceFlush(timeout: .seconds(2))
+
+      #expect(result.traces.status == .failed)
+      #expect(result.logs.status == .success)
+      #expect(runtime.diagnostics.traces.nonRetryableFailures == 1)
+      #expect(runtime.diagnostics.logs.successes == 1)
+      _ = await runtime.shutdown()
     }
 
     @Test("isolates non-retryable exporter failure from feature execution")
@@ -256,6 +830,7 @@ struct TelemetryRuntimeTests {
       var request = testRequest(body: Data("safe-body".utf8))
       request.setValue("Bearer must-not-persist", forHTTPHeaderField: "Authorization")
       #expect(await firstEngine.enqueue(request: request, signal: .traces))
+      #expect(fileSystem.fileContents.none { $0.containsData(Data("Authorization".utf8)) })
       #expect(fileSystem.fileContents.none { $0.containsData(Data("must-not-persist".utf8)) })
       await firstEngine.shutdown(retainPersisted: true)
 
@@ -327,6 +902,101 @@ struct TelemetryRuntimeTests {
       #expect(store.save(oversized).saved == false)
     }
 
+    @Test("rejects unsupported records, write failures, and unprotected spool files")
+    func persistenceFailureModes() throws {
+      let fileSystem = TestRuntimeFileSystem()
+      let directory = URL(fileURLWithPath: "/runtime-spool")
+      let unsupported: [String: Any] = [
+        "version": 0,
+        "id": UUID().uuidString,
+        "signal": "traces",
+        "createdAt": 1_000_000,
+        "attempt": 0,
+        "url": "https://gateway.example.test/v1/traces",
+        "method": "POST",
+        "headers": ["Content-Type": "application/x-protobuf"],
+        "body": Data("body".utf8).base64EncodedString(),
+      ]
+      fileSystem.insert(
+        try JSONSerialization.data(withJSONObject: unsupported),
+        at: directory.appendingPathComponent("unsupported.json")
+      )
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let configuration = TelemetryPersistenceConfiguration(
+        directory: directory,
+        maximumBytes: 64 * 1_024,
+        fileProtection: .complete
+      )
+      let store = try RuntimePersistenceStore(
+        configuration: configuration,
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: diagnostics
+      )
+
+      #expect(store.load(now: Date(timeIntervalSince1970: 1_000)).isEmpty)
+      #expect(diagnostics.snapshot().recoveredCorruptFiles == 1)
+
+      let batch = PendingOTLPBatch(
+        id: UUID(),
+        signal: .logs,
+        createdAt: Date(timeIntervalSince1970: 1_000),
+        attempt: 0,
+        request: testRequest()
+      )
+      fileSystem.failWrites = true
+      #expect(store.save(batch).saved == false)
+      fileSystem.failWrites = false
+      #expect(store.save(batch).saved)
+      #expect(fileSystem.protectedURLs.contains { $0.pathExtension == "json" })
+      #expect(diagnostics.snapshot().persistedBytes == fileSystem.fileContents.first?.count)
+    }
+
+    @Test("load evicts the oldest valid records beyond the byte budget")
+    func loadEvictsOldest() throws {
+      let fileSystem = TestRuntimeFileSystem()
+      let directory = URL(fileURLWithPath: "/runtime-spool")
+      let initialDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let initial = try RuntimePersistenceStore(
+        configuration: .init(
+          directory: directory,
+          maximumBytes: 64 * 1_024
+        ),
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: initialDiagnostics
+      )
+      let first = PendingOTLPBatch(
+        id: UUID(),
+        signal: .traces,
+        createdAt: Date(timeIntervalSince1970: 1),
+        attempt: 0,
+        request: testRequest(body: Data(repeating: 1, count: 512))
+      )
+      let second = PendingOTLPBatch(
+        id: UUID(),
+        signal: .logs,
+        createdAt: Date(timeIntervalSince1970: 2),
+        attempt: 0,
+        request: testRequest(body: Data(repeating: 2, count: 512))
+      )
+      #expect(initial.save(first).saved)
+      #expect(initial.save(second).saved)
+      let totalBytes = initialDiagnostics.snapshot().persistedBytes
+
+      let diagnostics = RuntimeDiagnosticsState(handler: nil)
+      let bounded = try RuntimePersistenceStore(
+        configuration: .init(
+          directory: directory,
+          maximumBytes: totalBytes - 1
+        ),
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: diagnostics
+      )
+      let loaded = bounded.load(now: Date(timeIntervalSince1970: 3))
+      #expect(loaded.map(\.id) == [second.id])
+      #expect(diagnostics.snapshot().traces.droppedItems == 1)
+      #expect(diagnostics.snapshot().persistedItems == 1)
+    }
+
     @Test("sanitizes raw spans before the persistence boundary")
     func privacyBeforeStorage() async throws {
       let fileSystem = TestRuntimeFileSystem()
@@ -359,6 +1029,112 @@ struct TelemetryRuntimeTests {
       #expect(!decodedBodies.isEmpty)
       #expect(decodedBodies.none { $0.containsData(Data(runtimeSentinelSecret.utf8)) })
       _ = await runtime.shutdown(timeout: .milliseconds(50))
+    }
+
+    @Test("splits trace, log, and metric arrays before persistence and preserves relaunch order")
+    func byteAwareSplitAndRelaunch() async throws {
+      let fileSystem = TestRuntimeFileSystem()
+      let persistence = TelemetryPersistenceConfiguration(
+        directory: URL(fileURLWithPath: "/runtime-spool"),
+        maximumBytes: 512 * 1_024
+      )
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: true, logsEnabled: true)
+      )
+      configuration.traces = .init(
+        maximumQueueSize: 40,
+        maximumBatchSize: 40,
+        scheduledDelay: .seconds(60)
+      )
+      configuration.logs = .init(
+        maximumQueueSize: 40,
+        maximumBatchSize: 40,
+        scheduledDelay: .seconds(60)
+      )
+      configuration.delivery.maximumEncodedRequestBytes = 500
+      configuration.persistence = persistence
+      let dependencies = TelemetryRuntimeDependencies(
+        clock: .live,
+        fileSystem: fileSystem.fileSystem,
+        makeID: UUID.init
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: ScriptedTransport([]).transport,
+        dependencies: dependencies
+      )
+      await runtime.setExportCondition(.unavailable)
+
+      for _ in 0..<40 {
+        runtime.client.recordNavigation(.push, route: "settings")
+      }
+      try await runtime.client.withEffectTrace(
+        effect: "success",
+        longLived: false,
+        parentContext: nil
+      ) {}
+      _ = await withDependencies {
+        $0.composableOTel = runtime.client
+      } operation: {
+        await tracedCall(dependency: "cache", operation: "load") { 1 }
+      }
+      _ = await runtime.forceFlush(timeout: .milliseconds(100))
+
+      let persistedBodies = try fileSystem.fileContents.compactMap(persistedBody)
+      #expect(persistedBodies.count > 3)
+      #expect(persistedBodies.allSatisfy { $0.count <= 500 })
+      #expect(runtime.diagnostics.traces.oversizedRequests == 0)
+      #expect(runtime.diagnostics.logs.oversizedRequests == 0)
+      #expect(runtime.diagnostics.metrics.oversizedRequests == 0)
+      _ = await runtime.shutdown(timeout: .milliseconds(50))
+
+      let inspection = try RuntimePersistenceStore(
+        configuration: persistence,
+        fileSystem: fileSystem.fileSystem,
+        diagnostics: RuntimeDiagnosticsState(handler: nil)
+      )
+      let pending = inspection.load(now: Date())
+      #expect(pending.filter { $0.signal == .traces }.count > 1)
+      #expect(pending.filter { $0.signal == .logs }.count > 1)
+      #expect(pending.filter { $0.signal == .metrics }.count > 1)
+      let expectedBodies = pending.compactMap { $0.request.httpBody }
+      let transport = ScriptedTransport(
+        Array(repeating: .status(202), count: expectedBodies.count)
+      )
+      let relaunched = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport,
+        dependencies: dependencies
+      )
+      try await eventually("split persisted requests were delivered after relaunch") {
+        await transport.requestCount == expectedBodies.count
+      }
+      #expect(await transport.requestBodies == expectedBodies)
+      try await eventually { relaunched.diagnostics.persistedItems == 0 }
+      _ = await relaunched.shutdown(timeout: .seconds(1))
+    }
+
+    @Test("drops one valid signal record that cannot fit the encoded ceiling")
+    func singleRecordEncodedDrop() async throws {
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.delivery.maximumEncodedRequestBytes = 64
+      let transport = ScriptedTransport([.status(202)])
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport
+      )
+
+      runtime.client.recordNavigation(.push, route: "settings")
+      let result = await runtime.forceFlush(timeout: .seconds(1))
+
+      #expect(result.traces.status == .failed)
+      #expect(runtime.diagnostics.traces.oversizedRequests == 1)
+      #expect(runtime.diagnostics.traces.droppedItems == 1)
+      #expect(await transport.requestCount == 0)
+      _ = await runtime.shutdown(timeout: .seconds(1))
     }
 
     @Test("purges known files even when directory listing fails")
@@ -460,6 +1236,76 @@ struct TelemetryRuntimeTests {
 
       #expect(first == second)
       #expect(first.operation == .shutdown)
+    }
+
+    @Test("background lifecycle uses the tighter host deadline")
+    func backgroundUsesRemainingTime() async throws {
+      let clock = TestRuntimeClock()
+      let transport = ScriptedTransport([.status(202)])
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
+      )
+      configuration.traces = .init(maximumQueueSize: 1, maximumBatchSize: 1)
+      configuration.backgroundFlushTimeout = .seconds(10)
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport,
+        dependencies: .init(
+          clock: clock.runtimeClock,
+          fileSystem: .live,
+          makeID: UUID.init
+        )
+      )
+      await runtime.setExportCondition(.unavailable)
+      runtime.client.recordNavigation(.push, route: "settings")
+      try await eventually("runtime queued a trace before backgrounding") {
+        runtime.diagnostics.traces.queueDepth == 1
+      }
+
+      let background = Task {
+        await runtime.applicationDidEnterBackground(remainingTime: .seconds(2))
+      }
+      try await eventually("background flush started its deadline") {
+        clock.pendingSleeps > 0
+      }
+      clock.advance(by: .seconds(2))
+      let result = await background.value
+
+      #expect(result.operation == .background)
+      #expect(result.traces.status == .timedOut)
+      #expect(runtime.diagnostics.timedOutFlushes == 1)
+
+      await runtime.setExportCondition(.available)
+      try await eventually("delivery resumed after the background timeout") {
+        runtime.diagnostics.traces.queueDepth == 0
+      }
+      _ = await runtime.shutdown(timeout: .seconds(1))
+    }
+
+    @Test("concurrent shutdown calls coalesce and later activation stays stopped")
+    func concurrentShutdown() async throws {
+      let runtime = try makeRuntime()
+      let results = await withTaskGroup(
+        of: TelemetryRuntimeOperationResult.self,
+        returning: [TelemetryRuntimeOperationResult].self
+      ) { group in
+        for _ in 0..<16 {
+          group.addTask {
+            await runtime.shutdown(timeout: .seconds(1))
+          }
+        }
+        var results: [TelemetryRuntimeOperationResult] = []
+        for await result in group {
+          results.append(result)
+        }
+        return results
+      }
+
+      let first = try #require(results.first)
+      #expect(results.allSatisfy { $0 == first })
+      #expect(runtime.diagnostics.completedFlushes == 1)
+      await runtime.applicationDidBecomeActive()
+      #expect(await runtime.shutdown() == first)
     }
   }
 
@@ -734,13 +1580,14 @@ private func makeDeliveryEngine(
   transport: TelemetryHTTPTransport,
   authenticator: TelemetryRequestAuthenticator = .none,
   delivery: TelemetryDeliveryConfiguration = .init(),
-  persistence: RuntimePersistenceStore? = nil
+  persistence: RuntimePersistenceStore? = nil,
+  diagnostics: RuntimeDiagnosticsState = RuntimeDiagnosticsState(handler: nil)
 ) -> RuntimeDeliveryEngine {
   RuntimeDeliveryEngine(
     configuration: delivery,
     transport: transport,
     authenticator: authenticator,
-    diagnostics: RuntimeDiagnosticsState(handler: nil),
+    diagnostics: diagnostics,
     dependencies: .init(
       clock: clock.runtimeClock,
       fileSystem: .live,
@@ -759,17 +1606,33 @@ private func testRequest(body: Data = Data("body".utf8)) -> URLRequest {
 }
 
 private func eventually(
-  timeout: Duration = .seconds(2),
+  _ description: String = "Condition",
+  timeout: Duration = .seconds(10),
   condition: @escaping @Sendable () async -> Bool
 ) async throws {
   let clock = ContinuousClock()
   let deadline = clock.now.advanced(by: timeout)
   while !(await condition()) {
     guard clock.now < deadline else {
-      Issue.record("Condition did not become true before the deadline")
-      return
+      Issue.record("\(description) did not become true before the deadline")
+      throw RuntimeTestError.eventuallyTimedOut
     }
     try await Task.sleep(for: .milliseconds(1))
+  }
+}
+
+private enum RuntimeTestError: Error, TelemetryRetryClassifyingError {
+  case eventuallyTimedOut
+  case unclassified
+  case classified(Bool)
+
+  var telemetryRetryable: Bool {
+    switch self {
+    case .classified(let retryable):
+      retryable
+    case .eventuallyTimedOut, .unclassified:
+      false
+    }
   }
 }
 
@@ -854,9 +1717,13 @@ private final class TestRuntimeClock: @unchecked Sendable {
   var pendingDurations: [Duration] {
     lock.withLock {
       sleepers.values.map {
-        .runtimeSeconds(max(0, $0.deadline.timeIntervalSince(now)))
+        Duration.runtimeSeconds(max(0, $0.deadline.timeIntervalSince(now)))
       }
     }
+  }
+
+  var currentDate: Date {
+    lock.withLock { now }
   }
 
   func advance(by duration: Duration) {
@@ -900,7 +1767,10 @@ private final class TestRuntimeClock: @unchecked Sendable {
 private actor ScriptedTransport {
   enum Step: Sendable {
     case status(Int)
+    case response(TelemetryHTTPResponse)
     case suspend
+    case urlError(URLError.Code)
+    case classifiedError(retryable: Bool)
   }
 
   private var steps: [Step]
@@ -924,8 +1794,20 @@ private actor ScriptedTransport {
     requests.count
   }
 
+  var authorizationHeaders: [String] {
+    requests.compactMap { $0.value(forHTTPHeaderField: "Authorization") }
+  }
+
   var cancellationCount: Int {
     cancellations
+  }
+
+  var requestBodySizes: [Int] {
+    requests.map { $0.httpBody?.count ?? 0 }
+  }
+
+  var requestBodies: [Data] {
+    requests.compactMap(\.httpBody)
   }
 
   private func send(_ request: URLRequest) async throws -> TelemetryHTTPResponse {
@@ -934,6 +1816,8 @@ private actor ScriptedTransport {
     switch step {
     case .status(let status):
       return TelemetryHTTPResponse(statusCode: status)
+    case .response(let response):
+      return response
     case .suspend:
       do {
         try await Task.sleep(for: .seconds(30))
@@ -942,7 +1826,36 @@ private actor ScriptedTransport {
         cancellations += 1
         throw error
       }
+    case .urlError(let code):
+      throw URLError(code)
+    case .classifiedError(let retryable):
+      throw RuntimeTestError.classified(retryable)
     }
+  }
+}
+
+private actor AuthInvalidatingTransport {
+  private var requests: [URLRequest] = []
+  private(set) var invalidationCount = 0
+
+  nonisolated var transport: TelemetryHTTPTransport {
+    TelemetryHTTPTransport { [weak self] request in
+      guard let self else { throw CancellationError() }
+      return await self.send(request)
+    }
+  }
+
+  var requestCount: Int {
+    requests.count
+  }
+
+  private func send(_ request: URLRequest) -> TelemetryHTTPResponse {
+    requests.append(request)
+    if requests.count == 1 {
+      invalidationCount += 1
+      return TelemetryHTTPResponse(statusCode: 401)
+    }
+    return TelemetryHTTPResponse(statusCode: 202)
   }
 }
 
@@ -966,12 +1879,30 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
   private let lock = NSLock()
   private var files: [URL: Data] = [:]
   private var directories: Set<URL> = []
+  private var writes = 0
+  private var protected = Set<URL>()
+  private var backupExcluded = Set<URL>()
+  private var writesFail = false
   private var shouldFailListings = false
   private var shouldFailRemovals = false
   private var removals = 0
-  private(set) var atomicWriteCount = 0
-  private(set) var protectedURLs: Set<URL> = []
-  private(set) var backupExcludedURLs: Set<URL> = []
+
+  var failWrites: Bool {
+    get { lock.withLock { writesFail } }
+    set { lock.withLock { writesFail = newValue } }
+  }
+
+  var atomicWriteCount: Int {
+    lock.withLock { writes }
+  }
+
+  var protectedURLs: Set<URL> {
+    lock.withLock { protected }
+  }
+
+  var backupExcludedURLs: Set<URL> {
+    lock.withLock { backupExcluded }
+  }
 
   var fileSystem: TelemetryRuntimeFileSystem {
     TelemetryRuntimeFileSystem(
@@ -999,9 +1930,13 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
         return data
       },
       writeAtomically: { [weak self] data, url in
-        self?.lock.withLock {
-          self?.files[url] = data
-          self?.atomicWriteCount += 1
+        guard let self else { return }
+        try self.lock.withLock {
+          if self.writesFail {
+            throw CocoaError(.fileWriteUnknown)
+          }
+          self.files[url] = data
+          self.writes += 1
         }
       },
       remove: { [weak self] url in
@@ -1016,12 +1951,12 @@ private final class TestRuntimeFileSystem: @unchecked Sendable {
       },
       applyProtection: { [weak self] url, _ in
         _ = self?.lock.withLock {
-          self?.protectedURLs.insert(url)
+          self?.protected.insert(url)
         }
       },
       excludeFromBackup: { [weak self] url in
         _ = self?.lock.withLock {
-          self?.backupExcludedURLs.insert(url)
+          self?.backupExcluded.insert(url)
         }
       }
     )

@@ -53,14 +53,29 @@ filter instruments and dimensions before collection. Every signal is sanitized a
 official OTLP/HTTP encoder creates a request. Only that sanitized encoded request can reach optional
 persistence or the host transport.
 
-Queue size, batch size, schedule delay, exporter timeout, pending request count, request timeout,
-overflow policy, retry attempts, backoff, jitter, metric interval, and flush deadlines are finite and
-configurable. `.dropOldest` and `.dropNewest` make overflow deterministic.
+Queue size, batch size, schedule delay, exporter timeout, pending request count, encoded request
+bytes, request timeout, overflow policy, retry attempts, backoff, jitter, metric interval, and flush
+deadlines are finite and configurable. `.dropOldest` and `.dropNewest` make overflow deterministic.
+Sanitized signal arrays are officially encoded and recursively split in order before persistence and
+transport until every request fits `maximumEncodedRequestBytes`. A single record whose encoded body
+still exceeds the ceiling, or an unmeasurable body stream, is dropped with bounded diagnostics.
 
 HTTP 408, 425, 429, 502, 503, and 504 plus selected transient `URLError` values are retryable. Other
-responses are non-retryable. `TelemetryRetryClassifyingError` lets host transports and
-authenticators classify their own errors. Exponential backoff is capped, jitter is bounded, task
-cancellation stops the attempt, and authorization is reacquired before every retry.
+responses, including 401 and 413, are non-retryable. `TelemetryRetryClassifyingError` lets host
+transports and authenticators classify their own errors. A numeric `Retry-After` represented by
+``TelemetryHTTPResponse/retryAfter`` replaces exponential backoff for that retry and is clamped to
+the configured maximum. Exponential backoff is otherwise capped, jitter is bounded, task
+cancellation stops the attempt, and authorization is reacquired before every retry. A custom
+transport may invalidate host credentials when it observes 401 before returning that response.
+
+For a gateway capped at 64 KiB compressed/decoded bodies, 50 items, and a 5-second request, use the
+reviewed conservative profile: 25-item trace/log batches, a 64 KiB encoded ceiling, and a 5-second
+request timeout. Metric collections are not split by point count; prove each collection stays below
+both gateway limits or use a metrics route that accepts the bounded collection.
+
+The package's OTLP exporters do not enable compression, so this ceiling applies to the decoded
+protobuf body. A custom transport that compresses the request must enforce its compressed-body limit
+after compression.
 
 ``TelemetryExportCondition`` is a scheduling hint. An unavailable hint pauses new attempts, but an
 available hint never proves that DNS, TLS, authentication, the gateway, or the backend will work.
@@ -122,3 +137,6 @@ drops, persisted bytes/items, attempts, successes, retryable/non-retryable failu
 corruption recovery, and flush/discard outcomes. Diagnostics bypass OpenTelemetry and contain only
 bounded categories and counts, so exporter failures cannot recursively generate more exporter
 telemetry.
+
+Use <doc:OperationalRunbook> for failure response and <doc:ProductionReadiness> for the package,
+platform, pilot, and release gates that must pass before stable production use.

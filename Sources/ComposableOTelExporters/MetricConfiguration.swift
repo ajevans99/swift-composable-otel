@@ -37,6 +37,25 @@ public enum ComposableOTelMetricConfiguration {
         view: viewBuilder.build()
       )
     }
+    for schema in policy.catalog.counters.values.sorted(by: {
+      $0.identity.name < $1.identity.name
+    }) {
+      _ = builder.registerView(
+        selector: InstrumentSelectorBuilder()
+          .setInstrument(name: schema.identity.name)
+          .setMeter(name: ComposableOTelMetadata.instrumentationName)
+          .build(),
+        view: View.builder()
+          .addAttributeFilter { schema.fieldKeys.contains($0) }
+          .addAttributeProcessor(
+            processor: ContractMetricAttributeProcessor(
+              schema: schema,
+              version: policy.catalog.contractVersion
+            )
+          )
+          .build()
+      )
+    }
     return builder
   }
 
@@ -118,11 +137,38 @@ public enum ComposableOTelMetricConfiguration {
     )
   }
 
+  package static func makeContractInstruments(
+    meter: MeterSdk,
+    catalog: TelemetryContractCatalog
+  ) -> [TelemetryContractIdentity: any LongCounter] {
+    Dictionary(
+      uniqueKeysWithValues: catalog.counters.values.map { schema in
+        (
+          schema.identity,
+          meter
+            .counterBuilder(name: schema.identity.name)
+            .setDescription(schema.description ?? "")
+            .setUnit(schema.unit ?? "")
+            .build() as any LongCounter
+        )
+      }
+    )
+  }
+
   private static let durationMetricNames: Set<String> = [
     ComposableOTelSemantics.Metrics.reducerDuration,
     ComposableOTelSemantics.Metrics.effectDuration,
     ComposableOTelSemantics.Metrics.dependencyDuration,
   ]
+}
+
+private struct ContractMetricAttributeProcessor: AttributeProcessor {
+  let schema: TelemetryContractRecordSchema
+  let version: TelemetryContractVersion
+
+  func process(incoming: [String: AttributeValue]) -> [String: AttributeValue] {
+    schema.sanitizedAttributes(incoming, version: version) ?? incoming
+  }
 }
 
 private struct PolicyMetricAttributeProcessor: AttributeProcessor {

@@ -94,7 +94,19 @@ for fileURL in allMarkdown {
   }
 }
 
-for requiredFile in ["CHANGELOG.md", "LICENSE", "README.md", "RELEASING.md", "SUPPORT.md"] {
+for requiredFile in [
+  "CHANGELOG.md",
+  "LICENSE",
+  "MIGRATION.md",
+  "PERFORMANCE.md",
+  "PILOT.md",
+  "PRIVACY.md",
+  "README.md",
+  "RELEASE_NOTES.md",
+  "RELEASING.md",
+  "SECURITY.md",
+  "SUPPORT.md",
+] {
   if !fileManager.fileExists(atPath: repositoryRoot.appendingPathComponent(requiredFile).path) {
     failures.append("Missing required project document \(requiredFile)")
   }
@@ -164,9 +176,11 @@ let forbiddenDocumentation = [
   "as! TracerProviderSdk",
 ]
 for forbidden in forbiddenDocumentation
-where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkdown).contains(where: {
-  (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
-}) {
+where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkdown).contains(
+  where: {
+    (try? String(contentsOf: $0, encoding: .utf8).contains(forbidden)) == true
+  })
+{
   failures.append("Documentation contains stale example text: \(forbidden)")
 }
 
@@ -186,6 +200,56 @@ for requiredPrivacyClaim in [
   failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
 
+for requiredGatewayClaim in [
+  "`maximumEncodedRequestBytes` defaults to 64 KiB",
+  "including 401 and 413",
+  "numeric `Retry-After`",
+  "reviewed conservative profile uses 25-item",
+  "trace/log batches",
+  "one metric containing too many points remains",
+  "`TelemetryContractCatalog`",
+  "`TelemetryDeploymentEnvironment`",
+  "Record-time names",
+  "upstream limitation",
+] where !readme.contains(requiredGatewayClaim) {
+  failures.append("README is missing gateway contract claim: \(requiredGatewayClaim)")
+}
+
+let pilot = read("PILOT.md")
+for requiredPilotOwner in [
+  "Package integration evidence",
+  "Gateway and export evidence",
+  "Representative TCA flow evidence",
+  "Physical-device release evidence",
+  "compressed and decoded OTLP body of 64 KiB",
+  "50 signal items",
+  "5-second request timeout",
+  "next-minute jitter",
+  "production resources and principals are isolated from non-production",
+  "specific dashboard or OS metrics framework is not required",
+] where !pilot.contains(requiredPilotOwner) {
+  failures.append("PILOT.md is missing required ownership/evidence text: \(requiredPilotOwner)")
+}
+
+let privacy = read("PRIVACY.md")
+for requiredRevocationBoundary in [
+  "`setExportCondition(.unavailable)` is only a scheduling pause",
+  "`shutdown()` is an orderly lifecycle operation",
+  "`TelemetryClient.noop`",
+  "`disableAndDiscardPending()`",
+] where !privacy.contains(requiredRevocationBoundary) {
+  failures.append(
+    "PRIVACY.md is missing consent-revocation boundary: \(requiredRevocationBoundary)"
+  )
+}
+for requiredCatalogBoundary in [
+  "Registered external contracts remain allowlist-first",
+  "Recording takes typed payloads only",
+  "conditional combinations",
+] where !privacy.contains(requiredCatalogBoundary) {
+  failures.append("PRIVACY.md is missing typed catalog boundary: \(requiredCatalogBoundary)")
+}
+
 let manifest = read("Package.swift")
 if !manifest.contains(".iOS(.v17)") || !manifest.contains(".macOS(.v14)") {
   failures.append("Package.swift must retain the documented iOS 17 and macOS 14 minimums")
@@ -200,18 +264,22 @@ if !manifest.contains("open-telemetry/opentelemetry-swift.git")
 }
 
 let bootstrap = read("Sources/ComposableOTelExporters/TelemetryBootstrap.swift")
-if bootstrap.contains("case production") || bootstrap.contains("StdoutSpanExporter(isDebug: false)") {
+if bootstrap.contains("case production") || bootstrap.contains("StdoutSpanExporter(isDebug: false)")
+{
   failures.append("Production stdout must remain impossible through TelemetryBootstrap")
 }
 
 let runtime = read("Sources/ComposableOTelExporters/TelemetryRuntime.swift")
+let runtimeEncoding = read("Sources/ComposableOTelExporters/TelemetryRuntimeEncoding.swift")
+let runtimeBoundary = runtime + runtimeEncoding
 for requiredRuntimeBoundary in [
   "OtlpHttpTraceExporter",
   "OtlpHttpMetricExporter",
   "OtlpHttpLogExporter",
-  "deploymentEnvironment: \"production\"",
+  "deploymentEnvironment: configuration.deploymentEnvironment",
   "public func disableAndDiscardPending()",
-] where !runtime.contains(requiredRuntimeBoundary) {
+  "delivery.maximumEncodedRequestBytes > 0",
+] where !runtimeBoundary.contains(requiredRuntimeBoundary) {
   failures.append("TelemetryRuntime is missing production boundary: \(requiredRuntimeBoundary)")
 }
 if runtime.contains("Stdout") {

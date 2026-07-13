@@ -147,6 +147,7 @@ let readme = read("README.md")
 let gettingStarted = read("Sources/ComposableOTel/Documentation.docc/Articles/GettingStarted.md")
 let changelog = read("CHANGELOG.md")
 let releaseNotes = read("RELEASE_NOTES.md")
+let releasing = read("RELEASING.md")
 if !readme.contains("[MIT License](LICENSE), SPDX identifier `MIT`") {
   failures.append("README must reference the approved MIT license and SPDX identifier")
 }
@@ -177,6 +178,12 @@ if let packageVersion {
   if !releaseNotes.hasPrefix("# swift-composable-otel \(packageVersion)\n") {
     failures.append("RELEASE_NOTES does not use ComposableOTelMetadata.version")
   }
+}
+if !releasing.contains(
+  "watchOS passes its named support gate. Documented\n"
+    + "   unsupported watchOS status is permitted only for pre-1.0 releases"
+) {
+  failures.append("RELEASING must require the watchOS support gate for 1.0")
 }
 
 let forbiddenDocumentation = [

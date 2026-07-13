@@ -112,6 +112,8 @@ The complete `0.2.2` to `0.3.0` migration is in [MIGRATION.md](MIGRATION.md). In
   dedicated queue, matching its production execution context instead of blocking Swift Testing's
   cooperative executor. macOS CI test steps now have a 10-minute timeout as bounded
   defense-in-depth.
+- The release policy now requires the named watchOS support gate to pass for 1.0; documented
+  unsupported status remains available only to pre-1.0 releases.
 
 ### Security
 

@@ -76,6 +76,7 @@ jobs:
         run: xcrun swift build
 
       - name: Test on macOS
+        timeout-minutes: 10
         run: xcrun swift test
 
       - name: Build all products for iOS
@@ -106,6 +107,7 @@ jobs:
         run: bash Scripts/resolve-dependencies.sh latest
 
       - name: Test with coverage
+        timeout-minutes: 10
         run: xcrun swift test --enable-code-coverage
 
       - name: Enforce target and runtime floors
@@ -127,6 +129,7 @@ jobs:
         run: bash Scripts/resolve-dependencies.sh latest
 
       - name: Test concurrent paths with TSan
+        timeout-minutes: 10
         run: xcrun swift test --sanitize=thread
 
   compatibility-and-performance:

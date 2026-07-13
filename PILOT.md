@@ -2,7 +2,7 @@
 
 The production-like pilot is owned by a consumer application outside this package repository. The
 package does not add consumer-specific APIs, deploy infrastructure, or treat one accepted request as
-pilot approval. A stable release remains blocked until every required artifact below is linked and
+pilot approval. A 1.0 release remains blocked until every required artifact below is linked and
 reviewed.
 
 ## Evidence roles

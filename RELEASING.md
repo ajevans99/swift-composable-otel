@@ -75,8 +75,9 @@ reviewer:
    pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
 6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
    in `SUPPORT.md` remains exact and reviewed.
-7. **Platforms:** macOS and iOS gates pass. watchOS either passes its named support gate or remains
-   explicitly unsupported with current evidence; no partial build may be presented as support.
+7. **Platforms:** macOS and iOS gates pass, and watchOS passes its named support gate. Documented
+   unsupported watchOS status is permitted only for pre-1.0 releases; no partial build may be
+   presented as support.
 8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
    release notes, and residual-risk ownership are approved.
 9. **Consumer pilot:** every item in `PILOT.md` is supplied by the external pilot, linked immutably,
@@ -84,9 +85,9 @@ reviewer:
 10. **Repository administration:** default-branch protection and the complete production CI matrix
     are required for merge and release.
 
-Any missing or failed item is a no-go. Accepted residual risk must name the owner, scope, mitigation,
-reviewer, and reconsideration date. Issue #6 stays open while pilot or repository-administration
-evidence remains outstanding.
+Any missing or failed item is a no-go for 1.0. A maintainer may approve a pre-1.0 release only when
+each accepted residual risk names the owner, scope, mitigation, reviewer, and reconsideration date.
+That acceptance does not satisfy or waive the corresponding 1.0 criterion.
 
 ## Historical metadata
 

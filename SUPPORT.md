@@ -32,7 +32,7 @@ The 2026-07-12 reference probe temporarily added `.watchOS(.v10)` and built `Com
 `Sources/ComposableArchitecture/Internal/NotificationName.swift:27:12` with
 `main actor-isolated default value in a nonisolated context`. Because even the core product did not
 compile, the exporter products and meaningful platform tests were not claimable. The named
-**watchOS support gate** above, tracked by issue #6, remains the only route to declaring support.
+**watchOS support gate** above remains the only route to declaring support.
 
 ## Swift toolchain
 
@@ -102,7 +102,7 @@ version can consume those traits.
 - Release performance, memory, batching, and queue ceilings are documented in `PERFORMANCE.md`.
 
 Default-branch protection and required-check configuration are repository administration evidence,
-not package code. They must be reviewed separately before a stable release.
+not package code. They remain required before 1.0.
 
 ## Upstream exact-log limitation
 

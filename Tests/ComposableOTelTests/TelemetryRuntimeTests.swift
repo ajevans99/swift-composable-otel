@@ -500,19 +500,25 @@ struct TelemetryRuntimeTests {
         maximumEncodedRequestBytes: 1,
         deliveryClient: deliveryClient
       )
-      var encoded: [[Int]] = []
-
-      let succeeded = dispatcher.dispatch([1, 2]) { values in
-        encoded.append(values)
-        if values == [1] {
-          return nil
+      let result: (succeeded: Bool, encoded: [[Int]]) = await withCheckedContinuation {
+        continuation in
+        DispatchQueue(label: "com.swift-composable-otel.test.encoding").async {
+          var encoded: [[Int]] = []
+          let succeeded = dispatcher.dispatch([1, 2]) { values in
+            encoded.append(values)
+            if values == [1] {
+              return nil
+            }
+            return testRequest(body: Data(repeating: 1, count: values.count))
+          }
+          continuation.resume(returning: (succeeded, encoded))
         }
-        return testRequest(body: Data(repeating: 1, count: values.count))
       }
 
-      #expect(succeeded == false)
-      #expect(encoded == [[1, 2], [1], [2]])
+      #expect(result.succeeded == false)
+      #expect(result.encoded == [[1, 2], [1], [2]])
       try await eventually { await transport.requestCount == 1 }
+      await engine.shutdown(retainPersisted: false)
     }
 
     @Test("429 Retry-After is honored and clamped to maximum backoff")

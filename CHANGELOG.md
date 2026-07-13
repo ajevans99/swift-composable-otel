@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-13
+
 ### Added
 
 - Central package and OpenTelemetry instrumentation metadata.
@@ -83,7 +85,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Migration
 
-The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md). In summary:
+The complete `0.2.2` to `0.3.0` migration is in [MIGRATION.md](MIGRATION.md). In summary:
 
 - replace reflection-derived names with typed schema identifiers;
 - replace `.traced()` with `.traceStart(effect:)` or a lifecycle-traced effect;
@@ -103,6 +105,13 @@ The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md).
   migrate to `TelemetryRuntime` with a host transport and short-lived request authenticator.
 - Public raw SDK client/instrument factories, dictionary sanitizer methods, privacy exporter
   wrappers, and metric view configuration from normal products. Cross-target wiring is package-only.
+
+### Fixed
+
+- The split-encoding failure-isolation test now invokes the synchronous exporter dispatcher from a
+  dedicated queue, matching its production execution context instead of blocking Swift Testing's
+  cooperative executor. macOS CI test steps now have a 10-minute timeout as bounded
+  defense-in-depth.
 
 ### Security
 
@@ -144,7 +153,8 @@ The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md).
 - Dependency-injected `TelemetryClient` and in-memory test helpers.
 - Stdout SDK bootstrap, DocC catalogs, formatting configuration, and macOS CI.
 
-[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.2...HEAD
+[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.2...0.3.0
 [0.2.2]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.1...0.2.2
 [0.2.1]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/ajevans99/swift-composable-otel/compare/0.1.0...0.2.0

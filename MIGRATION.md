@@ -1,9 +1,8 @@
-# Unreleased Migration Guide
+# Migrating from 0.2.2 to 0.3.0
 
-The changes below describe migration from the current `0.2.2` tag to the unreleased package state.
-No 1.0 release has been tagged or published.
+The changes below describe migration from `0.2.2` to the pre-1.0 `0.3.0` release.
 
-| Previous API or behavior | Unreleased replacement |
+| Previous API or behavior | 0.3.0 replacement |
 | --- | --- |
 | Reflection-derived reducer and action names | Pass typed `feature:` and `action:` values to `.instrumented(...)`. |
 | State description comparison | Supply an optional opaque `StateChangeToken`; omit it when no non-sensitive token exists. |

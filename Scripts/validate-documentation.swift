@@ -144,6 +144,9 @@ if let versionMatch, let range = Range(versionMatch.range(at: 1), in: metadata) 
 }
 
 let readme = read("README.md")
+let gettingStarted = read("Sources/ComposableOTel/Documentation.docc/Articles/GettingStarted.md")
+let changelog = read("CHANGELOG.md")
+let releaseNotes = read("RELEASE_NOTES.md")
 if !readme.contains("[MIT License](LICENSE), SPDX identifier `MIT`") {
   failures.append("README must reference the approved MIT license and SPDX identifier")
 }
@@ -154,6 +157,25 @@ if let packageVersion {
     + #"    from: "\#(packageVersion)""#
   if !readme.contains(expectedInstallation) {
     failures.append("README installation does not use ComposableOTelMetadata.version")
+  }
+  if !readme.contains(
+    "[`\(packageVersion)`](https://github.com/ajevans99/swift-composable-otel/tree/\(packageVersion))"
+  ) {
+    failures.append("README current release link does not use ComposableOTelMetadata.version")
+  }
+  if !gettingStarted.contains(#"from: "\#(packageVersion)""#) {
+    failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
+  }
+  if !changelog.contains("## [Unreleased]\n\n## [\(packageVersion)] - ") {
+    failures.append("CHANGELOG must have an empty Unreleased section before the current version")
+  }
+  if !changelog.contains(
+    "[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/\(packageVersion)...HEAD"
+  ) {
+    failures.append("CHANGELOG Unreleased compare link does not start at the current version")
+  }
+  if !releaseNotes.hasPrefix("# swift-composable-otel \(packageVersion)\n") {
+    failures.append("RELEASE_NOTES does not use ComposableOTelMetadata.version")
   }
 }
 

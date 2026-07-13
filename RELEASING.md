@@ -84,9 +84,9 @@ reviewer:
 10. **Repository administration:** default-branch protection and the complete production CI matrix
     are required for merge and release.
 
-Any missing or failed item is a no-go. Accepted residual risk must name the owner, scope, mitigation,
-reviewer, and reconsideration date. Issue #6 stays open while pilot or repository-administration
-evidence remains outstanding.
+Any missing or failed item is a no-go for 1.0. A maintainer may approve a pre-1.0 release only when
+each accepted residual risk names the owner, scope, mitigation, reviewer, and reconsideration date.
+That acceptance does not satisfy or waive the corresponding 1.0 criterion.
 
 ## Historical metadata
 

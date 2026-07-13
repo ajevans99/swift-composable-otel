@@ -45,3 +45,5 @@ fi
 xcrun swift Scripts/check-api.swift \
   --symbol-graphs "$graph_directory" \
   --baseline API/PublicAPI.json
+
+bash Scripts/check-unsafe-api.sh

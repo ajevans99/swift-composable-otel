@@ -111,13 +111,14 @@ extension TestCollectors {
   ) -> [DecodedContractLog] {
     logs.allRecords.compactMap { record in
       guard record.eventName == definition.eventName.rawValue,
+        let severity = decodedContractLogSeverity(record.severity),
         let decoded = decodeRecord(record.attributes)
       else {
         return nil
       }
       return DecodedContractLog(
-        eventName: definition.eventName.rawValue,
-        severity: definition.severity,
+        eventName: record.eventName ?? definition.eventName.rawValue,
+        severity: severity,
         body: record.body.flatMap(decodeScalar),
         contractVersion: decoded.version,
         fields: decoded.fields
@@ -157,10 +158,10 @@ extension TestCollectors {
       + logs.allRecords.map(\.resource)
       + (contractMetrics?.metrics.map(\.resource) ?? [])
     for resource in resources {
-      let contractFields = resource.attributes.filter {
-        definition.schema.fieldKeys.contains($0.key)
-      }
-      if let decoded = decodeRecord(contractFields) {
+      if let decoded = decodeContractResourceAttributes(
+        resource.attributes,
+        expectedFieldKeys: definition.schema.fieldKeys
+      ) {
         return DecodedContractResource(
           contractVersion: decoded.version,
           fields: decoded.fields
@@ -169,6 +170,23 @@ extension TestCollectors {
     }
     return nil
   }
+}
+
+package func decodedContractLogSeverity(_ severity: Severity?) -> TelemetryLogSeverity? {
+  switch severity {
+  case .info: .info
+  case .error: .error
+  default: nil
+  }
+}
+
+package func decodeContractResourceAttributes(
+  _ attributes: [String: AttributeValue],
+  expectedFieldKeys: Set<String>
+) -> (version: Int, fields: [String: TelemetryDecodedScalar])? {
+  let expectedKeys = expectedFieldKeys.union([TelemetryContractCatalog.contractVersionKey])
+  guard Set(attributes.keys) == expectedKeys else { return nil }
+  return decodeRecord(attributes)
 }
 
 private func decodeRecord(

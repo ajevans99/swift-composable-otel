@@ -3,10 +3,10 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Package-owned metric instruments and bounded SDK views.
-public enum ComposableOTelMetricConfiguration {
+package enum ComposableOTelMetricConfiguration {
   /// Registers a drop-by-default view plus one allowlisted view for every package metric.
   @discardableResult
-  public static func registerViews(
+  package static func registerViews(
     on builder: MeterProviderBuilder,
     policy: TelemetryPolicy
   ) -> MeterProviderBuilder {
@@ -60,7 +60,7 @@ public enum ComposableOTelMetricConfiguration {
   }
 
   /// Creates all package instruments with stable descriptions and UCUM-compatible units.
-  public static func makeInstruments(meter: MeterSdk) -> MetricInstruments {
+  package static func makeInstruments(meter: MeterSdk) -> MetricInstruments {
     .unsafeCustomSDK(
       actionsDispatched:
         meter

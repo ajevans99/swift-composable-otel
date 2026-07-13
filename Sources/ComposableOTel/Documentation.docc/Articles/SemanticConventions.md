@@ -101,16 +101,12 @@ Allowed resource attributes are bounded `service.name` and optional `service.ver
 `deployment.environment.name`, `os.type=darwin`, and fixed SDK/distribution identity. Process name,
 OS version text, environment resources, and arbitrary host dictionaries are not merged.
 
-## Custom integration trust boundary
+## SDK trust boundary
 
-``TelemetryClient/unsafeCustomSDK(tracer:metrics:logger:policy:)`` and
-``MetricInstruments/unsafeCustomSDK(actionsDispatched:effectsStarted:effectsCompleted:effectsCancelled:effectsErrored:dependenciesCalled:dependenciesErrored:navigationTransitions:reducerDuration:effectDuration:dependencyDuration:activeEffects:)``
-are explicit trust boundaries. Custom SDK providers, processors, readers, or exporters can bypass
-package enforcement.
-
-Use `ComposableOTelExporters` privacy-preserving exporter wrappers, package metric configuration,
-and a resource sanitized with the same ``TelemetryPolicy``. The package does not provide a
-raw-payload development mode.
+Normal public products expose only typed package recording/configuration. Raw SDK client/instrument
+factories, attribute sanitizers, privacy processors, and metric view builders are package-only
+implementation hooks. Applications that instantiate OpenTelemetry SDK providers directly own a
+separate trust boundary. The package does not provide a raw-payload development mode.
 
 ## Registered external contracts
 

@@ -7,7 +7,7 @@ import OpenTelemetrySdk
 /// Collects policy-filtered package log records for test assertions.
 ///
 /// ```swift
-/// let (client, collectors) = TelemetryClient.test()
+/// let (client, collectors) = try TelemetryClient.test()
 /// // ... exercise actions ...
 /// let errorLogs = collectors.logs.records(withSeverity: .error)
 /// #expect(!errorLogs.isEmpty)

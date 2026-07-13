@@ -12,7 +12,7 @@ let schema = try! TelemetrySchema(
 )
 let policy = TelemetryPolicy(schema: schema)
 let reader = InMemoryMetricReader()
-let (telemetry, collectors) = TelemetryClient.test(
+let (telemetry, collectors) = try TelemetryClient.test(
   metricReader: reader,
   policy: policy
 )
@@ -78,7 +78,8 @@ let resource = collectors.decodedResource(for: resourceDefinition)
 ```
 
 Assert exact field sets and ``TelemetryDecodedScalar`` cases, integer contract version, nil log body,
-fixed EventName/severity, delta counter temporality/unit/value, and resource environment.
+fixed EventName/severity, delta counter temporality/unit/value, resource environment, and nil
+instrumentation-scope schema URLs.
 
 Use ``InMemoryEncodedRequestCollector`` as the production runtime transport to inspect encoded
 request signal/body size without network access.

@@ -52,6 +52,7 @@ actor RuntimeDeliveryEngine {
         maximumEncodedRequestBytes: configuration.maximumEncodedRequestBytes
       )
     }
+
     if !oversized.isEmpty {
       let oversizedIDs = Set(oversized.map(\.id))
       queue.removeAll { oversizedIDs.contains($0.id) }
@@ -366,7 +367,7 @@ actor RuntimeDeliveryEngine {
     if response.statusCode == 408 || response.statusCode == 425 || response.statusCode == 429
       || response.statusCode == 502 || response.statusCode == 503 || response.statusCode == 504
     {
-      return .retryable(retryAfter: response.retryAfter)
+      return .retryable(retryAfter: response.statusCode == 429 ? response.retryAfter : nil)
     }
     return .nonRetryable
   }

@@ -21,8 +21,10 @@ uses the package's reviewed conservative profile: a 64 KiB encoded ceiling, no m
 trace/log items per batch, and a 5-second request timeout. The runtime drops an oversized encoded
 body before persistence or transport and reports `oversizedRequests` plus `droppedItems`.
 
-Metric collections are not split by point count. The pilot must prove that each synchronous
-collection stays within both gateway limits or provide a route that accepts the bounded collection.
+Custom metric arrays are partitioned by actual point count before encoding. Points inside one
+oversized `MetricData` cannot be split, so that record is dropped with a bounded diagnostic. The
+package also rejects registered counter catalogs whose declared maximum-series sum exceeds
+`maximumContractMetricPointsPerRequest` (50 by default).
 The gateway must also prove:
 
 - numeric `Retry-After` carries any required next-minute jitter and is within the configured maximum;

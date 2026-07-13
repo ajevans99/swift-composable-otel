@@ -59,8 +59,15 @@ try await telemetry.withSpan(span, payload: payload) {
 }
 ```
 
-Every record receives `telemetry.contract.version` exactly once. A definition not registered in the
-catalog is rejected. Existing reducer, effect, dependency, and navigation APIs are unchanged.
+Every record receives `telemetry.contract.version` exactly once. Registration carries an opaque
+identity, so rebuilding a structurally identical definition does not forge catalog membership.
+Custom definitions cannot reserve package-owned span, event, or metric names. A definition not
+registered in the catalog is rejected. Existing reducer, effect, dependency, and navigation APIs are
+unchanged.
+
+``TelemetryClient/withSynchronousSpan(_:payload:operation:)`` preserves synchronous execution;
+``TelemetryClient/withSpan(_:payload:operation:)`` preserves async execution. Disabled and no-op
+clients execute either operation unchanged and make log/counter recording a no-op.
 
 ## Validate conditional fields
 
@@ -79,9 +86,13 @@ definitions. ``TelemetryCounterDelta`` accepts positive monotonic increments onl
 ``TelemetryResourceDefinition/makeValue(_:)`` returns an immutable ``TelemetryResourceValue`` that
 can only be used with the catalog containing that exact definition.
 
-``TelemetryDeploymentEnvironment`` is finite: development, test, staging, or production. The
-runtime validates the resource definition before creating providers. Extra keys and wrong scalar
-types cannot enter through the typed API and are removed at the export boundary.
+``TelemetryDeploymentEnvironment`` is finite: development, test, staging, or production.
+`TelemetryResourceMode.native(environment:)` preserves the existing
+service/environment/Darwin/SDK/distribution
+resource. `TelemetryResourceMode.strict(_:)` emits only required registered fields plus contract
+version. Strict resource definitions cannot contain optional fields and must include exactly one
+bounded deployment environment in the resource value. Extra keys and wrong scalar types are rejected
+before providers.
 
 ## Log wire limitation
 
@@ -91,11 +102,21 @@ contain a severity-text field, so the package cannot currently promise an explic
 `severity_text` value without bypassing the SDK. A contract requiring exact severity text remains
 blocked on an upstream model/encoder capability; this package does not add a raw OTLP bypass.
 
+Error classification follows observed control flow. An error that escapes a registered span receives
+generic error status/event handling. If an operation catches an error and returns success, the span
+remains successful; record a registered bodyless handled-error log explicitly instead of
+reinterpreting the successful operation.
+
 ## Delivery and testing
 
 Sanitized span, log, and metric arrays are officially encoded, then recursively split in order before
 persistence/transport until every request fits `maximumEncodedRequestBytes`. One record that cannot
 fit is a bounded non-retryable drop.
+
+`maximumContractMetricPointsPerRequest` independently bounds the sum of registered counter maximum
+series in one custom collection (50 by default). Runtime creation rejects a catalog above the cap,
+and the exporter independently partitions metric records by actual point count. A single metric
+record above the cap is dropped without transport and produces a bounded diagnostic.
 
 `ComposableOTelTesting` exposes decoded contract spans, logs, delta counters, and resources plus
 `InMemoryEncodedRequestCollector` for no-network request assertions.

@@ -176,7 +176,7 @@ struct ComposableOTelAllTests {
     @Test("uses a stable span name and typed action attribute")
     @MainActor
     func spanPerAction() async throws {
-      let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+      let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
       } withDependencies: {
@@ -198,7 +198,7 @@ struct ComposableOTelAllTests {
     @MainActor
     func actionAndStateLeakage() async throws {
       let metricReader = InMemoryMetricReader()
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         metricReader: metricReader,
         policy: testPolicy()
       )
@@ -224,8 +224,8 @@ struct ComposableOTelAllTests {
 
     @Test("action logs are disabled by default")
     @MainActor
-    func defaultLogsDisabled() async {
-      let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    func defaultLogsDisabled() async throws {
+      let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
       let store = TestStore(initialState: CounterFeature.State()) {
         CounterFeature()
       } withDependencies: {
@@ -238,7 +238,7 @@ struct ComposableOTelAllTests {
     @Test("action logs contain only bounded identifiers and one measured duration")
     @MainActor
     func actionDispatchLog() async throws {
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         policy: testPolicy(
           signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: true)
         )
@@ -269,9 +269,9 @@ struct ComposableOTelAllTests {
   @Suite("Signal controls")
   struct SignalControlTests {
     @Test("metrics remain enabled when traces and logs are disabled")
-    func metricsOnly() {
+    func metricsOnly() throws {
       let reader = InMemoryMetricReader()
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         metricReader: reader,
         policy: testPolicy(
           signals: .init(tracesEnabled: false, metricsEnabled: true, logsEnabled: false)
@@ -286,9 +286,9 @@ struct ComposableOTelAllTests {
     }
 
     @Test("logs remain enabled when traces and metrics are disabled")
-    func logsOnly() {
+    func logsOnly() throws {
       let reader = InMemoryMetricReader()
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         metricReader: reader,
         policy: testPolicy(
           signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: true)
@@ -389,7 +389,7 @@ struct ComposableOTelAllTests {
         var errorDescription: String? { sentinelSecret }
       }
 
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         policy: testPolicy(
           signals: .init(tracesEnabled: true, metricsEnabled: true, logsEnabled: true)
         )
@@ -481,7 +481,7 @@ struct ComposableOTelAllTests {
           )
         }
       )
-      let (client, collectors) = TelemetryClient.test(policy: policy)
+      let (client, collectors) = try TelemetryClient.test(policy: policy)
 
       do {
         let _: Void = try await withDependencies {
@@ -513,7 +513,7 @@ struct ComposableOTelAllTests {
     @Test("dynamic routes and effects aggregate without changing names or series count")
     func boundedNamesAndSeries() async throws {
       let reader = InMemoryMetricReader()
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         metricReader: reader,
         policy: testPolicy()
       )
@@ -625,9 +625,9 @@ struct ComposableOTelAllTests {
   @Suite("Metric semantics")
   struct MetricSemanticsTests {
     @Test("package metrics declare descriptions and units")
-    func descriptionsAndUnits() async {
+    func descriptionsAndUnits() async throws {
       let reader = InMemoryMetricReader()
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         metricReader: reader,
         policy: testPolicy()
       )
@@ -655,7 +655,7 @@ struct ComposableOTelAllTests {
   struct PackageMetadataTests {
     @Test("uses one instrumentation version for traces and logs")
     func instrumentationScopes() throws {
-      let (client, collectors) = TelemetryClient.test(
+      let (client, collectors) = try TelemetryClient.test(
         policy: testPolicy(
           signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: true)
         )
@@ -672,11 +672,11 @@ struct ComposableOTelAllTests {
     }
 
     @Test("uses package version in a bounded bootstrap resource")
-    func bootstrapResource() {
-      let resource = TelemetryBootstrap.makeResource(
+    func bootstrapResource() throws {
+      let resource = try TelemetryBootstrap.makeResource(
         serviceName: "metadata-test",
         serviceVersion: "1.2.3",
-        deploymentEnvironment: .production,
+        resourceMode: .native(environment: .production),
         policy: testPolicy()
       )
       #expect(resource.attributes["service.name"] == .string("metadata-test"))

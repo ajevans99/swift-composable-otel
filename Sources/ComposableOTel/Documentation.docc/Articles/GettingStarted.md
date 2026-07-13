@@ -35,9 +35,8 @@ route parameters. Values absent from the schema aggregate to `other`.
 ## Bootstrap once
 
 ```swift
-let telemetry = TelemetryBootstrap.configure(
+let telemetry = try TelemetryBootstrap.configure(
   serviceName: "example-app",
-  environment: .debug,
   policy: policy
 )
 
@@ -109,7 +108,7 @@ metrics.
 ## Test
 
 ```swift
-let (telemetry, collectors) = TelemetryClient.test(policy: policy)
+let (telemetry, collectors) = try TelemetryClient.test(policy: policy)
 // Inject, exercise the feature, then:
 collectors.forceFlush()
 collectors.spans.assertSpanExists(named: "tca.reducer")

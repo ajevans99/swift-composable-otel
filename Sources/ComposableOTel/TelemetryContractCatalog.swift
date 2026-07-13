@@ -388,6 +388,7 @@ package enum TelemetryContractKind: String, Sendable {
 }
 
 package struct TelemetryContractIdentity: Hashable, Sendable {
+  package let registrationID: UUID
   package let kind: TelemetryContractKind
   package let name: String
   package let fingerprint: String
@@ -485,6 +486,9 @@ private func validatedDefinition<Payload: Sendable>(
 ) throws -> TelemetryContractIdentity {
   let maximumFields = kind == .span ? 15 : 16
   guard fields.count <= maximumFields else { throw TelemetryContractError.invalidDefinition }
+  if kind == .resource, fields.contains(where: { !$0.isRequired }) {
+    throw TelemetryContractError.invalidDefinition
+  }
   let keys = fields.map(\.key)
   guard
     Set(keys).count == keys.count,
@@ -493,7 +497,12 @@ private func validatedDefinition<Payload: Sendable>(
     throw TelemetryContractError.invalidDefinition
   }
   let fingerprint = (fields.map(\.fingerprint).sorted() + [suffix]).joined(separator: "|")
-  return TelemetryContractIdentity(kind: kind, name: name.rawValue, fingerprint: fingerprint)
+  return TelemetryContractIdentity(
+    registrationID: UUID(),
+    kind: kind,
+    name: name.rawValue,
+    fingerprint: fingerprint
+  )
 }
 
 private func contractAttributes<Payload: Sendable>(
@@ -763,6 +772,11 @@ public struct TelemetryResourceValue: Sendable {
   package let attributes: [String: AttributeValue]
 }
 
+public enum TelemetryResourceMode: Sendable {
+  case native(environment: TelemetryDeploymentEnvironment)
+  case strict(TelemetryResourceValue)
+}
+
 public struct TelemetryResourceDefinition<Payload: Sendable>: @unchecked Sendable {
   public let name: TelemetryContractName
   private let fields: [TelemetryField<Payload>]
@@ -803,6 +817,14 @@ public struct TelemetryResourceDefinition<Payload: Sendable>: @unchecked Sendabl
     }
     guard schema.validatesFields(attributes) else {
       throw TelemetryContractError.invalidPayload(field: nil)
+    }
+    guard
+      case .string(let environment)? = attributes["deployment.environment.name"],
+      TelemetryDeploymentEnvironment(rawValue: environment) != nil
+    else {
+      throw TelemetryContractError.invalidPayload(
+        field: try TelemetryFieldKey("deployment.environment.name")
+      )
     }
     return TelemetryResourceValue(identity: identity, attributes: attributes)
   }
@@ -872,6 +894,30 @@ public struct TelemetryContractCatalog: Sendable {
     resources: [AnyTelemetryResourceDefinition] = []
   ) throws {
     guard spans.count <= 64, logs.count <= 64, counters.count <= 32, resources.count <= 1 else {
+      throw TelemetryContractError.invalidDefinition
+    }
+    let reservedNames =
+      Set([
+        ComposableOTelSemantics.Spans.reducer,
+        ComposableOTelSemantics.Spans.effect,
+        ComposableOTelSemantics.Spans.dependency,
+        ComposableOTelSemantics.Spans.navigation,
+        ComposableOTelSemantics.Spans.unknown,
+        ComposableOTelSemantics.Events.effectStarted,
+        ComposableOTelSemantics.Events.effectCompleted,
+        ComposableOTelSemantics.Events.effectCancelled,
+        ComposableOTelSemantics.Events.exception,
+        ComposableOTelSemantics.Events.navigationChanged,
+      ])
+      .union(ComposableOTelSemantics.Metrics.all)
+    guard
+      spans.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
+      logs.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
+      counters.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
+      resources.allSatisfy({
+        $0.schema.requiredKeys.contains("deployment.environment.name")
+      })
+    else {
       throw TelemetryContractError.invalidDefinition
     }
 
@@ -958,6 +1004,9 @@ extension TelemetryClient {
     payload: Payload,
     operation: @escaping @Sendable () async throws -> Result
   ) async throws -> Result {
+    guard policy.signals.tracesEnabled else {
+      return try await operation()
+    }
     guard contracts.catalog.contains(definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition
     }
@@ -965,10 +1014,6 @@ extension TelemetryClient {
       for: payload,
       version: contracts.catalog.contractVersion
     )
-    guard policy.signals.tracesEnabled else {
-      return try await operation()
-    }
-
     return
       try await tracer
       .spanBuilder(spanName: definition.name.rawValue)
@@ -995,10 +1040,14 @@ extension TelemetryClient {
       }
   }
 
-  public func record<Payload: Sendable>(
-    _ definition: TelemetryLogDefinition<Payload>,
-    payload: Payload
-  ) throws {
+  public func withSynchronousSpan<Payload: Sendable, Result: Sendable>(
+    _ definition: TelemetrySpanDefinition<Payload>,
+    payload: Payload,
+    operation: @Sendable () throws -> Result
+  ) throws -> Result {
+    guard policy.signals.tracesEnabled else {
+      return try operation()
+    }
     guard contracts.catalog.contains(definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition
     }
@@ -1006,8 +1055,45 @@ extension TelemetryClient {
       for: payload,
       version: contracts.catalog.contractVersion
     )
-    guard policy.signals.logsEnabled else { return }
 
+    return
+      try tracer
+      .spanBuilder(spanName: definition.name.rawValue)
+      .setSpanKind(spanKind: .internal)
+      .setAttributes(attributes)
+      .withActiveSpan { span in
+        do {
+          let result = try operation()
+          span.status = .ok
+          return result
+        } catch {
+          if error is CancellationError {
+            span.status = .unset
+            span.addEvent(name: ComposableOTelSemantics.Events.effectCancelled)
+          } else {
+            span.status = .error(description: "Operation failed")
+            span.addEvent(
+              name: ComposableOTelSemantics.Events.exception,
+              attributes: telemetryErrorAttributes(for: error)
+            )
+          }
+          throw error
+        }
+      }
+  }
+
+  public func record<Payload: Sendable>(
+    _ definition: TelemetryLogDefinition<Payload>,
+    payload: Payload
+  ) throws {
+    guard policy.signals.logsEnabled else { return }
+    guard contracts.catalog.contains(definition.identity) else {
+      throw TelemetryContractError.unregisteredDefinition
+    }
+    let attributes = try definition.attributes(
+      for: payload,
+      version: contracts.catalog.contractVersion
+    )
     let builder = logger.logRecordBuilder()
       .setSeverity(definition.severity.otelSeverity)
       .setAttributes(attributes)
@@ -1023,6 +1109,7 @@ extension TelemetryClient {
     delta: TelemetryCounterDelta,
     payload: Payload
   ) throws {
+    guard policy.signals.metricsEnabled else { return }
     guard contracts.catalog.contains(definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition
     }
@@ -1030,7 +1117,6 @@ extension TelemetryClient {
       for: payload,
       version: contracts.catalog.contractVersion
     )
-    guard policy.signals.metricsEnabled else { return }
     guard var counter = contracts.counter(for: definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition
     }

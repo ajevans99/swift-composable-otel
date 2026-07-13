@@ -111,6 +111,25 @@ for file in graphFiles {
 }
 
 current.sort()
+let forbiddenPublicPaths = [
+  "TelemetryClient.unsafeCustomSDK",
+  "MetricInstruments",
+  "TelemetryPolicy.sanitized",
+  "PrivacyPreservingSpanExporter",
+  "PrivacyPreservingLogRecordExporter",
+  "PrivacyPreservingMetricExporter",
+  "ComposableOTelMetricConfiguration",
+]
+let forbiddenSymbols = current.filter { symbol in
+  forbiddenPublicPaths.contains { symbol.path.contains($0) }
+}
+if !forbiddenSymbols.isEmpty {
+  for symbol in forbiddenSymbols {
+    print("UNSAFE public API: [\(symbol.module)] \(symbol.path)")
+  }
+  exit(1)
+}
+
 let encoder = JSONEncoder()
 encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
 let baselineURL = URL(fileURLWithPath: baselinePath)

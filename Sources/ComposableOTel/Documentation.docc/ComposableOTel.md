@@ -51,7 +51,6 @@ exporter-boundary filtering and metric views.
 ### Runtime
 
 - ``TelemetryClient``
-- ``MetricInstruments``
 - ``ComposableOTelMetadata``
 - ``ComposableOTelSemantics``
 - ``TCAAttributes``

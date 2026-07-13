@@ -28,6 +28,12 @@ let runtime = try TelemetryRuntime(
 Inject `runtime.client` into TCA dependencies. The runtime keeps tracer, meter, logger, processors,
 readers, exporters, queues, persistence, and shutdown state private.
 
+Resource mode defaults to `.native(environment: .production)`, preserving
+service/environment/Darwin/OpenTelemetry
+SDK/distribution attributes. Use `.strict(resourceValue)` only for a registered resource definition;
+strict mode emits exactly its required keys plus integer contract version and rejects an environment
+mismatch before providers are created.
+
 All production endpoints must use HTTPS and include a host. Embedded URL credentials, query strings,
 and fragments are rejected before providers are built. The API intentionally has no static header
 dictionary. The authenticator is called immediately before every attempt and its output is never
@@ -62,16 +68,18 @@ still exceeds the ceiling, or an unmeasurable body stream, is dropped with bound
 
 HTTP 408, 425, 429, 502, 503, and 504 plus selected transient `URLError` values are retryable. Other
 responses, including 401 and 413, are non-retryable. `TelemetryRetryClassifyingError` lets host
-transports and authenticators classify their own errors. A numeric `Retry-After` represented by
-``TelemetryHTTPResponse/retryAfter`` replaces exponential backoff for that retry and is clamped to
+transports and authenticators classify their own errors. For 429 only, a numeric `Retry-After`
+represented by ``TelemetryHTTPResponse/retryAfter`` replaces exponential backoff and is clamped to
 the configured maximum. Exponential backoff is otherwise capped, jitter is bounded, task
 cancellation stops the attempt, and authorization is reacquired before every retry. A custom
 transport may invalidate host credentials when it observes 401 before returning that response.
 
 For a gateway capped at 64 KiB compressed/decoded bodies, 50 items, and a 5-second request, use the
 reviewed conservative profile: 25-item trace/log batches, a 64 KiB encoded ceiling, and a 5-second
-request timeout. Metric collections are not split by point count; prove each collection stays below
-both gateway limits or use a metrics route that accepts the bounded collection.
+request timeout. `maximumContractMetricPointsPerRequest` rejects registered counter catalogs whose
+declared maximum-series sum exceeds the configured cap and partitions encoded metric records by
+actual point count. It cannot split the points inside one `MetricData`; a single metric record above
+the cap is a bounded non-retryable drop with a `metricPointLimitExceeded` diagnostic.
 
 The package's OTLP exporters do not enable compression, so this ceiling applies to the decoded
 protobuf body. A custom transport that compresses the request must enforce its compressed-body limit

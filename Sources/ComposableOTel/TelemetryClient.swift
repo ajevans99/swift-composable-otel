@@ -4,10 +4,8 @@ import OpenTelemetryApi
 
 /// Reference-stable OpenTelemetry instruments for package-owned metrics.
 ///
-/// Applications normally receive this value from `ComposableOTelExporters`. The explicitly unsafe
-/// factory exists for custom SDK integrations, which must configure equivalent metric views and
-/// exporter-boundary policy enforcement.
-public final class MetricInstruments: @unchecked Sendable {
+/// Package-only SDK instrument wiring. Normal consumers record through ``TelemetryClient``.
+package final class MetricInstruments: @unchecked Sendable {
   let actionsDispatched: any LongCounter
   let effectsStarted: any LongCounter
   let effectsCompleted: any LongCounter
@@ -49,7 +47,7 @@ public final class MetricInstruments: @unchecked Sendable {
     self.activeEffects = activeEffects
   }
 
-  public static func unsafeCustomSDK(
+  package static func unsafeCustomSDK(
     actionsDispatched: any LongCounter,
     effectsStarted: any LongCounter,
     effectsCompleted: any LongCounter,
@@ -140,8 +138,7 @@ struct SendableLogger: @unchecked Sendable {
 /// The dependency-injected runtime for bounded ComposableOTel instrumentation.
 ///
 /// Use `TelemetryRuntime.client` for production or `TelemetryBootstrap.configure` for explicit
-/// development stdout. The ``unsafeCustomSDK(tracer:metrics:logger:policy:)`` factory is a trust
-/// boundary: callers using it must install privacy-preserving views/processors/exporters themselves.
+/// development stdout. Raw SDK construction is not part of the normal public product.
 public struct TelemetryClient: Sendable {
   let tracer: SendableTracer
   let metrics: MetricInstruments
@@ -169,7 +166,7 @@ public struct TelemetryClient: Sendable {
   /// - Warning: This bypasses the package-owned SDK boundary. Wrap every exporter with the privacy
   ///   wrappers from `ComposableOTelExporters`, configure package metric views, and provide only a
   ///   sanitized resource before using this client.
-  public static func unsafeCustomSDK(
+  package static func unsafeCustomSDK(
     tracer: any Tracer,
     metrics: MetricInstruments,
     logger: any Logger,

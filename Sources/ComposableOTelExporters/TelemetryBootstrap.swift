@@ -9,24 +9,37 @@ public enum TelemetryBootstrap {
   private final class State: @unchecked Sendable {
     private let lock = NSLock()
     private var client: TelemetryClient?
+    private var shutdown: (() -> Void)?
 
-    func configure(_ makeClient: () -> TelemetryClient) -> TelemetryClient {
+    func configure(
+      _ makeClient: () throws -> (client: TelemetryClient, shutdown: () -> Void)
+    ) rethrows -> TelemetryClient {
       lock.lock()
       defer { lock.unlock() }
       if let client {
         return client
       }
-      let client = makeClient()
+      let configured = try makeClient()
+      let client = configured.client
       self.client = client
+      shutdown = configured.shutdown
       return client
+    }
+
+    func resetForTesting() {
+      let shutdown = lock.withLock {
+        let shutdown = self.shutdown
+        client = nil
+        self.shutdown = nil
+        return shutdown
+      }
+      shutdown?()
     }
   }
 
   private static let state = State()
-
-  public enum Environment: Sendable {
-    /// Privacy-preserving stdout export with full trace sampling.
-    case debug
+  package static func resetForTesting() {
+    state.resetForTesting()
   }
 
   /// Configures development-only, bounded stdout telemetry once for the process.
@@ -38,18 +51,16 @@ public enum TelemetryBootstrap {
   public static func configure(
     serviceName: ServiceID,
     serviceVersion: ServiceVersionID? = nil,
-    environment: Environment = .debug,
     samplingRatio: Double? = nil,
-    resource: TelemetryResourceValue? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .development),
     policy: TelemetryPolicy = .init()
-  ) -> TelemetryClient {
-    state.configure {
-      makeClient(
+  ) throws -> TelemetryClient {
+    try state.configure {
+      try makeClient(
         serviceName: serviceName,
         serviceVersion: serviceVersion,
-        environment: environment,
         samplingRatio: samplingRatio,
-        resource: resource,
+        resourceMode: resourceMode,
         policy: policy
       )
     }
@@ -58,21 +69,14 @@ public enum TelemetryBootstrap {
   private static func makeClient(
     serviceName: ServiceID,
     serviceVersion: ServiceVersionID?,
-    environment: Environment,
     samplingRatio: Double?,
-    resource: TelemetryResourceValue?,
+    resourceMode: TelemetryResourceMode,
     policy: TelemetryPolicy
-  ) -> TelemetryClient {
-    let deploymentEnvironment =
-      switch environment {
-      case .debug:
-        TelemetryDeploymentEnvironment.development
-      }
-    let resource = makeResource(
+  ) throws -> (client: TelemetryClient, shutdown: () -> Void) {
+    let resource = try makeResource(
       serviceName: serviceName,
       serviceVersion: serviceVersion,
-      deploymentEnvironment: deploymentEnvironment,
-      resource: resource,
+      resourceMode: resourceMode,
       policy: policy
     )
 
@@ -171,7 +175,7 @@ public enum TelemetryBootstrap {
       .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
 
-    return TelemetryClient.packageSDK(
+    let client = TelemetryClient.packageSDK(
       tracer: tracer,
       metrics: ComposableOTelMetricConfiguration.makeInstruments(meter: meter),
       logger: logger,
@@ -179,15 +183,36 @@ public enum TelemetryBootstrap {
       contractCounters: contractCounters,
       contractProviderRetention: customMeterProvider
     )
+    return (
+      client,
+      {
+        tracerProvider.shutdown()
+        _ = meterProvider.shutdown()
+        _ = customMeterProvider?.shutdown()
+      }
+    )
   }
 
   package static func makeResource(
     serviceName: ServiceID,
     serviceVersion: ServiceVersionID?,
-    deploymentEnvironment: TelemetryDeploymentEnvironment,
-    resource: TelemetryResourceValue? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .production),
     policy: TelemetryPolicy
-  ) -> Resource {
+  ) throws -> Resource {
+    if case .strict(let resource) = resourceMode {
+      guard policy.catalog.contains(resource.identity) else {
+        throw TelemetryContractError.unregisteredDefinition
+      }
+      var attributes = resource.attributes
+      attributes[TelemetryContractCatalog.contractVersionKey] = .int(
+        policy.catalog.contractVersion.rawValue
+      )
+      return Resource(attributes: policy.sanitizedResourceAttributes(attributes))
+    }
+
+    guard case .native(let deploymentEnvironment) = resourceMode else {
+      preconditionFailure("unknown resource mode")
+    }
     var attributes: [String: AttributeValue] = [
       "service.name": .string(serviceName.rawValue),
       "deployment.environment.name": .string(deploymentEnvironment.rawValue),
@@ -198,12 +223,6 @@ public enum TelemetryBootstrap {
       ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
     if let resolvedVersion {
       attributes["service.version"] = .string(resolvedVersion)
-    }
-    if let resource, policy.catalog.contains(resource.identity) {
-      attributes.merge(resource.attributes) { _, new in new }
-      attributes[TelemetryContractCatalog.contractVersionKey] = .int(
-        policy.catalog.contractVersion.rawValue
-      )
     }
     return Resource(attributes: policy.sanitizedResourceAttributes(attributes))
   }

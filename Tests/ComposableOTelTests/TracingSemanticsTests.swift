@@ -110,7 +110,7 @@ struct TracingSemanticsTests {
   @Test("reducer span is the explicit parent of its traced effect")
   @MainActor
   func reducerEffectParent() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: CounterFeature.State()) {
       CounterFeature()
     } withDependencies: {
@@ -141,7 +141,7 @@ struct TracingSemanticsTests {
 
   @Test("effect context survives await and inherited child tasks")
   func taskLocalPropagation() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
 
     try await withDependencies {
       $0.composableOTel = client
@@ -186,7 +186,7 @@ struct TracingSemanticsTests {
 
   @Test("detached tasks require explicit dependency injection and do not inherit span context")
   func detachedTaskContextBoundary() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
 
     try await withDependencies {
       $0.composableOTel = client
@@ -219,7 +219,7 @@ struct TracingSemanticsTests {
 
   @Test("effect tracing records and rethrows failures")
   func errorRethrow() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     do {
       let _: Void = try await client.withEffectTrace(
         effect: "failure",
@@ -244,7 +244,7 @@ struct TracingSemanticsTests {
 
   @Test("effect tracing records and rethrows cancellation")
   func cancellationRethrow() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let task = Task {
       try await client.withEffectTrace(
         effect: "cancellation",
@@ -275,7 +275,7 @@ struct TracingSemanticsTests {
 
   @Test("handled or translated cancellation follows the operation result")
   func handledCancellation() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let recoveredTask = Task {
       try await client.withEffectTrace(
         effect: "recovered-cancellation",
@@ -335,7 +335,7 @@ struct TracingSemanticsTests {
   @Test("long-lived effects use one span and classify normal completion")
   @MainActor
   func longLivedCompletion() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: LifecycleFeature.State()) {
       LifecycleFeature()
     } withDependencies: {
@@ -361,7 +361,7 @@ struct TracingSemanticsTests {
   @Test("long-lived cancellation is not completion")
   @MainActor
   func longLivedCancellation() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: LifecycleFeature.State()) {
       LifecycleFeature()
     } withDependencies: {
@@ -383,7 +383,7 @@ struct TracingSemanticsTests {
   @Test("long-lived failures emit one error terminal outcome")
   func longLivedError() async throws {
     let metricReader = InMemoryMetricReader()
-    let (client, collectors) = TelemetryClient.test(
+    let (client, collectors) = try TelemetryClient.test(
       metricReader: metricReader,
       policy: testPolicy()
     )
@@ -419,7 +419,7 @@ struct TracingSemanticsTests {
   @Test("traceStart marker is parented to the reducer span")
   @MainActor
   func traceStartParentage() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: MarkerFeature.State()) {
       MarkerFeature()
     } withDependencies: {
@@ -446,7 +446,7 @@ struct TracingSemanticsTests {
   @Test("catch-to-action is opt-in and records the observed successful completion")
   @MainActor
   func catchToActionYieldsSuccess() async throws {
-    let (client, collectors) = TelemetryClient.test(policy: testPolicy())
+    let (client, collectors) = try TelemetryClient.test(policy: testPolicy())
     let store = TestStore(initialState: CatchFeature.State()) {
       CatchFeature()
     } withDependencies: {
@@ -469,7 +469,7 @@ struct TracingSemanticsTests {
   @Test("effect counters and active accounting are balanced exactly once")
   func balancedEffectMetrics() async throws {
     let metricReader = InMemoryMetricReader()
-    let (client, _) = TelemetryClient.test(
+    let (client, _) = try TelemetryClient.test(
       metricReader: metricReader,
       policy: testPolicy()
     )
@@ -530,12 +530,12 @@ struct TracingSemanticsTests {
   }
 
   @Test("test clients retain isolated cached loggers under concurrency")
-  func injectedLoggerIsolation() async {
+  func injectedLoggerIsolation() async throws {
     let policy = testPolicy(
       signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: true)
     )
-    let (firstClient, firstCollectors) = TelemetryClient.test(policy: policy)
-    let (secondClient, secondCollectors) = TelemetryClient.test(policy: policy)
+    let (firstClient, firstCollectors) = try TelemetryClient.test(policy: policy)
+    let (secondClient, secondCollectors) = try TelemetryClient.test(policy: policy)
 
     firstClient.recordNavigation(.push, route: "settings")
     secondClient.recordNavigation(.push, route: "settings")
@@ -551,7 +551,9 @@ struct TracingSemanticsTests {
   }
 
   @Test("bootstrap is atomic, idempotent, and unaffected by prior default-client access")
-  func concurrentBootstrap() async {
+  func concurrentBootstrap() async throws {
+    TelemetryBootstrap.resetForTesting()
+    defer { TelemetryBootstrap.resetForTesting() }
     let defaultClient = currentTelemetryClient()
     let globalTracerProvider = ObjectIdentifier(OpenTelemetry.instance.tracerProvider as AnyObject)
     let globalMeterProvider = ObjectIdentifier(OpenTelemetry.instance.meterProvider as AnyObject)
@@ -562,9 +564,8 @@ struct TracingSemanticsTests {
     ) { group in
       for index in 0..<32 {
         group.addTask {
-          TelemetryBootstrap.configure(
+          try! TelemetryBootstrap.configure(
             serviceName: ServiceID(validating: "bootstrap-\(index)")!,
-            environment: .debug,
             policy: testPolicy()
           )
         }
@@ -579,9 +580,8 @@ struct TracingSemanticsTests {
     let first = clients[0]
     #expect(defaultClient.metrics !== first.metrics)
     #expect(clients.allSatisfy { $0.metrics === first.metrics })
-    let repeated = TelemetryBootstrap.configure(
+    let repeated = try TelemetryBootstrap.configure(
       serviceName: "metadata-test",
-      environment: .debug,
       policy: testPolicy()
     )
     #expect(repeated.metrics === first.metrics)

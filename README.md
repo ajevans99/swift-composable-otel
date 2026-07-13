@@ -101,9 +101,12 @@ attribute dictionaries, and raw SDK handles are not exposed. Counter dimensions 
 declared cardinality.
 
 `TelemetryRuntime.Configuration` accepts a finite `TelemetryDeploymentEnvironment`
-(`development`, `test`, `staging`, or `production`) and an immutable schema-matched
-`TelemetryResourceValue`. Extra keys, wrong scalar types, and a resource from another catalog are
-rejected before providers are created.
+(`development`, `test`, `staging`, or `production`) through `TelemetryResourceMode`. `.native`
+preserves
+the existing service, environment, Darwin, OpenTelemetry SDK, and package distribution attributes.
+`.strict(resourceValue)` emits only the registered required keys plus contract version. Extra keys,
+wrong scalar types, optional strict keys, a mismatched environment, and a resource from another
+catalog are rejected before providers are created.
 
 Registered bodyless logs preserve EventName, severity, `body == nil`, and typed fields. The supported
 OpenTelemetry Swift log model has no severity-text field, so exact empty `severity_text` remains an
@@ -114,10 +117,9 @@ upstream limitation; this package does not add a raw OTLP bypass.
 The explicit debug bootstrap writes privacy-filtered telemetry to stdout:
 
 ```swift
-let telemetry = TelemetryBootstrap.configure(
+let telemetry = try TelemetryBootstrap.configure(
   serviceName: "example-app",
   serviceVersion: "1.2.3",
-  environment: .debug,
   policy: policy
 )
 
@@ -212,6 +214,9 @@ capped at 64 KiB, 50 signal items, and 5 seconds, the reviewed conservative prof
 trace/log batches, a 64 KiB encoded ceiling, and a 5-second request timeout. Metric arrays are split
 by `MetricData`; one metric containing too many points remains a single-record limit that the pilot
 must prove or route elsewhere.
+
+`maximumContractMetricPointsPerRequest` defaults to 50. Runtime creation rejects a registered custom
+counter catalog whose declared maximum-series sum exceeds that independent point cap.
 
 The package's official OTLP exporters do not enable compression, so the encoded ceiling bounds the
 decoded protobuf body. A custom transport that adds compression remains responsible for enforcing
@@ -385,13 +390,10 @@ The production runtime performs the same filtering before its span/log queues, a
 before collection, and sanitizes every signal again before OTLP encoding, persistence, and network
 delivery.
 
-The package no longer exposes arbitrary `info`, `error`, raw body, raw attribute, tracer, logger, or
-meter convenience APIs. `TelemetryClient.unsafeCustomSDK` and
-`MetricInstruments.unsafeCustomSDK` are intentionally named trust boundaries. A custom SDK,
-processor, reader, or exporter can bypass package enforcement unless it uses
-`PrivacyPreservingSpanExporter`, `PrivacyPreservingLogRecordExporter`,
-`PrivacyPreservingMetricExporter`, `ComposableOTelMetricConfiguration`, and a resource sanitized
-by the same `TelemetryPolicy`.
+The normal package products do not expose arbitrary `info`, `error`, raw body, raw attribute,
+tracer, logger, meter, sanitizer, processor, view, or exporter factories. Cross-target SDK wiring is
+Swift `package` implementation detail and is checked by symbol-graph plus expected-failure compile
+gates. Applications that integrate OpenTelemetry directly own that separate SDK trust boundary.
 
 The package does not offer a raw-payload development mode. Applications that create raw
 OpenTelemetry data directly own its classification, consent, redaction, retention, and exporter
@@ -420,14 +422,14 @@ process globals, so unrelated SDK traffic is not rewritten or dropped by this pa
 | `TelemetryRuntime` | validated OTLP/HTTP over TLS | `0.1` | 60 seconds |
 
 The removed `.production(endpoint:headers:)` bootstrap placeholder never sent remotely and has no
-direct replacement. Migrate production composition to `TelemetryRuntime`; keep `.debug` only for
-explicit local stdout inspection.
+direct replacement. Migrate production composition to `TelemetryRuntime`; use
+`TelemetryBootstrap.configure` only for explicit local stdout inspection.
 
 ## Testing
 
 ```swift
 let reader = InMemoryMetricReader()
-let (telemetry, collectors) = TelemetryClient.test(
+let (telemetry, collectors) = try TelemetryClient.test(
   metricReader: reader,
   policy: policy
 )
@@ -467,7 +469,7 @@ See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
 
 The unreleased package quality layer includes:
 
-- 82 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- 83 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;

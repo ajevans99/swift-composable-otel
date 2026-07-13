@@ -9,9 +9,7 @@ that tag or release.
 
 ## Dependency baseline
 
-These gates are layered on `main` with terminal-discard commit
-`038f26e69ff876c531172679e4463a5df1977921`. They must not be presented as consent-revocation
-acceptance against the earlier runtime head `7814d29`.
+These gates are layered on `main` after the terminal `disableAndDiscardPending()` lifecycle API.
 
 ## Quality and runtime evidence
 
@@ -26,6 +24,9 @@ acceptance against the earlier runtime head `7814d29`.
   numeric `Retry-After`, and explicit 401/413 terminal handling.
 - Typed bootstrap-registered custom spans, bodyless EventName logs, delta counters, exact resources,
   conditional-field enforcement, and decoded/no-network testing captures.
+- Explicit native-versus-strict resource mode and a 50-point default custom metric collection cap.
+- Opaque catalog registration, native-name reservations, one resource-environment source,
+  sync/async no-op preservation, and actual metric point partitioning/drop diagnostics.
 
 ## Operations and migration
 

@@ -19,17 +19,20 @@ raise SystemExit("No available iPhone simulator")
 '
 )"
 
-derived_data_arguments=()
+arguments=(
+  -quiet
+  -skipMacroValidation
+  -scheme swift-composable-otel-Package
+  -destination "platform=iOS Simulator,id=$destination_id"
+  -parallel-testing-enabled NO
+)
 if [[ -n "${DERIVED_DATA_PATH:-}" ]]; then
-  derived_data_arguments=(-derivedDataPath "$DERIVED_DATA_PATH")
+  arguments+=(-derivedDataPath "$DERIVED_DATA_PATH")
 fi
-
-xcodebuild \
-  -quiet \
-  -skipMacroValidation \
-  -scheme swift-composable-otel-Package \
-  -destination "platform=iOS Simulator,id=$destination_id" \
-  "${derived_data_arguments[@]}" \
-  -configuration Debug \
-  CODE_SIGNING_ALLOWED=NO \
+arguments+=(
+  -configuration Debug
+  CODE_SIGNING_ALLOWED=NO
   test
+)
+
+xcodebuild "${arguments[@]}"

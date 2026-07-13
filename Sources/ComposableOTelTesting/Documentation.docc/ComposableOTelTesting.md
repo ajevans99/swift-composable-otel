@@ -5,7 +5,7 @@ Inspect bounded ComposableOTel signals with isolated in-memory collectors.
 ## Overview
 
 Use
-``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:deploymentEnvironment:resource:policy:)``
+``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:resourceMode:policy:)``
 with the same policy as the
 application. Test clients install the production span/log privacy wrappers and package metric
 views, own local providers, and never replace process-global OpenTelemetry providers.
@@ -21,7 +21,7 @@ exposing production credentials or performing network I/O.
 
 ### Test client
 
-- ``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:deploymentEnvironment:resource:policy:)``
+- ``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:resourceMode:policy:)``
 - ``TestCollectors``
 
 ### Collectors

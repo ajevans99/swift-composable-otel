@@ -15,8 +15,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var endpoints: OTLPEndpoints
     public var samplingRatio: Double
     public var policy: TelemetryPolicy
-    public var deploymentEnvironment: TelemetryDeploymentEnvironment
-    public var resource: TelemetryResourceValue?
+    public var resourceMode: TelemetryResourceMode
     public var traces: TelemetryBatchConfiguration
     public var logs: TelemetryBatchConfiguration
     public var metricExportInterval: Duration
@@ -31,8 +30,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       endpoints: OTLPEndpoints,
       samplingRatio: Double = 0.1,
       policy: TelemetryPolicy = .init(),
-      deploymentEnvironment: TelemetryDeploymentEnvironment = .production,
-      resource: TelemetryResourceValue? = nil,
+      resourceMode: TelemetryResourceMode = .native(environment: .production),
       traces: TelemetryBatchConfiguration = .init(),
       logs: TelemetryBatchConfiguration = .init(),
       metricExportInterval: Duration = .seconds(60),
@@ -46,8 +44,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.endpoints = endpoints
       self.samplingRatio = samplingRatio
       self.policy = policy
-      self.deploymentEnvironment = deploymentEnvironment
-      self.resource = resource
+      self.resourceMode = resourceMode
       self.traces = traces
       self.logs = logs
       self.metricExportInterval = metricExportInterval
@@ -184,11 +181,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
     self.logQueue = logQueue
     let logProcessor = RuntimeLogRecordProcessor(queue: logQueue, boundary: boundary)
 
-    let resource = TelemetryBootstrap.makeResource(
+    let resource = try TelemetryBootstrap.makeResource(
       serviceName: configuration.serviceName,
       serviceVersion: configuration.serviceVersion,
-      deploymentEnvironment: configuration.deploymentEnvironment,
-      resource: configuration.resource,
+      resourceMode: configuration.resourceMode,
       policy: configuration.policy
     )
     let sampler = Samplers.parentBased(
@@ -231,6 +227,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
       let customRawExporter = RuntimeByteBoundedMetricExporter(
         endpoint: configuration.endpoints.metrics,
         maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
+        maximumPointsPerRequest: configuration.delivery.maximumContractMetricPointsPerRequest,
+        diagnostics: diagnosticsState,
         deliveryClient: customHTTPClient
       )
       let customMetricExporter = PrivacyPreservingMetricExporter(
@@ -534,6 +532,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let retry = delivery.retry
     guard delivery.maximumPendingBatches > 0,
       delivery.maximumEncodedRequestBytes > 0,
+      delivery.maximumContractMetricPointsPerRequest > 0,
       valid(duration: delivery.requestTimeout),
       retry.maximumAttempts > 0,
       valid(duration: retry.initialBackoff),
@@ -547,6 +546,15 @@ public final class TelemetryRuntime: @unchecked Sendable {
     else {
       throw TelemetryRuntimeConfigurationError.invalidDeliveryLimits
     }
+    let maximumContractPoints = configuration.policy.catalog.counters.values.reduce(0) {
+      partial,
+      schema in
+      let added = partial.addingReportingOverflow(schema.maximumSeries ?? 0)
+      return added.overflow ? Int.max : added.partialValue
+    }
+    guard maximumContractPoints <= delivery.maximumContractMetricPointsPerRequest else {
+      throw TelemetryRuntimeConfigurationError.invalidDeliveryLimits
+    }
 
     if let persistence = configuration.persistence {
       guard persistence.directory.isFileURL,
@@ -556,10 +564,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
         throw TelemetryRuntimeConfigurationError.invalidPersistenceLimits
       }
     }
-    if let resource = configuration.resource,
-      !configuration.policy.catalog.contains(resource.identity)
-    {
-      throw TelemetryRuntimeConfigurationError.invalidResourceContract
+    if case .strict(let resource) = configuration.resourceMode {
+      guard configuration.policy.catalog.contains(resource.identity) else {
+        throw TelemetryRuntimeConfigurationError.invalidResourceContract
+      }
     }
   }
 

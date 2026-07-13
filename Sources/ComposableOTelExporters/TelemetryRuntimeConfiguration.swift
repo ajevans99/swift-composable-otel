@@ -75,6 +75,8 @@ public struct TelemetryDeliveryConfiguration: Sendable {
   public var maximumPendingBatches: Int
   /// Maximum encoded OTLP body accepted into memory or persistence.
   public var maximumEncodedRequestBytes: Int
+  /// Maximum total points declared by registered custom counters in one collection.
+  public var maximumContractMetricPointsPerRequest: Int
   public var requestTimeout: Duration
   public var retry: Retry
   public var overflowPolicy: TelemetryOverflowPolicy
@@ -82,12 +84,14 @@ public struct TelemetryDeliveryConfiguration: Sendable {
   public init(
     maximumPendingBatches: Int = 256,
     maximumEncodedRequestBytes: Int = 64 * 1_024,
+    maximumContractMetricPointsPerRequest: Int = 50,
     requestTimeout: Duration = .seconds(10),
     retry: Retry = .init(),
     overflowPolicy: TelemetryOverflowPolicy = .dropOldest
   ) {
     self.maximumPendingBatches = maximumPendingBatches
     self.maximumEncodedRequestBytes = maximumEncodedRequestBytes
+    self.maximumContractMetricPointsPerRequest = maximumContractMetricPointsPerRequest
     self.requestTimeout = requestTimeout
     self.retry = retry
     self.overflowPolicy = overflowPolicy

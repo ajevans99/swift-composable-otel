@@ -111,6 +111,13 @@ text. Registered definitions can guarantee EventName, severity, nil/fixed body, 
 contract version, but cannot guarantee an explicitly empty `severity_text`. A release contract that
 requires that exact field remains unsupported until the upstream model/encoder adds it.
 
+## Public SDK boundary
+
+Normal products intentionally omit raw SDK client/instrument factories, dictionary sanitizer
+methods, privacy exporter wrappers, and metric-view builders. Swift package-access hooks support
+internal exporter/testing targets. CI checks the public symbol graph and compiles a negative consumer
+fixture that must fail when referencing those implementation symbols.
+
 ## `Package.resolved`
 
 The repository intentionally does not commit a root `Package.resolved`. This is a library package,

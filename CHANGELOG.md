@@ -36,6 +36,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   plus bounded numeric `Retry-After` response metadata.
 - An immutable typed external contract catalog for exact custom spans, bodyless EventName logs,
   monotonic delta counters, conditional fields, and schema-matched resources.
+- Separate native and strict resource modes plus an independent registered custom-metric point cap.
 - Current iOS simulator testing plus migration, privacy, security, operations, pilot-evidence, and
   explicit 1.0 go/no-go guidance.
 - An idempotent consent-revocation operation that skips flush, cancels delivery, permanently stops
@@ -67,10 +68,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Production composition now uses an owned `TelemetryRuntime`; `TelemetryBootstrap` is an explicit
   development-only stdout helper.
 - Reducer duration is measured once and reused across its span, metric, and log.
-- HTTP 401 and 413 are explicitly terminal, while retryable responses honor host-parsed numeric
-  `Retry-After` up to the configured maximum backoff.
+- HTTP 401 and 413 are explicitly terminal, while 429 honors host-parsed numeric `Retry-After` up to
+  the configured maximum backoff.
 - Production resource environments are now a finite typed value instead of a hardcoded production
-  label; the default remains production for source compatibility.
+  label and have one source in native or strict resource mode; the runtime default remains
+  production.
+- Caught errors remain successful native/custom operations unless the host explicitly records a
+  registered typed handled-error log.
+- Catalog membership now uses opaque registration identities, custom definitions reject native
+  signal names, disabled clients preserve sync/async operation semantics, and metric exporters
+  enforce actual point counts in addition to catalog series bounds.
+- Bootstrap and test-client creation now throw when a strict resource value is not registered,
+  before any provider is created.
 
 ### Migration
 
@@ -92,6 +101,8 @@ The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md).
 - The deprecated global `configureTestTelemetry` helper and marker-only `.traced()` spelling.
 - The unused `.production(endpoint:headers:)` stdout bootstrap placeholder. Production callers
   migrate to `TelemetryRuntime` with a host transport and short-lived request authenticator.
+- Public raw SDK client/instrument factories, dictionary sanitizer methods, privacy exporter
+  wrappers, and metric view configuration from normal products. Cross-target wiring is package-only.
 
 ### Security
 

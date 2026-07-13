@@ -4,7 +4,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Sanitizes span names, resources, attributes, events, links, and status before export.
-public final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Sendable {
+package final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Sendable {
   private let exporter: any SpanExporter
   private let boundary: TelemetryPrivacyBoundary
 
@@ -66,7 +66,7 @@ public final class PrivacyPreservingSpanExporter: SpanExporter, @unchecked Senda
 }
 
 /// Rebuilds log records from allowlisted bodies, resources, attributes, and event names.
-public final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unchecked Sendable {
+package final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unchecked Sendable {
   private let exporter: any LogRecordExporter
   private let boundary: TelemetryPrivacyBoundary
 
@@ -126,7 +126,7 @@ public final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unche
 }
 
 /// Drops unknown instruments and sanitizes package metric dimensions immediately before export.
-public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked Sendable {
+package final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked Sendable {
   private let exporter: any MetricExporter
   private let boundary: TelemetryPrivacyBoundary
 

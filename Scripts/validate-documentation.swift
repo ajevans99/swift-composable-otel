@@ -187,8 +187,8 @@ where ([repositoryRoot.appendingPathComponent("README.md")] + documentationMarkd
 for requiredPrivacyClaim in [
   "logs are disabled by default",
   "deterministically aggregate to",
-  "PrivacyPreservingSpanExporter",
-  "unsafeCustomSDK",
+  "`TelemetryContractCatalog`",
+  "Swift `package` implementation detail",
   "watchOS | Unsupported",
   "best-effort",
   "short-lived",
@@ -276,7 +276,7 @@ for requiredRuntimeBoundary in [
   "OtlpHttpTraceExporter",
   "OtlpHttpMetricExporter",
   "OtlpHttpLogExporter",
-  "deploymentEnvironment: configuration.deploymentEnvironment",
+  "resourceMode: configuration.resourceMode",
   "public func disableAndDiscardPending()",
   "delivery.maximumEncodedRequestBytes > 0",
 ] where !runtimeBoundary.contains(requiredRuntimeBoundary) {

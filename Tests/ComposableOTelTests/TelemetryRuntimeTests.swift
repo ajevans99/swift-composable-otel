@@ -549,6 +549,33 @@ struct TelemetryRuntimeTests {
       #expect(await transport.requestCount == 2)
       #expect(diagnostics.snapshot().traces.retryableFailures == 1)
       #expect(diagnostics.snapshot().traces.successes == 1)
+
+      let fallbackClock = TestRuntimeClock()
+      let fallbackTransport = ScriptedTransport([
+        .response(.init(statusCode: 503, retryAfter: .seconds(120))),
+        .status(202),
+      ])
+      let fallbackEngine = makeDeliveryEngine(
+        clock: fallbackClock,
+        transport: fallbackTransport.transport,
+        delivery: .init(
+          requestTimeout: .seconds(20),
+          retry: .init(
+            maximumAttempts: 2,
+            initialBackoff: .seconds(2),
+            maximumBackoff: .seconds(30),
+            jitterRatio: 0
+          )
+        )
+      )
+      await fallbackEngine.start()
+      #expect(await fallbackEngine.enqueue(request: testRequest(), signal: .logs))
+      try await eventually("503 used exponential fallback instead of Retry-After") {
+        fallbackClock.pendingDurations.contains(.seconds(2))
+      }
+      fallbackClock.advance(by: .seconds(2))
+      try await eventually { await fallbackEngine.pendingBySignal()[.logs] == 0 }
+      #expect(await fallbackTransport.requestCount == 2)
     }
 
     @Test("401 and 413 are non-retryable and later requests can refresh auth")
@@ -599,6 +626,22 @@ struct TelemetryRuntimeTests {
       }
       #expect(await rejectionTransport.requestCount == 1)
       #expect(rejectionDiagnostics.snapshot().logs.droppedItems == 1)
+
+      let forbiddenClock = TestRuntimeClock()
+      let forbiddenTransport = ScriptedTransport([.status(403)])
+      let forbiddenDiagnostics = RuntimeDiagnosticsState(handler: nil)
+      let forbiddenEngine = makeDeliveryEngine(
+        clock: forbiddenClock,
+        transport: forbiddenTransport.transport,
+        delivery: .init(retry: .init(maximumAttempts: 3)),
+        diagnostics: forbiddenDiagnostics
+      )
+      await forbiddenEngine.start()
+      #expect(await forbiddenEngine.enqueue(request: testRequest(), signal: .metrics))
+      try await eventually("403 was classified without retry") {
+        forbiddenDiagnostics.snapshot().metrics.nonRetryableFailures == 1
+      }
+      #expect(await forbiddenTransport.requestCount == 1)
     }
 
     @Test("worst-case bounded span batch fits conservative gateway limits")

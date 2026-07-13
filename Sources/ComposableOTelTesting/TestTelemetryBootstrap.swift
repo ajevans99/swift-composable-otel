@@ -4,7 +4,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// In-memory collectors returned by
-/// ``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:deploymentEnvironment:resource:policy:)``.
+/// ``ComposableOTel/TelemetryClient/test(metricReader:contractMetricReader:resourceMode:policy:)``.
 public struct TestCollectors: @unchecked Sendable {
   public let spans: InMemorySpanCollector
   public let logs: InMemoryLogCollector
@@ -46,15 +46,13 @@ extension TelemetryClient {
   public static func test(
     metricReader: InMemoryMetricReader? = nil,
     contractMetricReader: InMemoryMetricReader? = nil,
-    deploymentEnvironment: TelemetryDeploymentEnvironment = .test,
-    resource: TelemetryResourceValue? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .test),
     policy: TelemetryPolicy = .init()
-  ) -> (client: TelemetryClient, collectors: TestCollectors) {
-    let resource = TelemetryBootstrap.makeResource(
+  ) throws -> (client: TelemetryClient, collectors: TestCollectors) {
+    let resource = try TelemetryBootstrap.makeResource(
       serviceName: "test-suite",
       serviceVersion: nil,
-      deploymentEnvironment: deploymentEnvironment,
-      resource: resource,
+      resourceMode: resourceMode,
       policy: policy
     )
 

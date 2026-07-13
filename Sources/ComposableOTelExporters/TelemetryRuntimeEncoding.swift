@@ -3,6 +3,38 @@ import OpenTelemetryApi
 import OpenTelemetryProtocolExporterHttp
 import OpenTelemetrySdk
 
+func runtimePointBoundedBatches<Element>(
+  _ elements: [Element],
+  maximumPoints: Int?,
+  pointCount: (Element) -> Int
+) -> (batches: [[Element]], droppedPoints: Int) {
+  guard let maximumPoints else {
+    return (elements.isEmpty ? [] : [elements], 0)
+  }
+  var batches = [[Element]]()
+  var current = [Element]()
+  var currentPointCount = 0
+  var droppedPoints = 0
+  for element in elements {
+    let count = pointCount(element)
+    if count > maximumPoints {
+      droppedPoints += count
+      continue
+    }
+    if !current.isEmpty, currentPointCount + count > maximumPoints {
+      batches.append(current)
+      current.removeAll(keepingCapacity: true)
+      currentPointCount = 0
+    }
+    current.append(element)
+    currentPointCount += count
+  }
+  if !current.isEmpty {
+    batches.append(current)
+  }
+  return (batches, droppedPoints)
+}
+
 private final class RuntimeRequestCaptureHTTPClient: HTTPClient, @unchecked Sendable {
   private let lock = NSLock()
   private var request: URLRequest?
@@ -180,13 +212,19 @@ final class RuntimeByteBoundedMetricExporter: MetricExporter, @unchecked Sendabl
   private let capture = RuntimeRequestCaptureHTTPClient()
   private let exporter: OtlpHttpMetricExporter
   private let dispatcher: RuntimeEncodedRequestDispatcher<MetricData>
+  private let maximumPointsPerRequest: Int?
+  private let diagnostics: RuntimeDiagnosticsState?
   private let encodingLock = NSLock()
 
   init(
     endpoint: URL,
     maximumEncodedRequestBytes: Int,
+    maximumPointsPerRequest: Int? = nil,
+    diagnostics: RuntimeDiagnosticsState? = nil,
     deliveryClient: RuntimeOTLPHTTPClient
   ) {
+    self.maximumPointsPerRequest = maximumPointsPerRequest
+    self.diagnostics = diagnostics
     exporter = OtlpHttpMetricExporter(
       endpoint: endpoint,
       httpClient: capture,
@@ -200,12 +238,26 @@ final class RuntimeByteBoundedMetricExporter: MetricExporter, @unchecked Sendabl
 
   func export(metrics: [MetricData]) -> ExportResult {
     encodingLock.withLock {
-      dispatcher.dispatch(metrics) { subset in
-        let (_, request) = capture.capture {
-          exporter.export(metrics: subset)
+      let bounded = runtimePointBoundedBatches(
+        metrics,
+        maximumPoints: maximumPointsPerRequest,
+        pointCount: { $0.data.points.count }
+      )
+      if bounded.droppedPoints > 0 {
+        diagnostics?.recordMetricPointLimitExceeded(count: bounded.droppedPoints)
+      }
+
+      var succeeded = bounded.droppedPoints == 0
+      for batch in bounded.batches {
+        let dispatched = dispatcher.dispatch(batch) { subset in
+          let (_, request) = capture.capture {
+            exporter.export(metrics: subset)
+          }
+          return request
         }
-        return request
-      } ? .success : .failure
+        succeeded = dispatched && succeeded
+      }
+      return succeeded ? .success : .failure
     }
   }
 

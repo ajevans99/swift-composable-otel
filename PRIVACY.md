@@ -23,6 +23,10 @@ conditional combinations, body policy, severity, unit, contract version, and cou
 fixed at bootstrap. Recording takes typed payloads only. Exporters rebuild registered signals and
 drop raw SDK attempts with extra keys, wrong types, invalid combinations, or an incorrect version.
 
+Native resource mode preserves the package's established SDK/distribution metadata. Strict resource
+mode is opt-in and emits only one registered exact required key set plus integer contract version;
+it never silently mixes native metadata into the strict contract.
+
 Action and navigation logs are disabled by default. Signal controls are independent, and trace
 sampling does not disable metrics or logs.
 
@@ -33,9 +37,9 @@ gateway access, retention, deletion, regional routing, and incident response. A 
 by the identifier grammar does not make it non-sensitive; only pre-reviewed schema constants belong
 in production.
 
-`TelemetryClient.unsafeCustomSDK` and `MetricInstruments.unsafeCustomSDK` are explicit trust
-boundaries. Custom SDK processors, readers, or exporters can bypass package enforcement unless the
-host installs equivalent privacy wrappers, metric views, and resource filtering.
+Raw SDK client/instrument factories, dictionary sanitizers, privacy processors, and metric-view
+builders are not public in normal products. They use Swift `package` access for exporter/testing
+wiring. A host that integrates OpenTelemetry directly is outside this package's enforcement.
 
 ## Consent revocation and opt-out
 

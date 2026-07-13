@@ -30,7 +30,7 @@ public struct TelemetryPolicy: Sendable {
     )
   }
 
-  public func sanitizedSpanName(_ name: String) -> String {
+  package func sanitizedSpanName(_ name: String) -> String {
     switch name {
     case ComposableOTelSemantics.Spans.reducer,
       ComposableOTelSemantics.Spans.effect,
@@ -42,7 +42,7 @@ public struct TelemetryPolicy: Sendable {
     }
   }
 
-  public func sanitizedEventName(_ name: String) -> String? {
+  package func sanitizedEventName(_ name: String) -> String? {
     switch name {
     case ComposableOTelSemantics.Events.effectStarted,
       ComposableOTelSemantics.Events.effectCompleted,
@@ -55,7 +55,7 @@ public struct TelemetryPolicy: Sendable {
     }
   }
 
-  public func sanitizedLogBody(_ body: AttributeValue?) -> AttributeValue {
+  package func sanitizedLogBody(_ body: AttributeValue?) -> AttributeValue {
     guard case .string(let body) = body else {
       return .string(ComposableOTelSemantics.LogBodies.unknown)
     }
@@ -70,19 +70,19 @@ public struct TelemetryPolicy: Sendable {
     }
   }
 
-  public func sanitizedSpanAttributes(
+  package func sanitizedSpanAttributes(
     _ attributes: [String: AttributeValue]
   ) -> [String: AttributeValue] {
     sanitizedAttributes(attributes)
   }
 
-  public func sanitizedLogAttributes(
+  package func sanitizedLogAttributes(
     _ attributes: [String: AttributeValue]
   ) -> [String: AttributeValue] {
     sanitizedAttributes(attributes)
   }
 
-  public func sanitizedMetricAttributes(
+  package func sanitizedMetricAttributes(
     _ attributes: [String: AttributeValue],
     instrumentName: String
   ) -> [String: AttributeValue] {
@@ -90,9 +90,23 @@ public struct TelemetryPolicy: Sendable {
     return sanitizedAttributes(attributes.filter { allowedKeys.contains($0.key) })
   }
 
-  public func sanitizedResourceAttributes(
+  package func sanitizedResourceAttributes(
     _ attributes: [String: AttributeValue]
   ) -> [String: AttributeValue] {
+    if attributes[TelemetryContractCatalog.contractVersionKey] != nil {
+      guard
+        let resourceSchema = catalog.resources.values.first,
+        Set(attributes.keys) == resourceSchema.fieldKeys,
+        let sanitized = resourceSchema.sanitizedAttributes(
+          attributes,
+          version: catalog.contractVersion
+        )
+      else {
+        return [:]
+      }
+      return sanitized
+    }
+
     var result: [String: AttributeValue] = [
       "telemetry.sdk.name": .string("opentelemetry"),
       "telemetry.sdk.language": .string("swift"),
@@ -123,15 +137,6 @@ public struct TelemetryPolicy: Sendable {
     }
     if attributes["os.type"] == .string("darwin") {
       result["os.type"] = .string("darwin")
-    }
-    if let resourceSchema = catalog.resources.values.first {
-      let custom = attributes.filter { resourceSchema.fieldKeys.contains($0.key) }
-      if let sanitized = resourceSchema.sanitizedAttributes(
-        custom,
-        version: catalog.contractVersion
-      ) {
-        result.merge(sanitized) { _, new in new }
-      }
     }
     return result
   }

@@ -16,6 +16,7 @@ public struct TelemetryRuntimeDiagnosticEvent: Sendable {
     case discardCompleted
     case discardFailed
     case encodedRequestTooLarge
+    case metricPointLimitExceeded
   }
 
   public let kind: Kind
@@ -186,6 +187,13 @@ final class RuntimeDiagnosticsState: @unchecked Sendable {
       signals[signal]?.oversizedRequests += 1
     }
     emitter.emit(.init(kind: .encodedRequestTooLarge, signal: signal))
+  }
+
+  func recordMetricPointLimitExceeded(count: Int) {
+    lock.withLock {
+      signals[.metrics]?.droppedItems += count
+    }
+    emitter.emit(.init(kind: .metricPointLimitExceeded, signal: .metrics, value: count))
   }
 
   func setPersistence(items: Int, bytes: Int) {

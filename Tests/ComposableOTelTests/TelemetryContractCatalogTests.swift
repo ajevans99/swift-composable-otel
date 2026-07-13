@@ -25,7 +25,7 @@ private struct ContractResourcePayload: Sendable {
   let deviceClass: TelemetryEnumValue
   let distribution: TelemetryEnumValue
   let commit: TelemetryStringValue
-  let serviceTier: TelemetryEnumValue
+  let environment: TelemetryEnumValue
 }
 
 private struct ContractFixture {
@@ -132,7 +132,7 @@ private struct ContractFixture {
     let deviceKey = try TelemetryFieldKey("device.class")
     let distributionKey = try TelemetryFieldKey("app.distribution")
     let commitKey = try TelemetryFieldKey("app.commit")
-    let tierKey = try TelemetryFieldKey("service.tier")
+    let environmentKey = try TelemetryFieldKey("deployment.environment.name")
     let resource = try TelemetryResourceDefinition<ContractResourcePayload>(
       name: .init("contract.resource"),
       fields: [
@@ -155,9 +155,12 @@ private struct ContractFixture {
         ) { $0.distribution },
         try .string(commitKey) { $0.commit },
         try .enumeration(
-          tierKey,
-          allowedValues: [try .init("free"), try .init("paid")]
-        ) { $0.serviceTier },
+          environmentKey,
+          allowedValues: [
+            try .init("development"), try .init("test"), try .init("staging"),
+            try .init("production"),
+          ]
+        ) { $0.environment },
       ]
     )
     let resourceValue = try resource.makeValue(
@@ -169,7 +172,7 @@ private struct ContractFixture {
         deviceClass: .init("phone"),
         distribution: .init("internal"),
         commit: .init("abcdef1"),
-        serviceTier: .init("paid")
+        environment: .init("staging")
       )
     )
     let catalog = try TelemetryContractCatalog(
@@ -218,12 +221,12 @@ private struct ContractFixture {
 @Suite("Typed external contract catalog", .serialized)
 struct TelemetryContractCatalogTests {
   @Test("supports only the finite deployment environment enum")
-  func deploymentEnvironments() {
+  func deploymentEnvironments() throws {
     for environment in TelemetryDeploymentEnvironment.allCases {
-      let resource = TelemetryBootstrap.makeResource(
+      let resource = try TelemetryBootstrap.makeResource(
         serviceName: "test-suite",
         serviceVersion: nil,
-        deploymentEnvironment: environment,
+        resourceMode: .native(environment: environment),
         policy: testPolicy()
       )
       #expect(
@@ -233,12 +236,141 @@ struct TelemetryContractCatalogTests {
     }
   }
 
+  @Test("strict resources require one bounded deployment environment")
+  func strictResourceEnvironment() throws {
+    struct ResourcePayload: Sendable {
+      let environment: TelemetryStringValue
+    }
+    let environmentKey = try TelemetryFieldKey("deployment.environment.name")
+    let resource = try TelemetryResourceDefinition<ResourcePayload>(
+      name: .init("contract.environment"),
+      fields: [
+        try .string(environmentKey) { $0.environment }
+      ]
+    )
+
+    #expect(
+      throws: TelemetryContractError.invalidPayload(field: environmentKey)
+    ) {
+      _ = try resource.makeValue(.init(environment: .init("qa")))
+    }
+
+    let missingEnvironment = try TelemetryResourceDefinition<Void>(
+      name: .init("contract.missing-environment"),
+      fields: []
+    )
+    #expect(throws: TelemetryContractError.invalidDefinition) {
+      _ = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        resources: [.init(missingEnvironment)]
+      )
+    }
+  }
+
+  @Test("registration identity cannot be reconstructed from an identical definition")
+  func canonicalRegistrationIdentity() async throws {
+    let registered = try ContractFixture.make()
+    let reconstructed = try ContractFixture.make()
+    let (client, _) = try TelemetryClient.test(policy: registered.policy)
+    let payload = try reconstructed.payload()
+
+    await #expect(throws: TelemetryContractError.unregisteredDefinition) {
+      try await client.withSpan(reconstructed.span, payload: payload) { true }
+    }
+    #expect(throws: TelemetryContractError.unregisteredDefinition) {
+      try client.record(reconstructed.startedLog, payload: payload)
+    }
+    #expect(throws: TelemetryContractError.unregisteredDefinition) {
+      try client.add(reconstructed.counter, delta: .init(1), payload: payload)
+    }
+  }
+
+  @Test("custom catalog definitions cannot reuse native signal names")
+  func nativeNamesAreReserved() throws {
+    let span = try TelemetrySpanDefinition<Void>(
+      name: .init(ComposableOTelSemantics.Spans.reducer),
+      fields: []
+    )
+    let log = try TelemetryLogDefinition<Void>(
+      eventName: .init(ComposableOTelSemantics.Events.effectStarted),
+      severity: .info,
+      bodyPolicy: .none,
+      fields: []
+    )
+    let counter = try TelemetryCounterDefinition<Void>(
+      name: .init(ComposableOTelSemantics.Metrics.actionsDispatched),
+      unit: .init("{event}"),
+      description: .init("reserved-name"),
+      maximumSeries: 1,
+      fields: []
+    )
+
+    #expect(throws: TelemetryContractError.invalidDefinition) {
+      _ = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        spans: [.init(span)]
+      )
+    }
+    #expect(throws: TelemetryContractError.invalidDefinition) {
+      _ = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        logs: [.init(log)]
+      )
+    }
+    #expect(throws: TelemetryContractError.invalidDefinition) {
+      _ = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        counters: [.init(counter)]
+      )
+    }
+  }
+
+  @Test("disabled and no-op clients preserve sync and async operation semantics")
+  func noopSemantics() async throws {
+    let fixture = try ContractFixture.make()
+    let payload = try fixture.payload()
+
+    let asynchronous = try await TelemetryClient.noop.withSpan(
+      fixture.span,
+      payload: payload
+    ) {
+      "async-result"
+    }
+    let synchronous = try TelemetryClient.noop.withSynchronousSpan(
+      fixture.span,
+      payload: payload
+    ) {
+      "sync-result"
+    }
+    try TelemetryClient.noop.record(fixture.startedLog, payload: payload)
+    try TelemetryClient.noop.add(fixture.counter, delta: .init(1), payload: payload)
+
+    #expect(asynchronous == "async-result")
+    #expect(synchronous == "sync-result")
+  }
+
+  @Test("metric point batches enforce the configured point cap")
+  func metricPointBatches() {
+    let bounded = runtimePointBoundedBatches(
+      [20, 30, 1, 51, 49],
+      maximumPoints: 50,
+      pointCount: { $0 }
+    )
+
+    #expect(bounded.batches == [[20, 30], [1, 49]])
+    #expect(bounded.batches.allSatisfy { $0.reduce(0, +) <= 50 })
+    #expect(bounded.droppedPoints == 51)
+
+    let diagnostics = RuntimeDiagnosticsState(handler: nil)
+    diagnostics.recordMetricPointLimitExceeded(count: bounded.droppedPoints)
+    #expect(diagnostics.snapshot().metrics.droppedItems == 51)
+  }
+
   @Test("emits exact typed resource, span, bodyless logs, and delta counter")
   func exactWireContracts() async throws {
     let fixture = try ContractFixture.make()
-    let (client, collectors) = TelemetryClient.test(
-      deploymentEnvironment: .staging,
-      resource: fixture.resourceValue,
+    let (client, collectors) = try TelemetryClient.test(
+      resourceMode: .strict(fixture.resourceValue),
       policy: fixture.policy
     )
     let payload = try fixture.payload()
@@ -268,6 +400,7 @@ struct TelemetryContractCatalogTests {
     #expect(span.fields["contract.retryable"] == .boolean(false))
 
     let rawSpan = try #require(collectors.spans.spans(named: "contract.flow").first)
+    #expect(rawSpan.instrumentationScope.schemaUrl == nil)
     let effect = try #require(collectors.spans.spans(named: "contract.effect").first)
     let dependency = try #require(collectors.spans.spans(named: "contract.dependency").first)
     #expect(effect.parentSpanId == rawSpan.spanId)
@@ -282,6 +415,11 @@ struct TelemetryContractCatalogTests {
     #expect(decodedLogs.count == 4)
     #expect(decodedLogs.allSatisfy { $0.body == nil && $0.contractVersion == 7 })
     #expect(decodedLogs.map(\.severity) == [.info, .info, .error, .error])
+    #expect(
+      collectors.logs.allRecords
+        .filter { $0.eventName?.hasPrefix("contract.flow.") == true }
+        .allSatisfy { $0.instrumentationScopeInfo.schemaUrl == nil }
+    )
 
     let counter = try #require(collectors.decodedCounters(for: fixture.counter).first)
     #expect(counter.unit == "{event}")
@@ -290,12 +428,19 @@ struct TelemetryContractCatalogTests {
     #expect(counter.value == 3)
     #expect(counter.contractVersion == 7)
     #expect(counter.fields.count == 2)
+    #expect(
+      collectors.contractMetrics?.metrics(named: fixture.counter.name.rawValue)
+        .allSatisfy { $0.instrumentationScopeInfo.schemaUrl == nil } == true
+    )
 
     let resource = try #require(collectors.decodedResource(for: fixture.resource))
     #expect(resource.contractVersion == 7)
     #expect(resource.fields.count == 8)
     #expect(resource.fields["app.build"] == .integer(42))
     #expect(rawSpan.resource.attributes["deployment.environment.name"] == .string("staging"))
+    #expect(rawSpan.resource.attributes.count == 9)
+    #expect(rawSpan.resource.attributes["telemetry.sdk.name"] == nil)
+    #expect(rawSpan.resource.attributes["telemetry.distro.name"] == nil)
   }
 
   @Test("custom spans preserve error and cancellation outcomes")
@@ -303,8 +448,9 @@ struct TelemetryContractCatalogTests {
     enum ExpectedFailure: Error {
       case failed
     }
+
     let fixture = try ContractFixture.make()
-    let (client, collectors) = TelemetryClient.test(policy: fixture.policy)
+    let (client, collectors) = try TelemetryClient.test(policy: fixture.policy)
     let errorPayload = try fixture.payload(result: "error", errorCode: "unavailable")
 
     do {
@@ -335,6 +481,35 @@ struct TelemetryContractCatalogTests {
     )
   }
 
+  @Test("caught errors use a typed log without reclassifying successful work")
+  func handledErrorLog() async throws {
+    enum HandledFailure: Error {
+      case failed
+    }
+    let fixture = try ContractFixture.make()
+    let (client, collectors) = try TelemetryClient.test(policy: fixture.policy)
+    let success = try fixture.payload()
+    let failure = try fixture.payload(result: "error", errorCode: "unavailable")
+
+    try await client.withSpan(fixture.span, payload: success) {
+      do {
+        throw HandledFailure.failed
+      } catch {
+        try client.record(fixture.failedLog, payload: failure)
+      }
+    }
+    collectors.forceFlush()
+
+    let span = try #require(
+      collectors.spans.spans(named: fixture.span.name.rawValue).first
+    )
+    #expect(span.status == .ok)
+    let log = try #require(collectors.decodedLogs(for: fixture.failedLog).first)
+    #expect(log.severity == .error)
+    #expect(log.body == nil)
+    #expect(log.fields["contract.result"] == .string("error"))
+  }
+
   @Test("production pipeline captures encoded registered signals without network")
   func encodedCapture() async throws {
     let fixture = try ContractFixture.make()
@@ -344,8 +519,7 @@ struct TelemetryContractCatalogTests {
       endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
       samplingRatio: 1,
       policy: fixture.policy,
-      deploymentEnvironment: .staging,
-      resource: fixture.resourceValue,
+      resourceMode: .strict(fixture.resourceValue),
       traces: .init(maximumQueueSize: 1, maximumBatchSize: 1),
       logs: .init(maximumQueueSize: 1, maximumBatchSize: 1),
       metricExportInterval: .seconds(3_600)
@@ -372,7 +546,7 @@ struct TelemetryContractCatalogTests {
   @Test("rejects invalid conditional payloads and unregistered definitions")
   func validationAndRegistration() async throws {
     let fixture = try ContractFixture.make()
-    let (client, collectors) = TelemetryClient.test(policy: fixture.policy)
+    let (client, collectors) = try TelemetryClient.test(policy: fixture.policy)
     let invalid = try fixture.payload(result: "error")
 
     #expect(throws: TelemetryContractError.invalidPayload(field: nil)) {
@@ -389,20 +563,62 @@ struct TelemetryContractCatalogTests {
       try client.record(unregistered, payload: try fixture.payload())
     }
 
-    struct EmptyResource: Sendable {}
-    let otherDefinition = try TelemetryResourceDefinition<EmptyResource>(
-      name: .init("contract.other-resource"),
-      fields: []
-    )
+    let reconstructedResource = try ContractFixture.make().resourceValue
+    #expect(throws: TelemetryContractError.unregisteredDefinition) {
+      _ = try TelemetryBootstrap.makeResource(
+        serviceName: "test-suite",
+        serviceVersion: nil,
+        resourceMode: .strict(reconstructedResource),
+        policy: fixture.policy
+      )
+    }
+    #expect(throws: TelemetryContractError.unregisteredDefinition) {
+      _ = try TelemetryClient.test(
+        resourceMode: .strict(reconstructedResource),
+        policy: fixture.policy
+      )
+    }
     let configuration = TelemetryRuntime.Configuration(
       serviceName: "test-suite",
       endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
       policy: fixture.policy,
-      resource: try otherDefinition.makeValue(EmptyResource())
+      resourceMode: .strict(reconstructedResource)
     )
     #expect(throws: TelemetryRuntimeConfigurationError.invalidResourceContract) {
       _ = try TelemetryRuntime(
         configuration: configuration,
+        transport: InMemoryEncodedRequestCollector().transport,
+        authenticator: .none
+      )
+    }
+
+    struct MetricPayload: Sendable {
+      let point: Int64
+    }
+    let pointField = try TelemetryField<MetricPayload>.integer(
+      .init("contract.point"),
+      range: 0...50
+    ) { $0.point }
+    let oversizedCounter = try TelemetryCounterDefinition(
+      name: TelemetryContractName("contract.too-many-points"),
+      unit: TelemetryStringValue("{event}"),
+      description: TelemetryStringValue("too-many-points"),
+      maximumSeries: 51,
+      fields: [pointField]
+    )
+    let oversizedCatalog = try TelemetryContractCatalog(
+      contractVersion: .init(1),
+      counters: [.init(oversizedCounter)]
+    )
+    var metricConfiguration = TelemetryRuntime.Configuration(
+      serviceName: "test-suite",
+      endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
+      policy: TelemetryPolicy(catalog: oversizedCatalog)
+    )
+    metricConfiguration.delivery.maximumContractMetricPointsPerRequest = 50
+    #expect(throws: TelemetryRuntimeConfigurationError.invalidDeliveryLimits) {
+      _ = try TelemetryRuntime(
+        configuration: metricConfiguration,
         transport: InMemoryEncodedRequestCollector().transport,
         authenticator: .none
       )

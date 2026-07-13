@@ -23,6 +23,8 @@ body before persistence or transport and reports `oversizedRequests` plus `dropp
 
 Metric collections are not split by point count. The pilot must prove that each synchronous
 collection stays within both gateway limits or provide a route that accepts the bounded collection.
+The package independently rejects registered counter catalogs whose declared maximum-series sum
+exceeds `maximumContractMetricPointsPerRequest` (50 by default).
 The gateway must also prove:
 
 - numeric `Retry-After` carries any required next-minute jitter and is within the configured maximum;

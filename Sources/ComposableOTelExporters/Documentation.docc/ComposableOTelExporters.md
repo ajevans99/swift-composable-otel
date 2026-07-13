@@ -12,14 +12,10 @@ exposes only its feature-facing `TelemetryClient`.
 ``TelemetryBootstrap`` remains an explicit development-only stdout path. Neither path replaces
 process-global OpenTelemetry providers.
 
-``PrivacyPreservingSpanExporter`` sanitizes names, attributes, events, links, status, and resources.
-``PrivacyPreservingLogRecordExporter`` rebuilds records from allowlisted bodies, attributes, event
-names, and resources. ``PrivacyPreservingMetricExporter`` drops unknown instruments and unsafe
-resources, sanitizes dimensions, and removes exemplars.
-
-``ComposableOTelMetricConfiguration`` installs a catch-all drop view plus per-instrument views with
-dimension processors and duration histograms. It also creates instruments with stable descriptions
-and units.
+Package-only processors rebuild spans, logs, metrics, and resources from native or catalog
+allowlists before encoding. Metric views are drop-by-default with exact dimensions, descriptions,
+units, temporality, and histograms. These implementation hooks are intentionally absent from the
+normal public API.
 
 Read <doc:MobileOTLPRuntime>, <doc:OperationalRunbook>, and <doc:ProductionReadiness> before enabling
 remote export. Mobile delivery remains best-effort: suspension and termination can interrupt every
@@ -53,13 +49,6 @@ sanitized by the same policy. Otherwise they are outside the package trust bound
 - <doc:MobileOTLPRuntime>
 - <doc:OperationalRunbook>
 - <doc:ProductionReadiness>
-
-### Policy boundary
-
-- ``PrivacyPreservingSpanExporter``
-- ``PrivacyPreservingLogRecordExporter``
-- ``PrivacyPreservingMetricExporter``
-- ``ComposableOTelMetricConfiguration``
 
 ### Console
 

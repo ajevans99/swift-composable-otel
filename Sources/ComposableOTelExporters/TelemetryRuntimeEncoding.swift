@@ -41,7 +41,7 @@ private final class RuntimeRequestCaptureHTTPClient: HTTPClient, @unchecked Send
 
   func capture<Result>(_ operation: () -> Result) -> (Result, URLRequest?) {
     lock.withLock {
-      request = nil
+      self.request = nil
     }
     let result = operation()
     let request = lock.withLock {

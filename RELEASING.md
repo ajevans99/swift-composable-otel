@@ -33,7 +33,7 @@ entries into a dated version section and restores an empty `Unreleased` section.
 4. Confirm `Package.swift` and `SUPPORT.md` agree on platforms and dependency ranges.
 5. Confirm the approved repository license is present and referenced by the README.
 6. Run baseline validation, strict formatting, minimum/latest dependency builds and tests, and
-   every supported-platform CI job.
+   every supported-platform, coverage, TSan, API, semantic-convention, benchmark, and DocC CI job.
 7. Confirm root `Package.resolved` is not tracked.
 8. Merge the release-preparation pull request and record its commit SHA.
 9. Create an annotated, immutable tag:
@@ -52,6 +52,41 @@ entries into a dated version section and restores an empty `Unreleased` section.
 
 Never move or reuse a published tag. If release metadata is wrong, correct the GitHub Release or
 publish a new patch version as appropriate.
+
+## 1.0 go/no-go criteria
+
+Do not tag or publish 1.0 until every item below has an immutable evidence link and an identified
+reviewer:
+
+1. **API stability:** the public API baseline is reviewed, intentional breakage has migration
+   guidance, and the compatibility gate has completed at least one clean release-candidate cycle.
+2. **Semantic conventions:** names, fields, units, defaults, cardinality, and the upstream semantic
+   convention snapshot are reviewed; the source lock is current. Registered external definitions,
+   contract version, resource keys, and conditional rules are included.
+3. **Privacy defaults:** finite schema, log defaults, error policy, sentinel leakage, state/action
+   non-capture, persistence filtering, and unsafe custom SDK boundaries are approved.
+4. **Runtime guarantees and limits:** lifecycle, batching, retry, timeout, overflow, persistence,
+   corruption, encoded request ceiling, `Retry-After`, auth refresh, flush/shutdown, terminal
+   consent-revocation discard, failure isolation, and best-effort delivery language match tested
+   behavior.
+   An exact severity-text requirement remains a no-go until the upstream Swift log model can
+   represent it without a raw encoding bypass.
+5. **Performance and memory:** hosted release benchmarks pass the reviewed budgets, and consumer
+   pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
+6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
+   in `SUPPORT.md` remains exact and reviewed.
+7. **Platforms:** macOS and iOS gates pass. watchOS either passes its named support gate or remains
+   explicitly unsupported with current evidence; no partial build may be presented as support.
+8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
+   release notes, and residual-risk ownership are approved.
+9. **Consumer pilot:** every item in `PILOT.md` is supplied by the external pilot, linked immutably,
+   and reviewed without adding consumer-specific package API.
+10. **Repository administration:** default-branch protection and the complete production CI matrix
+    are required for merge and release.
+
+Any missing or failed item is a no-go. Accepted residual risk must name the owner, scope, mitigation,
+reviewer, and reconsideration date. Issue #6 stays open while pilot or repository-administration
+evidence remains outstanding.
 
 ## Historical metadata
 

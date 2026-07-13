@@ -81,5 +81,16 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ]
     ),
+    .executableTarget(
+      name: "ComposableOTelBenchmarks",
+      dependencies: [
+        "ComposableOTel",
+        "ComposableOTelExporters",
+        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+        .product(name: "Dependencies", package: "swift-dependencies"),
+      ],
+      path: "Benchmarks/ComposableOTelBenchmarks",
+      resources: [.copy("Budgets.json")]
+    ),
   ]
 )

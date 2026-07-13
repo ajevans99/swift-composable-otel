@@ -10,8 +10,11 @@ public final class InMemoryMetricReader: MetricReader, @unchecked Sendable {
   private let lock = NSLock()
   private var _metrics: [MetricData] = []
   private var producer: MetricProducer?
+  private let temporality: AggregationTemporality
 
-  public init() {}
+  public init(temporality: AggregationTemporality = .cumulative) {
+    self.temporality = temporality
+  }
 
   /// All metric data collected so far.
   public var metrics: [MetricData] {
@@ -43,7 +46,7 @@ public final class InMemoryMetricReader: MetricReader, @unchecked Sendable {
   // MARK: - AggregationTemporalitySelectorProtocol
 
   public func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality {
-    .cumulative
+    temporality
   }
 
   // MARK: - DefaultAggregationSelector

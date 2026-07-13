@@ -73,17 +73,21 @@ public struct TelemetryBatchConfiguration: Sendable {
 /// Bounded delivery and retry limits for encoded OTLP requests.
 public struct TelemetryDeliveryConfiguration: Sendable {
   public var maximumPendingBatches: Int
+  /// Maximum encoded OTLP body accepted into memory or persistence.
+  public var maximumEncodedRequestBytes: Int
   public var requestTimeout: Duration
   public var retry: Retry
   public var overflowPolicy: TelemetryOverflowPolicy
 
   public init(
     maximumPendingBatches: Int = 256,
+    maximumEncodedRequestBytes: Int = 64 * 1_024,
     requestTimeout: Duration = .seconds(10),
     retry: Retry = .init(),
     overflowPolicy: TelemetryOverflowPolicy = .dropOldest
   ) {
     self.maximumPendingBatches = maximumPendingBatches
+    self.maximumEncodedRequestBytes = maximumEncodedRequestBytes
     self.requestTimeout = requestTimeout
     self.retry = retry
     self.overflowPolicy = overflowPolicy
@@ -141,9 +145,12 @@ public struct TelemetryPersistenceConfiguration: Sendable {
 /// A response returned by a host-supplied telemetry transport.
 public struct TelemetryHTTPResponse: Equatable, Sendable {
   public let statusCode: Int
+  /// A host-parsed numeric `Retry-After` delay. HTTP-date values are intentionally unsupported.
+  public let retryAfter: Duration?
 
-  public init(statusCode: Int) {
+  public init(statusCode: Int, retryAfter: Duration? = nil) {
     self.statusCode = statusCode
+    self.retryAfter = retryAfter
   }
 }
 
@@ -151,6 +158,8 @@ public struct TelemetryHTTPResponse: Equatable, Sendable {
 ///
 /// The runtime invokes this closure away from the main actor and enforces its own timeout. The
 /// implementation should still observe task cancellation and cancel its underlying network request.
+/// A custom transport may invalidate host credentials when it observes HTTP 401 before returning
+/// that non-retryable response; the authenticator will run again for a later independent request.
 public struct TelemetryHTTPTransport: Sendable {
   private let operation: @Sendable (URLRequest) async throws -> TelemetryHTTPResponse
 
@@ -181,8 +190,27 @@ public struct TelemetryHTTPTransport: Sendable {
       guard let response = response as? HTTPURLResponse else {
         throw TelemetryRuntimeTransportError.invalidResponse
       }
-      return TelemetryHTTPResponse(statusCode: response.statusCode)
+      return TelemetryHTTPResponse(
+        statusCode: response.statusCode,
+        retryAfter: retryAfter(from: response)
+      )
     }
+  }
+
+  private static func retryAfter(from response: HTTPURLResponse) -> Duration? {
+    numericRetryAfter(response.value(forHTTPHeaderField: "Retry-After"))
+  }
+
+  static func numericRetryAfter(_ value: String?) -> Duration? {
+    guard
+      let value,
+      let seconds = TimeInterval(value.trimmingCharacters(in: .whitespacesAndNewlines)),
+      seconds.isFinite,
+      seconds >= 0
+    else {
+      return nil
+    }
+    return .runtimeSeconds(min(seconds, TimeInterval(Int32.max)))
   }
 }
 
@@ -228,6 +256,7 @@ public enum TelemetryRuntimeConfigurationError: Error, Equatable, Sendable {
   case invalidBatchLimits
   case invalidDeliveryLimits
   case invalidPersistenceLimits
+  case invalidResourceContract
 }
 
 extension TelemetryRuntimeConfigurationError: LocalizedError {
@@ -249,6 +278,8 @@ extension TelemetryRuntimeConfigurationError: LocalizedError {
       "Delivery, timeout, retry, backoff, and jitter limits are invalid."
     case .invalidPersistenceLimits:
       "Persistence size and age limits must be positive and use a file URL."
+    case .invalidResourceContract:
+      "The immutable resource value must match a registered catalog definition."
     }
   }
 }

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "benchmarks": {
+    "batching": 300000,
+    "catalogCounter": 250000,
+    "catalogLog": 250000,
+    "catalogSpan": 2000000,
+    "dependency": 500000,
+    "effect": 1000000,
+    "logging": 100000,
+    "metrics": 100000,
+    "reducer": 250000,
+    "reducerDisabled": 50000,
+    "sampledSpan": 250000,
+    "stateChange": 300000,
+    "unsampledSpan": 100000
+  },
+  "gateway": {
+    "maximumEncodedRequestBytes": 65536,
+    "maximumSignalsPerBatch": 25
+  },
+  "maximumSampledToUnsampledRatio": 5.0,
+  "queue": {
+    "items": 2048,
+    "maximumResidentDeltaBytes": 67108864
+  }
+}

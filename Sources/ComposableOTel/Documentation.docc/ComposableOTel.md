@@ -21,6 +21,7 @@ exporter-boundary filtering and metric views.
 ### Adoption
 
 - Define a ``TelemetrySchema`` and ``TelemetryPolicy``.
+- Optionally register exact custom signals and resources with ``TelemetryContractCatalog``.
 - Add `Reducer.instrumented(feature:action:stateChangeToken:)`.
 - Use `Effect.tracedRun(effect:priority:operation:)` or
   `Effect.tracedLongLivedRun(effect:priority:operation:)`.
@@ -40,6 +41,12 @@ exporter-boundary filtering and metric views.
 - ``TelemetryOutcome``
 - ``NavigationOperation``
 - ``StateChangeToken``
+- ``TelemetryContractCatalog``
+- ``TelemetrySpanDefinition``
+- ``TelemetryLogDefinition``
+- ``TelemetryCounterDefinition``
+- ``TelemetryResourceDefinition``
+- ``TelemetryDeploymentEnvironment``
 
 ### Runtime
 
@@ -61,3 +68,4 @@ exporter-boundary filtering and metric views.
 
 - <doc:GettingStarted>
 - <doc:SemanticConventions>
+- <doc:TypedContracts>

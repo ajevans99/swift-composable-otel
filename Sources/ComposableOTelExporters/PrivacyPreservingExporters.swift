@@ -183,12 +183,43 @@ public final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked S
 
 }
 
+package final class DeltaCounterMetricExporter: MetricExporter, @unchecked Sendable {
+  private let exporter: any MetricExporter
+
+  package init(exporter: any MetricExporter) {
+    self.exporter = exporter
+  }
+
+  package func export(metrics: [MetricData]) -> ExportResult {
+    exporter.export(metrics: metrics)
+  }
+
+  package func flush() -> ExportResult {
+    exporter.flush()
+  }
+
+  package func shutdown() -> ExportResult {
+    exporter.shutdown()
+  }
+
+  package func getAggregationTemporality(
+    for instrument: InstrumentType
+  ) -> AggregationTemporality {
+    instrument == .counter ? .delta : exporter.getAggregationTemporality(for: instrument)
+  }
+
+  package func getDefaultAggregation(for instrument: InstrumentType) -> Aggregation {
+    exporter.getDefaultAggregation(for: instrument)
+  }
+}
+
 struct TelemetryPrivacyBoundary: Sendable {
   let policy: TelemetryPolicy
 
   func sanitizedSpans(_ spans: [SpanData]) -> [SpanData] {
     guard policy.signals.tracesEnabled else { return [] }
-    return spans.filter { isSafeInstrumentationScope($0.instrumentationScope) }.map { original in
+    return spans.filter { isSafeInstrumentationScope($0.instrumentationScope) }.compactMap {
+      original in
       var span = original
       let events = original.events.compactMap { event -> SpanData.Event? in
         guard let name = policy.sanitizedEventName(event.name) else { return nil }
@@ -207,8 +238,25 @@ struct TelemetryPrivacyBoundary: Sendable {
       case .unset:
         status = .unset
       }
-      span.settingName(policy.sanitizedSpanName(original.name))
-      span.settingAttributes(policy.sanitizedSpanAttributes(original.attributes))
+      let name: String
+      let attributes: [String: AttributeValue]
+      if let schema = policy.catalog.spans[original.name] {
+        guard
+          let sanitized = schema.sanitizedAttributes(
+            original.attributes,
+            version: policy.catalog.contractVersion
+          )
+        else {
+          return nil
+        }
+        name = original.name
+        attributes = sanitized
+      } else {
+        name = policy.sanitizedSpanName(original.name)
+        attributes = policy.sanitizedSpanAttributes(original.attributes)
+      }
+      span.settingName(name)
+      span.settingAttributes(attributes)
       span.settingEvents(events)
       span.settingLinks([])
       span.settingStatus(status)
@@ -223,8 +271,35 @@ struct TelemetryPrivacyBoundary: Sendable {
 
   func sanitizedLogs(_ records: [ReadableLogRecord]) -> [ReadableLogRecord] {
     guard policy.signals.logsEnabled else { return [] }
-    return records.map { record in
-      ReadableLogRecord(
+    return records.compactMap { record in
+      if let eventName = record.eventName, let schema = policy.catalog.logs[eventName] {
+        guard
+          isSafeInstrumentationScope(record.instrumentationScopeInfo),
+          record.severity == schema.severity?.otelSeverity,
+          (schema.bodyIsNil && record.body == nil)
+            || (!schema.bodyIsNil && record.body == schema.fixedBody),
+          let attributes = schema.sanitizedAttributes(
+            record.attributes,
+            version: policy.catalog.contractVersion
+          )
+        else {
+          return nil
+        }
+        return ReadableLogRecord(
+          resource: Resource(
+            attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
+          ),
+          instrumentationScopeInfo: safeInstrumentationScope,
+          timestamp: record.timestamp,
+          observedTimestamp: record.observedTimestamp,
+          spanContext: record.spanContext,
+          severity: schema.severity?.otelSeverity,
+          body: schema.fixedBody,
+          attributes: attributes,
+          eventName: eventName
+        )
+      }
+      return ReadableLogRecord(
         resource: Resource(
           attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
         ),
@@ -243,11 +318,36 @@ struct TelemetryPrivacyBoundary: Sendable {
   func sanitizedMetrics(_ metrics: [MetricData]) -> [MetricData] {
     guard policy.signals.metricsEnabled else { return [] }
     return metrics.compactMap { metric -> MetricData? in
-      guard ComposableOTelSemantics.Metrics.all.contains(metric.name),
-        isSafeInstrumentationScope(metric.instrumentationScopeInfo),
+      guard isSafeInstrumentationScope(metric.instrumentationScopeInfo),
         metric.resource.attributes
           == policy.sanitizedResourceAttributes(metric.resource.attributes)
       else {
+        return nil
+      }
+      if let schema = policy.catalog.counters[metric.name] {
+        guard
+          metric.type == .LongSum,
+          metric.isMonotonic,
+          metric.unit == schema.unit,
+          metric.data.aggregationTemporality == .delta
+        else {
+          return nil
+        }
+        for point in metric.data.points {
+          guard
+            let attributes = schema.sanitizedAttributes(
+              point.attributes,
+              version: policy.catalog.contractVersion
+            )
+          else {
+            return nil
+          }
+          point.attributes = attributes
+          point.exemplars = []
+        }
+        return metric
+      }
+      guard ComposableOTelSemantics.Metrics.all.contains(metric.name) else {
         return nil
       }
       for point in metric.data.points {

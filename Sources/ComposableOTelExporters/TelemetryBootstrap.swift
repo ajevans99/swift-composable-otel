@@ -40,6 +40,7 @@ public enum TelemetryBootstrap {
     serviceVersion: ServiceVersionID? = nil,
     environment: Environment = .debug,
     samplingRatio: Double? = nil,
+    resource: TelemetryResourceValue? = nil,
     policy: TelemetryPolicy = .init()
   ) -> TelemetryClient {
     state.configure {
@@ -48,6 +49,7 @@ public enum TelemetryBootstrap {
         serviceVersion: serviceVersion,
         environment: environment,
         samplingRatio: samplingRatio,
+        resource: resource,
         policy: policy
       )
     }
@@ -58,17 +60,19 @@ public enum TelemetryBootstrap {
     serviceVersion: ServiceVersionID?,
     environment: Environment,
     samplingRatio: Double?,
+    resource: TelemetryResourceValue?,
     policy: TelemetryPolicy
   ) -> TelemetryClient {
     let deploymentEnvironment =
       switch environment {
       case .debug:
-        "debug"
+        TelemetryDeploymentEnvironment.development
       }
     let resource = makeResource(
       serviceName: serviceName,
       serviceVersion: serviceVersion,
       deploymentEnvironment: deploymentEnvironment,
+      resource: resource,
       policy: policy
     )
 
@@ -84,7 +88,7 @@ public enum TelemetryBootstrap {
     let spanLimits = SpanLimits()
       .settingAttributeCountLimit(16)
       .settingAttributeValueLengthLimit(
-        UInt(TelemetryIdentifier<FeatureIdentifierKind>.maximumLength)
+        UInt(TelemetryStringValue.maximumLength)
       )
       .settingEventCountLimit(4)
       .settingLinkCountLimit(0)
@@ -110,6 +114,36 @@ public enum TelemetryBootstrap {
       .registerMetricReader(reader: metricReader)
     ComposableOTelMetricConfiguration.registerViews(on: meterBuilder, policy: policy)
     let meterProvider = meterBuilder.build()
+    let customMeterProvider: MeterProviderSdk?
+    let contractCounters: [TelemetryContractIdentity: any LongCounter]
+    if policy.catalog.counters.isEmpty {
+      customMeterProvider = nil
+      contractCounters = [:]
+    } else {
+      let rawCustomExporter: any MetricExporter = StdoutMetricExporter(isDebug: true)
+      let customExporter = PrivacyPreservingMetricExporter(
+        exporter: DeltaCounterMetricExporter(exporter: rawCustomExporter),
+        policy: policy
+      )
+      let customReader = PeriodicMetricReaderBuilder(exporter: customExporter)
+        .setInterval(timeInterval: 5)
+        .build()
+      let customBuilder = MeterProviderSdk.builder()
+        .setResource(resource: resource)
+        .registerMetricReader(reader: customReader)
+      ComposableOTelMetricConfiguration.registerViews(on: customBuilder, policy: policy)
+      let provider = customBuilder.build()
+      let customMeter =
+        provider
+        .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+        .setInstrumentationVersion(instrumentationVersion: ComposableOTelMetadata.version)
+        .build()
+      customMeterProvider = provider
+      contractCounters = ComposableOTelMetricConfiguration.makeContractInstruments(
+        meter: customMeter,
+        catalog: policy.catalog
+      )
+    }
 
     let rawLogExporter: any LogRecordExporter = StdoutLogExporter(isDebug: true)
     let logExporter = PrivacyPreservingLogRecordExporter(
@@ -137,23 +171,26 @@ public enum TelemetryBootstrap {
       .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
 
-    return TelemetryClient.unsafeCustomSDK(
+    return TelemetryClient.packageSDK(
       tracer: tracer,
       metrics: ComposableOTelMetricConfiguration.makeInstruments(meter: meter),
       logger: logger,
-      policy: policy
+      policy: policy,
+      contractCounters: contractCounters,
+      contractProviderRetention: customMeterProvider
     )
   }
 
-  static func makeResource(
+  package static func makeResource(
     serviceName: ServiceID,
     serviceVersion: ServiceVersionID?,
-    deploymentEnvironment: String,
+    deploymentEnvironment: TelemetryDeploymentEnvironment,
+    resource: TelemetryResourceValue? = nil,
     policy: TelemetryPolicy
   ) -> Resource {
     var attributes: [String: AttributeValue] = [
       "service.name": .string(serviceName.rawValue),
-      "deployment.environment.name": .string(deploymentEnvironment),
+      "deployment.environment.name": .string(deploymentEnvironment.rawValue),
       "os.type": .string("darwin"),
     ]
     let resolvedVersion =
@@ -161,6 +198,12 @@ public enum TelemetryBootstrap {
       ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
     if let resolvedVersion {
       attributes["service.version"] = .string(resolvedVersion)
+    }
+    if let resource, policy.catalog.contains(resource.identity) {
+      attributes.merge(resource.attributes) { _, new in new }
+      attributes[TelemetryContractCatalog.contractVersionKey] = .int(
+        policy.catalog.contractVersion.rawValue
+      )
     }
     return Resource(attributes: policy.sanitizedResourceAttributes(attributes))
   }

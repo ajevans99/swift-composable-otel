@@ -15,6 +15,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var endpoints: OTLPEndpoints
     public var samplingRatio: Double
     public var policy: TelemetryPolicy
+    public var deploymentEnvironment: TelemetryDeploymentEnvironment
+    public var resource: TelemetryResourceValue?
     public var traces: TelemetryBatchConfiguration
     public var logs: TelemetryBatchConfiguration
     public var metricExportInterval: Duration
@@ -29,6 +31,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
       endpoints: OTLPEndpoints,
       samplingRatio: Double = 0.1,
       policy: TelemetryPolicy = .init(),
+      deploymentEnvironment: TelemetryDeploymentEnvironment = .production,
+      resource: TelemetryResourceValue? = nil,
       traces: TelemetryBatchConfiguration = .init(),
       logs: TelemetryBatchConfiguration = .init(),
       metricExportInterval: Duration = .seconds(60),
@@ -42,6 +46,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.endpoints = endpoints
       self.samplingRatio = samplingRatio
       self.policy = policy
+      self.deploymentEnvironment = deploymentEnvironment
+      self.resource = resource
       self.traces = traces
       self.logs = logs
       self.metricExportInterval = metricExportInterval
@@ -61,6 +67,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
   private let logQueue: RuntimeBatchQueue<ReadableLogRecord>
   private let tracerProvider: UncheckedSendableBox<TracerProviderSdk>
   private let meterProvider: UncheckedSendableBox<MeterProviderSdk>
+  private let customMeterProvider: UncheckedSendableBox<MeterProviderSdk>?
   private let loggerProvider: UncheckedSendableBox<LoggerProviderSdk>
   private let shutdownCoordinator = RuntimeShutdownCoordinator()
   private let discardCoordinator = RuntimeDiscardCoordinator()
@@ -118,10 +125,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let boundary = TelemetryPrivacyBoundary(policy: configuration.policy)
     let traceHTTPClient = RuntimeOTLPHTTPClient(signal: .traces, delivery: delivery)
     let traceExporter = PrivacyPreservingSpanExporter(
-      exporter: OtlpHttpTraceExporter(
+      exporter: RuntimeByteBoundedSpanExporter(
         endpoint: configuration.endpoints.traces,
-        httpClient: traceHTTPClient,
-        envVarHeaders: []
+        maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
+        deliveryClient: traceHTTPClient
       ),
       policy: configuration.policy
     )
@@ -142,10 +149,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
 
     let metricHTTPClient = RuntimeOTLPHTTPClient(signal: .metrics, delivery: delivery)
     let metricExporter = PrivacyPreservingMetricExporter(
-      exporter: OtlpHttpMetricExporter(
+      exporter: RuntimeByteBoundedMetricExporter(
         endpoint: configuration.endpoints.metrics,
-        httpClient: metricHTTPClient,
-        envVarHeaders: []
+        maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
+        deliveryClient: metricHTTPClient
       ),
       policy: configuration.policy
     )
@@ -155,10 +162,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
 
     let logHTTPClient = RuntimeOTLPHTTPClient(signal: .logs, delivery: delivery)
     let logExporter = PrivacyPreservingLogRecordExporter(
-      exporter: OtlpHttpLogExporter(
+      exporter: RuntimeByteBoundedLogExporter(
         endpoint: configuration.endpoints.logs,
-        httpClient: logHTTPClient,
-        envVarHeaders: []
+        maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
+        deliveryClient: logHTTPClient
       ),
       policy: configuration.policy
     )
@@ -180,7 +187,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let resource = TelemetryBootstrap.makeResource(
       serviceName: configuration.serviceName,
       serviceVersion: configuration.serviceVersion,
-      deploymentEnvironment: "production",
+      deploymentEnvironment: configuration.deploymentEnvironment,
+      resource: configuration.resource,
       policy: configuration.policy
     )
     let sampler = Samplers.parentBased(
@@ -189,7 +197,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let spanLimits = SpanLimits()
       .settingAttributeCountLimit(16)
       .settingAttributeValueLengthLimit(
-        UInt(TelemetryIdentifier<FeatureIdentifierKind>.maximumLength)
+        UInt(TelemetryStringValue.maximumLength)
       )
       .settingEventCountLimit(4)
       .settingLinkCountLimit(0)
@@ -213,6 +221,48 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let meterProvider = meterBuilder.build()
     self.meterProvider = UncheckedSendableBox(meterProvider)
 
+    let customMeterProvider: MeterProviderSdk?
+    let contractCounters: [TelemetryContractIdentity: any LongCounter]
+    if configuration.policy.catalog.counters.isEmpty {
+      customMeterProvider = nil
+      contractCounters = [:]
+    } else {
+      let customHTTPClient = RuntimeOTLPHTTPClient(signal: .metrics, delivery: delivery)
+      let customRawExporter = RuntimeByteBoundedMetricExporter(
+        endpoint: configuration.endpoints.metrics,
+        maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
+        deliveryClient: customHTTPClient
+      )
+      let customMetricExporter = PrivacyPreservingMetricExporter(
+        exporter: DeltaCounterMetricExporter(exporter: customRawExporter),
+        policy: configuration.policy
+      )
+      let customReader = PeriodicMetricReaderBuilder(exporter: customMetricExporter)
+        .setInterval(timeInterval: configuration.metricExportInterval.runtimeSeconds)
+        .build()
+      let customBuilder = MeterProviderSdk.builder()
+        .setResource(resource: resource)
+        .registerMetricReader(reader: customReader)
+      ComposableOTelMetricConfiguration.registerViews(
+        on: customBuilder,
+        policy: configuration.policy
+      )
+      let provider = customBuilder.build()
+      let customMeter =
+        provider
+        .meterBuilder(name: ComposableOTelMetadata.instrumentationName)
+        .setInstrumentationVersion(
+          instrumentationVersion: ComposableOTelMetadata.version
+        )
+        .build()
+      customMeterProvider = provider
+      contractCounters = ComposableOTelMetricConfiguration.makeContractInstruments(
+        meter: customMeter,
+        catalog: configuration.policy.catalog
+      )
+    }
+    self.customMeterProvider = customMeterProvider.map(UncheckedSendableBox.init)
+
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
       logRecordProcessors: [logProcessor]
@@ -235,11 +285,13 @@ public final class TelemetryRuntime: @unchecked Sendable {
       .loggerBuilder(instrumentationScopeName: ComposableOTelMetadata.instrumentationName)
       .setInstrumentationVersion(ComposableOTelMetadata.version)
       .build()
-    client = TelemetryClient.unsafeCustomSDK(
+    client = TelemetryClient.packageSDK(
       tracer: tracer,
       metrics: ComposableOTelMetricConfiguration.makeInstruments(meter: meter),
       logger: logger,
-      policy: configuration.policy
+      policy: configuration.policy,
+      contractCounters: contractCounters,
+      contractProviderRetention: customMeterProvider
     )
 
     Task {
@@ -310,6 +362,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       _ = await (spans, logs)
       await self.performProviderOperation {
         _ = self.meterProvider.value.shutdown()
+        _ = self.customMeterProvider?.value.shutdown()
       }
 
       await self.delivery.shutdown(retainPersisted: self.configuration.persistence != nil)
@@ -335,6 +388,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       await self.performProviderOperation {
         self.tracerProvider.value.shutdown()
         _ = self.meterProvider.value.shutdown()
+        _ = self.customMeterProvider?.value.shutdown()
       }
 
       let current = self.diagnosticsState.snapshot()
@@ -389,7 +443,9 @@ public final class TelemetryRuntime: @unchecked Sendable {
     async let spans: Void = spanQueue.forceFlush()
     async let logs: Void = logQueue.forceFlush()
     async let metricsSucceeded: Bool = performProviderOperation {
-      self.meterProvider.value.forceFlush() == .success
+      let native = self.meterProvider.value.forceFlush() == .success
+      let custom = self.customMeterProvider?.value.forceFlush() != .failure
+      return native && custom
     }
     _ = await (spans, logs)
     let metricSucceeded = await metricsSucceeded
@@ -477,6 +533,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let delivery = configuration.delivery
     let retry = delivery.retry
     guard delivery.maximumPendingBatches > 0,
+      delivery.maximumEncodedRequestBytes > 0,
       valid(duration: delivery.requestTimeout),
       retry.maximumAttempts > 0,
       valid(duration: retry.initialBackoff),
@@ -498,6 +555,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
       else {
         throw TelemetryRuntimeConfigurationError.invalidPersistenceLimits
       }
+    }
+    if let resource = configuration.resource,
+      !configuration.policy.catalog.contains(resource.identity)
+    {
+      throw TelemetryRuntimeConfigurationError.invalidResourceContract
     }
   }
 

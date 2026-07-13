@@ -63,6 +63,26 @@ let actions = reader.metrics(named: "tca.actions.dispatched")
 Collected metrics include package descriptions, units, views, bounded dimensions, and explicit
 duration buckets.
 
+## Inspect registered contracts
+
+Create a test client with a policy containing the same `TelemetryContractCatalog` and optional
+resource value as production.
+`TestCollectors` can decode exact registered fields:
+
+```swift
+collectors.forceFlush()
+let spans = collectors.decodedSpans(for: spanDefinition)
+let logs = collectors.decodedLogs(for: logDefinition)
+let counters = collectors.decodedCounters(for: counterDefinition)
+let resource = collectors.decodedResource(for: resourceDefinition)
+```
+
+Assert exact field sets and ``TelemetryDecodedScalar`` cases, integer contract version, nil log body,
+fixed EventName/severity, delta counter temporality/unit/value, and resource environment.
+
+Use ``InMemoryEncodedRequestCollector`` as the production runtime transport to inspect encoded
+request signal/body size without network access.
+
 ## Leakage and cardinality tests
 
 Place sentinel values in action associated values, custom descriptions, state descriptions, errors,

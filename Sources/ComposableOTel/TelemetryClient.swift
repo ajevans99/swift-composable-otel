@@ -146,6 +146,7 @@ public struct TelemetryClient: Sendable {
   let tracer: SendableTracer
   let metrics: MetricInstruments
   let logger: SendableLogger
+  package let contracts: TelemetryContractRuntime
 
   public let policy: TelemetryPolicy
 
@@ -153,12 +154,14 @@ public struct TelemetryClient: Sendable {
     tracer: any Tracer,
     metrics: MetricInstruments,
     logger: any Logger,
-    policy: TelemetryPolicy
+    policy: TelemetryPolicy,
+    contracts: TelemetryContractRuntime
   ) {
     self.tracer = SendableTracer(underlying: tracer)
     self.metrics = metrics
     self.logger = SendableLogger(underlying: logger)
     self.policy = policy
+    self.contracts = contracts
   }
 
   /// Builds a client around a custom SDK pipeline.
@@ -172,7 +175,38 @@ public struct TelemetryClient: Sendable {
     logger: any Logger,
     policy: TelemetryPolicy
   ) -> TelemetryClient {
-    TelemetryClient(tracer: tracer, metrics: metrics, logger: logger, policy: policy)
+    TelemetryClient(
+      tracer: tracer,
+      metrics: metrics,
+      logger: logger,
+      policy: policy,
+      contracts: TelemetryContractRuntime(
+        catalog: policy.catalog,
+        counters: [:],
+        providerRetention: nil
+      )
+    )
+  }
+
+  package static func packageSDK(
+    tracer: any Tracer,
+    metrics: MetricInstruments,
+    logger: any Logger,
+    policy: TelemetryPolicy,
+    contractCounters: [TelemetryContractIdentity: any LongCounter],
+    contractProviderRetention: AnyObject? = nil
+  ) -> TelemetryClient {
+    TelemetryClient(
+      tracer: tracer,
+      metrics: metrics,
+      logger: logger,
+      policy: policy,
+      contracts: TelemetryContractRuntime(
+        catalog: policy.catalog,
+        counters: contractCounters,
+        providerRetention: contractProviderRetention
+      )
+    )
   }
 
   /// A provider-independent no-op dependency value.
@@ -193,7 +227,8 @@ public struct TelemetryClient: Sendable {
       tracer: tracer,
       metrics: .noop(meter: meter),
       logger: logger,
-      policy: TelemetryPolicy(signals: .disabled)
+      policy: TelemetryPolicy(signals: .disabled),
+      contracts: .empty
     )
   }()
 

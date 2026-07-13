@@ -30,6 +30,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   flush/shutdown results, lifecycle hooks, and non-recursive exporter diagnostics.
 - Optional atomic OTLP persistence with age/size limits, Apple file protection, backup exclusion,
   relaunch recovery, and corruption removal.
+- Deterministic concurrency stress, target/runtime coverage floors, TSan, public API compatibility,
+  semantic-convention review, and release performance/memory/queue gates.
+- A configurable encoded OTLP request ceiling with pre-persistence oversized-request diagnostics,
+  plus bounded numeric `Retry-After` response metadata.
+- An immutable typed external contract catalog for exact custom spans, bodyless EventName logs,
+  monotonic delta counters, conditional fields, and schema-matched resources.
+- Current iOS simulator testing plus migration, privacy, security, operations, pilot-evidence, and
+  explicit 1.0 go/no-go guidance.
 - An idempotent consent-revocation operation that skips flush, cancels delivery, permanently stops
   the runtime, and deletes all unsent in-memory and persisted telemetry.
 
@@ -58,6 +66,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   before cross-package dependency traits.
 - Production composition now uses an owned `TelemetryRuntime`; `TelemetryBootstrap` is an explicit
   development-only stdout helper.
+- Reducer duration is measured once and reused across its span, metric, and log.
+- HTTP 401 and 413 are explicitly terminal, while retryable responses honor host-parsed numeric
+  `Retry-After` up to the configured maximum backoff.
+- Production resource environments are now a finite typed value instead of a hardcoded production
+  label; the default remains production for source compatibility.
+
+### Migration
+
+The complete `0.2.2` to unreleased migration is in [MIGRATION.md](MIGRATION.md). In summary:
+
+- replace reflection-derived names with typed schema identifiers;
+- replace `.traced()` with `.traceStart(effect:)` or a lifecycle-traced effect;
+- replace `configureTestTelemetry` with `TelemetryClient.test(metricReader:policy:)`;
+- replace `ErrorDetailPolicy` and `SpanAttributeRedactor` with bounded
+  `TelemetryPolicy.classifyError`; and
+- replace production bootstrap headers with a retained `TelemetryRuntime` and per-attempt
+  authenticator.
 
 ### Removed
 

@@ -13,6 +13,12 @@ behavioral compatibility change.
 The conventions are package-generic. Application-specific product names, flows, data
 classifications, consent rules, and retention rules do not belong in this package.
 
+The package-specific `tca.*` namespace was reviewed against OpenTelemetry semantic conventions
+v1.43.0 on 2026-07-12. `API/SemanticConventions.lock` binds the source declarations to that review.
+Adding or renaming a convention requires updating the DocC contract, changelog or migration notes,
+the lock, cardinality analysis, API baseline where applicable, and release review. CI fails when the
+source changes without that explicit lock update.
+
 ## Identifier contract
 
 Every identifier domain has a distinct Swift type and a finite ``TelemetrySchema`` allowlist.
@@ -105,3 +111,14 @@ package enforcement.
 Use `ComposableOTelExporters` privacy-preserving exporter wrappers, package metric configuration,
 and a resource sanitized with the same ``TelemetryPolicy``. The package does not provide a
 raw-payload development mode.
+
+## Registered external contracts
+
+``TelemetryContractCatalog`` can add application-agnostic exact-wire definitions. Each registered
+name and key set is part of public compatibility review. Every signal injects one integer
+`telemetry.contract.version`; record-time names and raw attributes remain unavailable.
+
+Registered counters are monotonic delta sums with fixed units and finite declared series.
+Registered logs can be bodyless with fixed EventName/severity. Exact severity text is not represented
+by the supported upstream Swift log model and remains an explicit unsupported wire field rather than
+a raw bypass.

@@ -3,15 +3,18 @@ import OpenTelemetryApi
 /// Allowlist-first privacy and cardinality policy for package-owned telemetry.
 public struct TelemetryPolicy: Sendable {
   public let schema: TelemetrySchema
+  public let catalog: TelemetryContractCatalog
   public let signals: TelemetrySignalConfiguration
   private let classifyError: @Sendable (any Error) -> TelemetryErrorMetadata
 
   public init(
     schema: TelemetrySchema = .denyAll,
+    catalog: TelemetryContractCatalog = .empty,
     signals: TelemetrySignalConfiguration = .init(),
     classifyError: @escaping @Sendable (any Error) -> TelemetryErrorMetadata = { _ in .init() }
   ) {
     self.schema = schema
+    self.catalog = catalog
     self.signals = signals
     self.classifyError = classifyError
   }
@@ -35,7 +38,7 @@ public struct TelemetryPolicy: Sendable {
       ComposableOTelSemantics.Spans.navigation:
       return name
     default:
-      return ComposableOTelSemantics.Spans.unknown
+      return catalog.spans[name] == nil ? ComposableOTelSemantics.Spans.unknown : name
     }
   }
 
@@ -114,12 +117,21 @@ public struct TelemetryPolicy: Sendable {
       }
     }
     if case .string(let value) = attributes["deployment.environment.name"],
-      value == "debug" || value == "production"
+      TelemetryDeploymentEnvironment(rawValue: value) != nil
     {
       result["deployment.environment.name"] = .string(value)
     }
     if attributes["os.type"] == .string("darwin") {
       result["os.type"] = .string("darwin")
+    }
+    if let resourceSchema = catalog.resources.values.first {
+      let custom = attributes.filter { resourceSchema.fieldKeys.contains($0.key) }
+      if let sanitized = resourceSchema.sanitizedAttributes(
+        custom,
+        version: catalog.contractVersion
+      ) {
+        result.merge(sanitized) { _, new in new }
+      }
     }
     return result
   }

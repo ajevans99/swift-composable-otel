@@ -95,7 +95,6 @@ for fileURL in allMarkdown {
 }
 
 for requiredFile in [
-  "CHANGELOG.md",
   "LICENSE",
   "MIGRATION.md",
   "PERFORMANCE.md",
@@ -145,7 +144,6 @@ if let versionMatch, let range = Range(versionMatch.range(at: 1), in: metadata) 
 
 let readme = read("README.md")
 let gettingStarted = read("Sources/ComposableOTel/Documentation.docc/Articles/GettingStarted.md")
-let changelog = read("CHANGELOG.md")
 let releaseNotes = read("RELEASE_NOTES.md")
 let releasing = read("RELEASING.md")
 if !readme.contains("[MIT License](LICENSE), SPDX identifier `MIT`") {
@@ -166,20 +164,6 @@ if let packageVersion {
   }
   if !gettingStarted.contains(#"from: "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
-  }
-  if let unreleasedRange = changelog.range(of: "## [Unreleased]\n"),
-    let versionRange = changelog.range(of: "## [\(packageVersion)] - ")
-  {
-    if unreleasedRange.lowerBound >= versionRange.lowerBound {
-      failures.append("CHANGELOG must place Unreleased before the current version")
-    }
-  } else {
-    failures.append("CHANGELOG must place Unreleased before the current version")
-  }
-  if !changelog.contains(
-    "[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/\(packageVersion)...HEAD"
-  ) {
-    failures.append("CHANGELOG Unreleased compare link does not start at the current version")
   }
   if !releaseNotes.hasPrefix("# swift-composable-otel \(packageVersion)\n") {
     failures.append("RELEASE_NOTES does not use ComposableOTelMetadata.version")

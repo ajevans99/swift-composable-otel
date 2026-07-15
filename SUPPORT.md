@@ -118,5 +118,5 @@ that `Package.resolved` remains untracked.
 ## Support changes
 
 Raising a minimum platform, toolchain, or dependency version is a compatibility change. Before
-1.0 it requires at least a minor release and a changelog entry. After 1.0 it requires a major
-release unless an urgent correctness or security constraint makes the old range unusable.
+1.0 it requires at least a minor release and release-note migration guidance. After 1.0 it requires
+a major release unless an urgent correctness or security constraint makes the old range unusable.

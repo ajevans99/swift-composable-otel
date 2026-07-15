@@ -5,7 +5,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 
 > [!IMPORTANT]
 > The current tagged release is
-> [`0.3.1`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.1).
+> [`0.3.2`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.2).
 > This release remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -15,7 +15,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    from: "0.3.1"
+    from: "0.3.2"
   )
 ]
 ```
@@ -490,14 +490,13 @@ as bootstrap. They do not replace process globals.
 | OpenTelemetry Swift OTLP exporters | `>= 2.4.1, < 3.0.0` |
 | swift-sharing compatibility constraint | `== 2.8.2` |
 
-See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
-[RELEASING.md](RELEASING.md).
+See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.3.1 package quality layer includes:
+The 0.3.2 package quality layer includes:
 
-- 95 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;
@@ -509,7 +508,7 @@ The 0.3.1 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.3.1 and required
+consumer evidence and repository protection remain accepted residual risks for 0.3.2 and required
 no-go items for 1.0.
 
 ## License

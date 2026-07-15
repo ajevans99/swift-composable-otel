@@ -270,10 +270,17 @@ struct TelemetryPrivacyBoundary: Sendable {
   }
 
   func sanitizedLogs(_ records: [ReadableLogRecord]) -> [ReadableLogRecord] {
-    guard policy.signals.logsEnabled else { return [] }
-    return records.compactMap { record in
-      if let eventName = record.eventName, let schema = policy.catalog.logs[eventName] {
+    records.compactMap { record in
+      if let eventName = record.eventName,
+        let schema =
+          policy.catalog.operationalEvents[eventName] ?? policy.catalog.logs[eventName]
+      {
+        let enabled =
+          policy.catalog.operationalEvents[eventName] != nil
+          ? policy.signals.operationalEventsEnabled
+          : policy.signals.logsEnabled
         guard
+          enabled,
           isSafeInstrumentationScope(record.instrumentationScopeInfo),
           record.severity == schema.severity?.otelSeverity,
           (schema.bodyIsNil && record.body == nil)
@@ -299,6 +306,7 @@ struct TelemetryPrivacyBoundary: Sendable {
           eventName: eventName
         )
       }
+      guard policy.signals.logsEnabled else { return nil }
       return ReadableLogRecord(
         resource: Resource(
           attributes: policy.sanitizedResourceAttributes(record.resource.attributes)

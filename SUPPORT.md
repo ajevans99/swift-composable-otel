@@ -9,30 +9,20 @@ This document defines the supported platform, toolchain, and dependency posture 
 | --- | --- | --- | --- |
 | iOS | 17.0 | Supported | All products compile for a generic device and the package tests on the current hosted simulator. |
 | macOS | 14.0 | Supported | Minimum and latest dependency endpoint builds and tests pass in CI. |
-| watchOS | 10.0 intended | Unsupported | The watchOS support gate below must pass before support is declared. |
+| watchOS | 9.0 | Supported | All products compile for a generic device and platform-relevant contract/runtime tests run on the host. |
 
 The package does not currently make a Linux, tvOS, or visionOS support commitment.
 
-### watchOS support gate
+watchOS support covers the typed contracts, telemetry client, production exporters/runtime, and
+testing helpers. The current `swift-composable-architecture` 1.26 graph fails a generic watchOS build
+at `NotificationName.swift:27:12` because a WatchKit lifecycle notification is main-actor isolated.
+The package therefore conditionally excludes its TCA-specific reducer/effect conveniences on watchOS
+instead of carrying an upstream fork. The generic operational-event API needed by watch applications
+does not depend on that surface.
 
-watchOS remains unsupported until one change:
-
-1. Declares `.watchOS(.v10)` in `Package.swift`.
-2. Demonstrates that every public library product and all required dependencies compile for a
-   generic watchOS device.
-3. Adds a maintained watchOS CI job and a simulator- or host-based strategy that exercises the
-   platform-relevant test surface.
-4. Documents lifecycle, exporter, and background-execution limits specific to watchOS.
-
-A successful ad hoc build alone does not satisfy this gate.
-
-The 2026-07-12 reference probe temporarily added `.watchOS(.v10)` and built `ComposableOTel` for
-`generic/platform=watchOS` with Xcode 27 beta 3 and Swift 6.4. It failed in the inherited
-`swift-composable-architecture` graph at
-`Sources/ComposableArchitecture/Internal/NotificationName.swift:27:12` with
-`main actor-isolated default value in a nonisolated context`. Because even the core product did not
-compile, the exporter products and meaningful platform tests were not claimable. The named
-**watchOS support gate** above remains the only route to declaring support.
+The latest-dependency CI lane builds every public product for a generic watchOS device. The same lane
+runs platform-relevant typed-contract, bounded-queue, privacy, disabled-state, and deletion tests on
+the host because SwiftPM package tests are not executable in a standalone watchOS process.
 
 ## Swift toolchain
 
@@ -61,8 +51,8 @@ CI resolves and tests two dependency sets:
 - **Minimum:** pins each direct dependency to the lower bound above, then builds and tests on
   macOS with Xcode 16.3.
 - **Latest:** resolves the newest versions allowed by `Package.swift`, then builds and tests on
-  macOS, builds every product for a generic iOS device, and runs package tests on the current hosted
-  iOS simulator with the current Xcode.
+  macOS, builds every product for generic iOS and watchOS devices, and runs package tests on the
+  current hosted iOS simulator with the current Xcode.
 
 The GitHub-hosted macOS 15 image does not install Xcode 16.3's iOS 18.4 platform, so that
 lane cannot select a generic iOS destination. The current-Xcode lane remains the required iOS
@@ -75,9 +65,9 @@ The two lanes are supported endpoints rather than an unsupported four-way cross-
 | Xcode 16.3 | Required macOS build/test. Its hosted image lacks the Xcode 16.3 iOS 18.4 platform. | Not claimed; newer resolved packages may require a newer compiler. |
 | Current Xcode | Not claimed; the local Swift 6.4 probe fails TCA 1.25's `PresentsMacro.swift:225` because SwiftSyntax 600's `GenericArgumentSyntax` has no member `Argument`. | Required macOS build/test, generic iOS builds, and current iOS simulator tests. |
 
-Package deployment targets remain iOS 17 and macOS 14 even when hosted runners no longer offer those
-exact simulator/runtime versions. Generic builds compile against the declared deployment floors;
-runtime tests execute on the hosted SDKs actually listed by CI.
+Package deployment targets remain iOS 17, macOS 14, and watchOS 9 even when hosted runners no longer
+offer those exact simulator/runtime versions. Generic builds compile against the declared deployment
+floors; runtime tests execute on the hosted SDKs actually listed by CI.
 
 The minimum job catches accidental use of newer APIs. The latest job catches upstream
 compatibility regressions. A dependency update that fails either set is not supported until the
@@ -128,5 +118,5 @@ that `Package.resolved` remains untracked.
 ## Support changes
 
 Raising a minimum platform, toolchain, or dependency version is a compatibility change. Before
-1.0 it requires at least a minor release and a changelog entry. After 1.0 it requires a major
-release unless an urgent correctness or security constraint makes the old range unusable.
+1.0 it requires at least a minor release and release-note migration guidance. After 1.0 it requires
+a major release unless an urgent correctness or security constraint makes the old range unusable.

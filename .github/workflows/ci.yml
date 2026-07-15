@@ -97,6 +97,10 @@ jobs:
         if: matrix.ios
         run: bash Scripts/test-ios.sh
 
+      - name: Build all products for watchOS
+        if: matrix.ios
+        run: bash Scripts/build-watchos.sh
+
   coverage:
     name: Target coverage floors
     runs-on: macos-26

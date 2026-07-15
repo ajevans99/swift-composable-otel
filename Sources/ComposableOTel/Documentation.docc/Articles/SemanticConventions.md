@@ -5,7 +5,7 @@ Use package-owned names and bounded identifiers consistently across applications
 ## Stability
 
 These conventions are public package API. Before 1.0, documented breaking changes require a minor
-release and changelog migration notes. After 1.0, removals or semantic changes follow the
+release and release-note migration guidance. After 1.0, removals or semantic changes follow the
 deprecation and major-version policy in `RELEASING.md`. Adding an optional bounded field or a new
 instrument is additive; changing a name, unit, meaning, default signal, or cardinality rule is a
 behavioral compatibility change.
@@ -15,7 +15,7 @@ classifications, consent rules, and retention rules do not belong in this packag
 
 The package-specific `tca.*` namespace was reviewed against OpenTelemetry semantic conventions
 v1.43.0 on 2026-07-12. `API/SemanticConventions.lock` binds the source declarations to that review.
-Adding or renaming a convention requires updating the DocC contract, changelog or migration notes,
+Adding or renaming a convention requires updating the DocC contract, release or migration notes,
 the lock, cardinality analysis, API baseline where applicable, and release review. CI fails when the
 source changes without that explicit lock update.
 

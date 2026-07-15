@@ -5,7 +5,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 
 > [!IMPORTANT]
 > The current tagged release is
-> [`0.3.1`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.1).
+> [`0.3.2`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.2).
 > This release remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -15,7 +15,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    from: "0.3.1"
+    from: "0.3.2"
   )
 ]
 ```
@@ -75,16 +75,17 @@ service versions. Rejected values are never printed.
 ## Typed exact-wire contracts
 
 Applications that need stable external wire fields can register an immutable
-`TelemetryContractCatalog` at bootstrap. Generic typed definitions cover custom spans, fixed
-EventName logs, monotonic delta counters, and exact resources. Each definition fixes its name, field
-keys, scalar types, finite enum/range values, optionality, conditional validation, unit/severity/body
-policy, and series limit. Recording accepts only the registered definition and its typed payload:
+`TelemetryContractCatalog` at bootstrap. Generic typed definitions cover custom spans, fixed EventName logs, bodyless operational events,
+monotonic delta counters, and exact resources. Each definition fixes its name, field keys, scalar
+types, finite enum/range values, optionality, conditional validation, unit/severity/body policy, and
+series limit. Recording accepts only the registered definition and its typed payload:
 
 ```swift
 let catalog = try TelemetryContractCatalog(
   contractVersion: .init(1),
   spans: [.init(flowSpan)],
   logs: [.init(flowCompletedLog)],
+  operationalEvents: [.init(operationEvent)],
   counters: [.init(flowCounter)],
   resources: [.init(resourceDefinition)]
 )
@@ -92,6 +93,7 @@ let policy = TelemetryPolicy(schema: schema, catalog: catalog)
 
 try await telemetry.withSpan(flowSpan, payload: payload) {
   try telemetry.record(flowCompletedLog, payload: payload)
+  telemetry.record(operationEvent, payload: payload)
   try telemetry.add(flowCounter, delta: .init(1), payload: payload)
 }
 ```
@@ -99,6 +101,16 @@ try await telemetry.withSpan(flowSpan, payload: payload) {
 Every registered signal injects one integer `telemetry.contract.version`. Record-time names,
 attribute dictionaries, and raw SDK handles are not exposed. Counter dimensions must have finite
 declared cardinality.
+
+`TelemetryOperationalEventDefinition` is always bodyless with info severity. Its
+`operationalEventsEnabled` control is independent from `logsEnabled`, so an application can record
+registered operational events through the bounded log queue without enabling package-owned TCA
+logs. Validation and queue insertion happen synchronously before `record` returns; export remains
+bounded and asynchronous. Recording is nonthrowing and returns
+`TelemetryOperationalEventRecordingResult`: `.recorded`, `.disabled`, `.dropped`, or
+`.contractRejected`. Contract rejection fails closed and increments the runtime log dropped-item
+diagnostic. Field extraction closures are nonthrowing; returning `nil` for a required field rejects
+the payload.
 
 `TelemetryRuntime.Configuration` accepts a finite `TelemetryDeploymentEnvironment`
 (`development`, `test`, `staging`, or `production`) through `TelemetryResourceMode`. `.native`
@@ -470,7 +482,7 @@ as bootstrap. They do not replace process globals.
 | --- | --- |
 | iOS | 17.0+; generic device build required in CI |
 | macOS | 14.0+; package build and tests required in CI |
-| watchOS | Unsupported; the intended future floor is watchOS 10.0 and remains gated by [SUPPORT.md](SUPPORT.md) |
+| watchOS | 9.0+; all library products compile in CI; contract/runtime APIs are supported |
 | Swift | Swift tools 6.0 manifest; Xcode 16.3+ with Swift 6.x |
 | Composable Architecture | `>= 1.25.0, < 2.0.0` |
 | swift-dependencies | `>= 1.5.1, < 2.0.0` |
@@ -478,14 +490,13 @@ as bootstrap. They do not replace process globals.
 | OpenTelemetry Swift OTLP exporters | `>= 2.4.1, < 3.0.0` |
 | swift-sharing compatibility constraint | `== 2.8.2` |
 
-See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
-[RELEASING.md](RELEASING.md).
+See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.3.1 package quality layer includes:
+The 0.3.2 package quality layer includes:
 
-- 95 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;
@@ -497,7 +508,7 @@ The 0.3.1 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.3.1 and required
+consumer evidence and repository protection remain accepted residual risks for 0.3.2 and required
 no-go items for 1.0.
 
 ## License

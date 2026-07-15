@@ -114,11 +114,12 @@ public struct StateChangeToken: Equatable, Sendable {
   }
 }
 
-/// Independent controls for package-owned traces, metrics, and logs.
+/// Independent controls for package-owned and contract-bound signals.
 public struct TelemetrySignalConfiguration: Sendable {
   public var tracesEnabled: Bool
   public var metricsEnabled: Bool
   public var logsEnabled: Bool
+  public var operationalEventsEnabled: Bool
 
   public init(
     tracesEnabled: Bool = true,
@@ -128,12 +129,36 @@ public struct TelemetrySignalConfiguration: Sendable {
     self.tracesEnabled = tracesEnabled
     self.metricsEnabled = metricsEnabled
     self.logsEnabled = logsEnabled
+    operationalEventsEnabled = false
+  }
+
+  public init(
+    tracesEnabled: Bool,
+    metricsEnabled: Bool,
+    logsEnabled: Bool,
+    operationalEventsEnabled: Bool
+  ) {
+    self.tracesEnabled = tracesEnabled
+    self.metricsEnabled = metricsEnabled
+    self.logsEnabled = logsEnabled
+    self.operationalEventsEnabled = operationalEventsEnabled
+  }
+
+  /// Enables only registered operational events.
+  public init(operationalEventsEnabled: Bool) {
+    self.init(
+      tracesEnabled: false,
+      metricsEnabled: false,
+      logsEnabled: false,
+      operationalEventsEnabled: operationalEventsEnabled
+    )
   }
 
   public static let disabled = Self(
     tracesEnabled: false,
     metricsEnabled: false,
-    logsEnabled: false
+    logsEnabled: false,
+    operationalEventsEnabled: false
   )
 }
 

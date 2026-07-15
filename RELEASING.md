@@ -7,8 +7,9 @@ This project uses Semantic Versioning and release tags without a `v` prefix, for
 Before 1.0:
 
 - Minor releases may contain documented breaking changes.
-- Patch releases must remain source compatible and contain fixes or documentation only.
-- Public API removals or behavior changes require migration notes in the changelog.
+- Patch releases must remain source compatible. They may add APIs or platform support and may contain
+  fixes or documentation.
+- Public API removals or behavior changes require migration notes in the release notes.
 
 After 1.0:
 
@@ -18,18 +19,19 @@ After 1.0:
 - Immediate removal is reserved for a security or correctness issue that cannot be mitigated
   safely; the release notes must explain the exception.
 
-## Changelog convention
+## Release history
 
-Every user-visible pull request adds a concise entry under `CHANGELOG.md`'s `Unreleased` section
-using `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`. A release moves those
-entries into a dated version section and restores an empty `Unreleased` section.
+Published GitHub Releases are the canonical version history. `RELEASE_NOTES.md` stages the next
+release's notes in the repository so they can pass review and CI with the code they describe. After
+publication, a later release replaces that file; prior notes remain immutable on their GitHub Release
+pages. Pull requests do not maintain a separate tracked changelog.
 
 ## Release checklist
 
 1. Confirm the release scope and version against the compatibility policy.
 2. Update `ComposableOTelMetadata.version` and the README installation requirement to the release
    version. The source version must have no duplicate semantic-version literals.
-3. Finalize `CHANGELOG.md`, including migration guidance for behavior or API changes.
+3. Finalize `RELEASE_NOTES.md`, including migration guidance for behavior or API changes.
 4. Confirm `Package.swift` and `SUPPORT.md` agree on platforms and dependency ranges.
 5. Confirm the approved repository license is present and referenced by the README.
 6. Run baseline validation, strict formatting, minimum/latest dependency builds and tests, and
@@ -45,9 +47,9 @@ entries into a dated version section and restores an empty `Unreleased` section.
 
 10. Verify `git cat-file -t 0.3.0` reports `tag`, then create a GitHub Release targeting that exact
     tag and commit.
-11. Title the GitHub Release `swift-composable-otel 0.3.0`; copy the version's changelog notes,
-    link migrations and fixed issues, and mark it as a prerelease only when the version itself is
-    a prerelease.
+11. Title the GitHub Release `swift-composable-otel 0.3.0`; publish the reviewed
+    `RELEASE_NOTES.md`, link migrations and fixed issues, and mark it as a prerelease only when the
+    version itself is a prerelease.
 12. Verify the release page, source archive, package resolution, and DocC build from the tag.
 
 Never move or reuse a published tag. If release metadata is wrong, correct the GitHub Release or
@@ -75,9 +77,8 @@ reviewer:
    pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
 6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
    in `SUPPORT.md` remains exact and reviewed.
-7. **Platforms:** macOS and iOS gates pass, and watchOS passes its named support gate. Documented
-   unsupported watchOS status is permitted only for pre-1.0 releases; no partial build may be
-   presented as support.
+7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS.
+   Platform-relevant contract/runtime tests and watchOS lifecycle limitations remain documented.
 8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
    release notes, and residual-risk ownership are approved.
 9. **Consumer pilot:** every item in `PILOT.md` is supplied by the external pilot, linked immutably,

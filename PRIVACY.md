@@ -27,8 +27,9 @@ Native resource mode preserves the package's established SDK/distribution metada
 mode is opt-in and emits only one registered exact required key set plus integer contract version;
 it never silently mixes native metadata into the strict contract.
 
-Action and navigation logs are disabled by default. Signal controls are independent, and trace
-sampling does not disable metrics or logs.
+Action and navigation logs and contract-bound operational events are disabled by default. Their
+controls are independent, so enabling registered operational events does not enable package-owned
+logs. Trace sampling does not disable metrics, logs, or operational events.
 
 ## Host responsibilities
 

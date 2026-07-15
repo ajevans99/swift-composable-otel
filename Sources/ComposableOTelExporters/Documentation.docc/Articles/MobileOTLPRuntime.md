@@ -34,10 +34,27 @@ SDK/distribution attributes. Use `.strict(resourceValue)` only for a registered 
 strict mode emits exactly its required keys plus integer contract version and rejects an environment
 mismatch before providers are created.
 
-All production endpoints must use HTTPS and include a host. Embedded URL credentials, query strings,
+Endpoints require HTTPS by default and must include a host. Embedded URL credentials, query strings,
 and fragments are rejected before providers are built. The API intentionally has no static header
 dictionary. The authenticator is called immediately before every attempt and its output is never
 persisted.
+
+To send from a local simulator to a local collector, opt in explicitly:
+
+```swift
+let configuration = TelemetryRuntime.Configuration(
+  serviceName: "example-app",
+  endpoints: OTLPEndpoints(baseURL: URL(string: "http://localhost:4318")!),
+  endpointSecurity: .allowInsecureHTTPForLoopbackInDevelopmentOrTest,
+  resourceMode: .native(environment: .development)
+)
+```
+
+``TelemetryEndpointSecurityPolicy/allowInsecureHTTPForLoopbackInDevelopmentOrTest`` accepts HTTP
+only when the effective native or strict resource environment is `development` or `test` and every
+signal endpoint host is exactly `localhost`, a dotted-decimal address in `127.0.0.0/8`, or `::1`.
+Staging, production, LAN and other non-loopback hosts, mixed local/remote endpoint sets, and
+alternate numeric host spellings remain rejected. HTTPS remains accepted in every environment.
 
 ## Use a gateway and expiring credentials
 

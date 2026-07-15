@@ -167,8 +167,14 @@ if let packageVersion {
   if !gettingStarted.contains(#"from: "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
   }
-  if !changelog.contains("## [Unreleased]\n") || !changelog.contains("## [\(packageVersion)] - ") {
-    failures.append("CHANGELOG must have an Unreleased section before the current version")
+  if let unreleasedRange = changelog.range(of: "## [Unreleased]\n"),
+    let versionRange = changelog.range(of: "## [\(packageVersion)] - ")
+  {
+    if unreleasedRange.lowerBound >= versionRange.lowerBound {
+      failures.append("CHANGELOG must place Unreleased before the current version")
+    }
+  } else {
+    failures.append("CHANGELOG must place Unreleased before the current version")
   }
   if !changelog.contains(
     "[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/\(packageVersion)...HEAD"

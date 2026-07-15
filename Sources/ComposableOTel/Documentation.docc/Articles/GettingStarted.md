@@ -7,7 +7,7 @@ Configure a finite telemetry schema, inject a client, and instrument selected TC
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  from: "0.3.0"
+  from: "0.3.1"
 )
 ```
 

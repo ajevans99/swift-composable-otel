@@ -21,6 +21,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `swift-composable-architecture` watch lifecycle isolation failure; contract, client, exporter,
   runtime, and testing APIs remain available.
 
+## [0.3.1] - 2026-07-15
+
+### Fixed
+
+- `TelemetryRuntime` can now explicitly opt into plain HTTP for local simulator OTLP development,
+  but only when its resource environment is development or test and every signal endpoint host is
+  loopback. HTTPS remains the default, while staging, production, LAN, non-loopback, and mixed
+  local/remote endpoint configurations remain rejected.
+- Documentation validation now accepts the populated `Unreleased` section required by the
+  repository's changelog policy.
+
 ## [0.3.0] - 2026-07-13
 
 ### Added
@@ -168,7 +179,8 @@ The complete `0.2.2` to `0.3.0` migration is in [MIGRATION.md](MIGRATION.md). In
 - Dependency-injected `TelemetryClient` and in-memory test helpers.
 - Stdout SDK bootstrap, DocC catalogs, formatting configuration, and macOS CI.
 
-[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/0.3.1...HEAD
+[0.3.1]: https://github.com/ajevans99/swift-composable-otel/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.2...0.3.0
 [0.2.2]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.1...0.2.2
 [0.2.1]: https://github.com/ajevans99/swift-composable-otel/compare/0.2.0...0.2.1

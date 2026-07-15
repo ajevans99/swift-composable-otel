@@ -13,6 +13,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var serviceName: ServiceID
     public var serviceVersion: ServiceVersionID?
     public var endpoints: OTLPEndpoints
+    public var endpointSecurity: TelemetryEndpointSecurityPolicy
     public var samplingRatio: Double
     public var policy: TelemetryPolicy
     public var resourceMode: TelemetryResourceMode
@@ -42,6 +43,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.serviceName = serviceName
       self.serviceVersion = serviceVersion
       self.endpoints = endpoints
+      self.endpointSecurity = .requireHTTPS
       self.samplingRatio = samplingRatio
       self.policy = policy
       self.resourceMode = resourceMode
@@ -52,6 +54,41 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.persistence = persistence
       self.defaultFlushTimeout = defaultFlushTimeout
       self.backgroundFlushTimeout = backgroundFlushTimeout
+    }
+
+    /// Creates a configuration with an explicit endpoint security policy.
+    public init(
+      serviceName: ServiceID,
+      serviceVersion: ServiceVersionID? = nil,
+      endpoints: OTLPEndpoints,
+      endpointSecurity: TelemetryEndpointSecurityPolicy,
+      samplingRatio: Double = 0.1,
+      policy: TelemetryPolicy = .init(),
+      resourceMode: TelemetryResourceMode = .native(environment: .production),
+      traces: TelemetryBatchConfiguration = .init(),
+      logs: TelemetryBatchConfiguration = .init(),
+      metricExportInterval: Duration = .seconds(60),
+      delivery: TelemetryDeliveryConfiguration = .init(),
+      persistence: TelemetryPersistenceConfiguration? = nil,
+      defaultFlushTimeout: Duration = .seconds(10),
+      backgroundFlushTimeout: Duration = .seconds(5)
+    ) {
+      self.init(
+        serviceName: serviceName,
+        serviceVersion: serviceVersion,
+        endpoints: endpoints,
+        samplingRatio: samplingRatio,
+        policy: policy,
+        resourceMode: resourceMode,
+        traces: traces,
+        logs: logs,
+        metricExportInterval: metricExportInterval,
+        delivery: delivery,
+        persistence: persistence,
+        defaultFlushTimeout: defaultFlushTimeout,
+        backgroundFlushTimeout: backgroundFlushTimeout
+      )
+      self.endpointSecurity = endpointSecurity
     }
   }
 
@@ -517,7 +554,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
   private static func validate(_ configuration: Configuration) throws {
     for signal in TelemetryRuntimeSignal.allCases {
       let endpoint = configuration.endpoints.endpoint(for: signal)
-      guard endpoint.scheme?.lowercased() == "https" else {
+      guard
+        let scheme = endpoint.scheme?.lowercased(),
+        scheme == "https" || scheme == "http"
+      else {
         throw TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: signal)
       }
       guard endpoint.host?.isEmpty == false else {
@@ -528,6 +568,25 @@ public final class TelemetryRuntime: @unchecked Sendable {
       }
       guard endpoint.query == nil, endpoint.fragment == nil else {
         throw TelemetryRuntimeConfigurationError.endpointContainsQueryOrFragment(signal: signal)
+      }
+    }
+    if let insecureSignal = TelemetryRuntimeSignal.allCases.first(where: {
+      configuration.endpoints.endpoint(for: $0).scheme?.lowercased() == "http"
+    }) {
+      guard
+        allowsInsecureLoopbackHTTP(configuration)
+      else {
+        throw TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: insecureSignal)
+      }
+      if let nonLoopbackSignal = TelemetryRuntimeSignal.allCases.first(where: {
+        guard let host = configuration.endpoints.endpoint(for: $0).host else { return true }
+        return !isLoopbackHost(host)
+      }) {
+        let signal =
+          configuration.endpoints.endpoint(for: nonLoopbackSignal).scheme?.lowercased() == "http"
+          ? nonLoopbackSignal
+          : insecureSignal
+        throw TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: signal)
       }
     }
 
@@ -581,6 +640,58 @@ public final class TelemetryRuntime: @unchecked Sendable {
         throw TelemetryRuntimeConfigurationError.invalidResourceContract
       }
     }
+  }
+
+  private static func allowsInsecureLoopbackHTTP(_ configuration: Configuration) -> Bool {
+    guard
+      case .allowInsecureHTTPForLoopbackInDevelopmentOrTest = configuration.endpointSecurity,
+      let environment = deploymentEnvironment(for: configuration.resourceMode)
+    else {
+      return false
+    }
+    return environment == .development || environment == .test
+  }
+
+  private static func deploymentEnvironment(
+    for resourceMode: TelemetryResourceMode
+  ) -> TelemetryDeploymentEnvironment? {
+    switch resourceMode {
+    case .native(let environment):
+      return environment
+    case .strict(let resource):
+      guard
+        case .string(let value)? = resource.attributes["deployment.environment.name"]
+      else {
+        return nil
+      }
+      return TelemetryDeploymentEnvironment(rawValue: value)
+    }
+  }
+
+  private static func isLoopbackHost(_ host: String) -> Bool {
+    let normalized = host.lowercased()
+    if normalized == "localhost" || normalized == "::1" {
+      return true
+    }
+
+    let octets = normalized.split(separator: ".", omittingEmptySubsequences: false)
+    guard octets.count == 4 else { return false }
+    var values: [Int] = []
+    values.reserveCapacity(4)
+    for octet in octets {
+      guard
+        !octet.isEmpty,
+        octet.allSatisfy(\.isASCII),
+        octet.allSatisfy(\.isNumber),
+        let value = Int(octet),
+        value <= 255,
+        String(value) == octet
+      else {
+        return false
+      }
+      values.append(value)
+    }
+    return values[0] == 127
   }
 
   private static func valid(batch: TelemetryBatchConfiguration) -> Bool {

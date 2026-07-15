@@ -1,6 +1,13 @@
+import ComposableOTel
 import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
+
+enum RuntimeBatchQueueOfferResult {
+  case accepted
+  case dropped
+  case stopped
+}
 
 final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
   private let lock = NSLock()
@@ -41,17 +48,21 @@ final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
     )
   }
 
-  func offer(_ item: Item) {
+  @discardableResult
+  func offer(_ item: Item) -> RuntimeBatchQueueOfferResult {
     var batch: [Item]?
     var queueDelta = 0
     var dropped = 0
+    var result = RuntimeBatchQueueOfferResult.accepted
     lock.lock()
     if !accepting {
       dropped = 1
+      result = .stopped
     } else if items.count >= configuration.maximumQueueSize {
       dropped = 1
       switch configuration.overflowPolicy {
       case .dropNewest:
+        result = .dropped
         break
       case .dropOldest:
         items.removeFirst()
@@ -79,6 +90,7 @@ final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
     if let batch {
       startExport(batch)
     }
+    return result
   }
 
   func forceFlush() async {
@@ -318,5 +330,39 @@ final class RuntimeLogRecordProcessor: LogRecordProcessor, @unchecked Sendable {
   func shutdown(explicitTimeout: TimeInterval?) -> ExportResult {
     queue.stopAccepting()
     return .success
+  }
+}
+
+func makeRuntimeOperationalEventRecorder(
+  queue: RuntimeBatchQueue<ReadableLogRecord>,
+  boundary: TelemetryPrivacyBoundary,
+  resource: Resource,
+  now: @escaping @Sendable () -> Date
+) -> TelemetryOperationalEventRecorder {
+  TelemetryOperationalEventRecorder { event in
+    let record = ReadableLogRecord(
+      resource: resource,
+      instrumentationScopeInfo: InstrumentationScopeInfo(
+        name: ComposableOTelMetadata.instrumentationName,
+        version: ComposableOTelMetadata.version
+      ),
+      timestamp: now(),
+      spanContext: OpenTelemetry.instance.contextProvider.activeSpan?.context,
+      severity: .info,
+      body: nil,
+      attributes: event.attributes,
+      eventName: event.eventName
+    )
+    guard let sanitized = boundary.sanitizedLogs([record]).first else {
+      return .dropped
+    }
+    switch queue.offer(sanitized) {
+    case .accepted:
+      return .recorded
+    case .dropped:
+      return .dropped
+    case .stopped:
+      return .disabled
+    }
   }
 }

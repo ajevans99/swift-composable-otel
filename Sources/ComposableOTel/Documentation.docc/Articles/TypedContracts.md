@@ -61,7 +61,7 @@ definition plus its payload:
 ```swift
 try await telemetry.withSpan(span, payload: payload) {
   try telemetry.record(log, payload: payload)
-  try telemetry.record(event, payload: payload)
+  telemetry.record(event, payload: payload)
   try telemetry.add(counter, delta: .init(1), payload: payload)
 }
 ```
@@ -80,7 +80,10 @@ Operational events are bodyless info records. Enable them with
 `TelemetrySignalConfiguration(operationalEventsEnabled: true)`. This is independent from
 `logsEnabled`, so registered operational events do not enable package-owned action, navigation, or
 error logs. `TelemetryClient.record(_:payload:)` validates and inserts an operational event into
-the runtime's bounded log queue before returning; export remains asynchronous.
+the runtime's bounded log queue before returning; export remains asynchronous. It is nonthrowing and
+returns ``TelemetryOperationalEventRecordingResult`` so callers and tests can distinguish recorded,
+disabled, overflow-dropped, and contract-rejected events without coupling sync behavior to telemetry
+success.
 
 ## Validate conditional fields
 

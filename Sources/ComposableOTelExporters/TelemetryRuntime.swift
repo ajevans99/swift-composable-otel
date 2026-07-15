@@ -289,7 +289,13 @@ public final class TelemetryRuntime: @unchecked Sendable {
       logger: logger,
       policy: configuration.policy,
       contractCounters: contractCounters,
-      contractProviderRetention: customMeterProvider
+      contractProviderRetention: customMeterProvider,
+      operationalEventRecorder: makeRuntimeOperationalEventRecorder(
+        queue: logQueue,
+        boundary: boundary,
+        resource: resource,
+        now: dependencies.clock.now
+      )
     )
 
     Task {

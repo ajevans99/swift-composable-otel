@@ -135,6 +135,53 @@ struct SendableLogger: @unchecked Sendable {
   }
 }
 
+/// The finite synchronous outcome of recording a contract-bound operational event.
+public enum TelemetryOperationalEventRecordingResult: Equatable, Sendable {
+  /// The event was accepted into the configured telemetry pipeline.
+  case recorded
+  /// Operational events are disabled or the runtime permanently stopped accepting telemetry.
+  case disabled
+  /// The bounded queue rejected the event according to its overflow policy.
+  case dropped
+  /// The definition is unregistered or the payload does not satisfy its registered contract.
+  case contractRejected
+}
+
+package struct TelemetryOperationalEventRecord: Sendable {
+  package let eventName: String
+  package let attributes: [String: AttributeValue]
+}
+
+package struct TelemetryOperationalEventRecorder: Sendable {
+  private let operation:
+    @Sendable (TelemetryOperationalEventRecord) -> TelemetryOperationalEventRecordingResult
+
+  package init(
+    _ operation:
+      @escaping @Sendable (TelemetryOperationalEventRecord) ->
+      TelemetryOperationalEventRecordingResult
+  ) {
+    self.operation = operation
+  }
+
+  package func record(
+    _ event: TelemetryOperationalEventRecord
+  ) -> TelemetryOperationalEventRecordingResult {
+    operation(event)
+  }
+
+  fileprivate static func logger(_ logger: SendableLogger) -> Self {
+    Self { event in
+      logger.logRecordBuilder()
+        .setSeverity(Severity.info)
+        .setAttributes(event.attributes)
+        .setEventName(event.eventName)
+        .emit()
+      return .recorded
+    }
+  }
+}
+
 /// The dependency-injected runtime for bounded ComposableOTel instrumentation.
 ///
 /// Use `TelemetryRuntime.client` for production or `TelemetryBootstrap.configure` for explicit
@@ -143,6 +190,7 @@ public struct TelemetryClient: Sendable {
   let tracer: SendableTracer
   let metrics: MetricInstruments
   let logger: SendableLogger
+  private let operationalEventRecorder: TelemetryOperationalEventRecorder
   package let contracts: TelemetryContractRuntime
 
   public let policy: TelemetryPolicy
@@ -152,11 +200,14 @@ public struct TelemetryClient: Sendable {
     metrics: MetricInstruments,
     logger: any Logger,
     policy: TelemetryPolicy,
-    contracts: TelemetryContractRuntime
+    contracts: TelemetryContractRuntime,
+    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil
   ) {
+    let logger = SendableLogger(underlying: logger)
     self.tracer = SendableTracer(underlying: tracer)
     self.metrics = metrics
-    self.logger = SendableLogger(underlying: logger)
+    self.logger = logger
+    self.operationalEventRecorder = operationalEventRecorder ?? .logger(logger)
     self.policy = policy
     self.contracts = contracts
   }
@@ -191,7 +242,8 @@ public struct TelemetryClient: Sendable {
     logger: any Logger,
     policy: TelemetryPolicy,
     contractCounters: [TelemetryContractIdentity: any LongCounter],
-    contractProviderRetention: AnyObject? = nil
+    contractProviderRetention: AnyObject? = nil,
+    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil
   ) -> TelemetryClient {
     TelemetryClient(
       tracer: tracer,
@@ -202,7 +254,8 @@ public struct TelemetryClient: Sendable {
         catalog: policy.catalog,
         counters: contractCounters,
         providerRetention: contractProviderRetention
-      )
+      ),
+      operationalEventRecorder: operationalEventRecorder
     )
   }
 
@@ -240,6 +293,12 @@ public struct TelemetryClient: Sendable {
       .setBody(policy.sanitizedLogBody(.string(body)))
       .setAttributes(policy.sanitizedLogAttributes(attributes))
       .emit()
+  }
+
+  package func recordOperationalEvent(
+    _ event: TelemetryOperationalEventRecord
+  ) -> TelemetryOperationalEventRecordingResult {
+    operationalEventRecorder.record(event)
   }
 }
 

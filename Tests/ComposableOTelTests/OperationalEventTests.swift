@@ -72,9 +72,17 @@ struct OperationalEventTests {
     let fixture = try OperationalEventFixture.make()
     let (client, collectors) = try TelemetryClient.test(policy: fixture.policy)
 
-    try client.record(fixture.definition, payload: fixture.payload("queued"))
-    try client.record(fixture.definition, payload: fixture.payload("started", attempt: 1))
-    try client.record(fixture.definition, payload: fixture.payload("completed", attempt: 2))
+    #expect(
+      client.record(fixture.definition, payload: try fixture.payload("queued")) == .recorded
+    )
+    #expect(
+      client.record(fixture.definition, payload: try fixture.payload("started", attempt: 1))
+        == .recorded
+    )
+    #expect(
+      client.record(fixture.definition, payload: try fixture.payload("completed", attempt: 2))
+        == .recorded
+    )
 
     let events = collectors.decodedOperationalEvents(for: fixture.definition)
     #expect(events.map(\.eventName) == Array(repeating: "app.operation.event", count: 3))
@@ -110,15 +118,17 @@ struct OperationalEventTests {
       fields: []
     )
 
-    #expect(throws: TelemetryContractError.unregisteredDefinition) {
-      try client.record(unknown, payload: fixture.payload("queued"))
-    }
-    #expect(throws: TelemetryContractError.invalidPayload(field: fixture.phaseKey)) {
-      try client.record(fixture.definition, payload: fixture.payload("unknown"))
-    }
-    #expect(throws: TelemetryContractError.invalidPayload(field: fixture.attemptKey)) {
-      try client.record(fixture.definition, payload: fixture.payload("queued", attempt: 4))
-    }
+    #expect(
+      client.record(unknown, payload: try fixture.payload("queued")) == .contractRejected
+    )
+    #expect(
+      client.record(fixture.definition, payload: try fixture.payload("unknown"))
+        == .contractRejected
+    )
+    #expect(
+      client.record(fixture.definition, payload: try fixture.payload("queued", attempt: 4))
+        == .contractRejected
+    )
     #expect(collectors.logs.allRecords.isEmpty)
   }
 
@@ -166,12 +176,17 @@ struct OperationalEventTests {
       body: ComposableOTelSemantics.LogBodies.effectFailed,
       attributes: [:]
     )
-    try enabledClient.record(enabled.definition, payload: enabled.payload("queued"))
+    #expect(
+      enabledClient.record(enabled.definition, payload: try enabled.payload("queued")) == .recorded
+    )
     #expect(enabledCollectors.logs.allRecords.count == 1)
 
     let disabled = try OperationalEventFixture.make(enabled: false)
     let (disabledClient, disabledCollectors) = try TelemetryClient.test(policy: disabled.policy)
-    try disabledClient.record(disabled.definition, payload: disabled.payload("queued"))
+    #expect(
+      disabledClient.record(disabled.definition, payload: try disabled.payload("queued"))
+        == .disabled
+    )
     #expect(disabledCollectors.logs.allRecords.isEmpty)
   }
 
@@ -227,12 +242,12 @@ struct OperationalEventTests {
       )
     }
 
-    queue.offer(try queuedRecord("queued"))
-    queue.offer(try queuedRecord("started", attempt: 1))
+    #expect(queue.offer(try queuedRecord("queued")) == .accepted)
+    #expect(queue.offer(try queuedRecord("started", attempt: 1)) == .accepted)
     #expect(await waitForOperationalExport(firstExportStarted) == .success)
-    queue.offer(try queuedRecord("completed", attempt: 2))
-    queue.offer(try queuedRecord("queued", attempt: 3))
-    queue.offer(try queuedRecord("started", attempt: 1))
+    #expect(queue.offer(try queuedRecord("completed", attempt: 2)) == .accepted)
+    #expect(queue.offer(try queuedRecord("queued", attempt: 3)) == .accepted)
+    #expect(queue.offer(try queuedRecord("started", attempt: 1)) == .accepted)
     releaseFirstExport.signal()
     await queue.forceFlush()
 
@@ -244,6 +259,111 @@ struct OperationalEventTests {
       } == ["queued", "started", "queued", "started"]
     )
     await queue.shutdown()
+  }
+
+  @Test("drop-newest synchronously reports the rejected operational event")
+  func dropNewestResult() async throws {
+    let fixture = try OperationalEventFixture.make()
+    let diagnostics = RuntimeDiagnosticsState(handler: nil)
+    let firstExportStarted = DispatchSemaphore(value: 0)
+    let releaseFirstExport = DispatchSemaphore(value: 0)
+    let queue = RuntimeBatchQueue<ReadableLogRecord>(
+      configuration: .init(
+        maximumQueueSize: 2,
+        maximumBatchSize: 2,
+        scheduledDelay: .seconds(60),
+        overflowPolicy: .dropNewest
+      ),
+      signal: .logs,
+      diagnostics: diagnostics,
+      clock: .live,
+      export: { records, _ in
+        if records.first?.attributes["sync.attempt"] == .int(0) {
+          firstExportStarted.signal()
+          _ = releaseFirstExport.wait(timeout: .now() + 10)
+        }
+        return true
+      },
+      shutdownExporter: { _ in }
+    )
+    let recorder = makeRuntimeOperationalEventRecorder(
+      queue: queue,
+      boundary: TelemetryPrivacyBoundary(policy: fixture.policy),
+      resource: Resource(attributes: [:]),
+      now: { Date(timeIntervalSince1970: 1) }
+    )
+    func event(_ phase: String, attempt: Int64 = 0) throws -> TelemetryOperationalEventRecord {
+      TelemetryOperationalEventRecord(
+        eventName: fixture.definition.eventName.rawValue,
+        attributes: try fixture.definition.attributes(
+          for: fixture.payload(phase, attempt: attempt),
+          version: fixture.policy.catalog.contractVersion
+        )
+      )
+    }
+
+    #expect(recorder.record(try event("queued")) == .recorded)
+    #expect(recorder.record(try event("started", attempt: 1)) == .recorded)
+    #expect(await waitForOperationalExport(firstExportStarted) == .success)
+    #expect(recorder.record(try event("completed", attempt: 2)) == .recorded)
+    #expect(recorder.record(try event("queued", attempt: 3)) == .recorded)
+    #expect(recorder.record(try event("started", attempt: 1)) == .dropped)
+    releaseFirstExport.signal()
+    await queue.forceFlush()
+
+    #expect(diagnostics.snapshot().logs.droppedItems == 1)
+    await queue.shutdown()
+  }
+
+  @Test("production queue records the active span context")
+  func preservesActiveSpanContext() async throws {
+    let fixture = try OperationalEventFixture.make()
+    let collector = InMemoryLogCollector()
+    let exporter = PrivacyPreservingLogRecordExporter(
+      exporter: collector,
+      policy: fixture.policy
+    )
+    let queue = RuntimeBatchQueue<ReadableLogRecord>(
+      configuration: .init(maximumQueueSize: 1, maximumBatchSize: 1),
+      signal: .logs,
+      diagnostics: RuntimeDiagnosticsState(handler: nil),
+      clock: .live,
+      export: { records, timeout in
+        exporter.export(logRecords: records, explicitTimeout: timeout) == .success
+      },
+      shutdownExporter: { timeout in
+        exporter.shutdown(explicitTimeout: timeout)
+      }
+    )
+    let recorder = makeRuntimeOperationalEventRecorder(
+      queue: queue,
+      boundary: TelemetryPrivacyBoundary(policy: fixture.policy),
+      resource: Resource(attributes: [:]),
+      now: { Date(timeIntervalSince1970: 1) }
+    )
+    let event = TelemetryOperationalEventRecord(
+      eventName: fixture.definition.eventName.rawValue,
+      attributes: try fixture.definition.attributes(
+        for: fixture.payload("queued"),
+        version: fixture.policy.catalog.contractVersion
+      )
+    )
+    let provider = TracerProviderBuilder().build()
+    let tracer = provider.get(
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
+    )
+    var expectedContext: SpanContext?
+
+    tracer.spanBuilder(spanName: "test.operation").withActiveSpan { span in
+      expectedContext = span.context
+      #expect(recorder.record(event) == .recorded)
+    }
+    await queue.forceFlush()
+
+    #expect(collector.allRecords.first?.spanContext == expectedContext)
+    await queue.shutdown()
+    provider.shutdown()
   }
 
   @Test("discard stops synchronous acceptance and deletes pending events")
@@ -261,14 +381,19 @@ struct OperationalEventTests {
       transport: InMemoryEncodedRequestCollector().transport,
       authenticator: .none
     )
-    try runtime.client.record(fixture.definition, payload: fixture.payload("queued"))
+    #expect(
+      runtime.client.record(fixture.definition, payload: try fixture.payload("queued")) == .recorded
+    )
     #expect(runtime.diagnostics.logs.queueDepth == 1)
 
     let result = await runtime.disableAndDiscardPending()
     #expect(result.logs.droppedItems == 1)
     #expect(runtime.diagnostics.logs.queueDepth == 0)
 
-    try runtime.client.record(fixture.definition, payload: fixture.payload("started"))
+    #expect(
+      runtime.client.record(fixture.definition, payload: try fixture.payload("started"))
+        == .disabled
+    )
     #expect(runtime.diagnostics.logs.queueDepth == 0)
     #expect(runtime.diagnostics.logs.droppedItems == 2)
   }

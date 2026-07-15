@@ -1218,23 +1218,29 @@ extension TelemetryClient {
   ///
   /// Acceptance into a production runtime occurs on the caller before this method returns. Export
   /// remains asynchronous and bounded by the runtime's log batch configuration.
+  @discardableResult
   public func record<Payload: Sendable>(
     _ definition: TelemetryOperationalEventDefinition<Payload>,
     payload: Payload
-  ) throws {
-    guard policy.signals.operationalEventsEnabled else { return }
+  ) -> TelemetryOperationalEventRecordingResult {
+    guard policy.signals.operationalEventsEnabled else { return .disabled }
     guard contracts.catalog.contains(definition.identity) else {
-      throw TelemetryContractError.unregisteredDefinition
+      return .contractRejected
     }
-    let attributes = try definition.attributes(
-      for: payload,
-      version: contracts.catalog.contractVersion
+    guard
+      let attributes = try? definition.attributes(
+        for: payload,
+        version: contracts.catalog.contractVersion
+      )
+    else {
+      return .contractRejected
+    }
+    return recordOperationalEvent(
+      TelemetryOperationalEventRecord(
+        eventName: definition.eventName.rawValue,
+        attributes: attributes
+      )
     )
-    logger.logRecordBuilder()
-      .setSeverity(Severity.info)
-      .setAttributes(attributes)
-      .setEventName(definition.eventName.rawValue)
-      .emit()
   }
 
   public func add<Payload: Sendable>(

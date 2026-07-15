@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - watchOS 9 support for all public library products, with platform-relevant host tests and generic
   watchOS builds in CI.
-- Typed registered operational events with synchronous bounded-queue acceptance, independent
+- Typed registered operational events with nonthrowing synchronous bounded-queue results, independent
   enablement from package-owned logs, exact test captures, and the existing privacy/deletion boundary.
 
 ### Changed

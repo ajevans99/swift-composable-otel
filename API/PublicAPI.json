@@ -2366,18 +2366,18 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV6policyAA0C6PolicyVvp"
   },
   {
+    "declaration" : "@discardableResult func record<Payload>(_ definition: TelemetryOperationalEventDefinition<Payload>, payload: Payload) -> TelemetryOperationalEventRecordingResult where Payload : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryClient.record(_:payload:)",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV6record_7payloadAA0C31OperationalEventRecordingResultOAA0cgH10DefinitionVyxG_xts8SendableRzlF"
+  },
+  {
     "declaration" : "func record<Payload>(_ definition: TelemetryLogDefinition<Payload>, payload: Payload) throws where Payload : Sendable",
     "kind" : "swift.method",
     "module" : "ComposableOTel",
     "path" : "TelemetryClient.record(_:payload:)",
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV6record_7payloadyAA0C13LogDefinitionVyxG_xtKs8SendableRzlF"
-  },
-  {
-    "declaration" : "func record<Payload>(_ definition: TelemetryOperationalEventDefinition<Payload>, payload: Payload) throws where Payload : Sendable",
-    "kind" : "swift.method",
-    "module" : "ComposableOTel",
-    "path" : "TelemetryClient.record(_:payload:)",
-    "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV6record_7payloadyAA0C26OperationalEventDefinitionVyxG_xtKs8SendableRzlF"
   },
   {
     "declaration" : "func withSpan<Payload, Result>(_ definition: TelemetrySpanDefinition<Payload>, payload: Payload, operation: @escaping @Sendable () async throws -> Result) async throws -> Result where Payload : Sendable, Result : Sendable",
@@ -3778,6 +3778,41 @@
     "module" : "ComposableOTel",
     "path" : "AnyTelemetryOperationalEventDefinition.init(_:)",
     "preciseIdentifier" : "s:14ComposableOTel38AnyTelemetryOperationalEventDefinitionVyAcA0defG0VyxGcs8SendableRzlufc"
+  },
+  {
+    "declaration" : "enum TelemetryOperationalEventRecordingResult",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryOperationalEventRecordingResult",
+    "preciseIdentifier" : "s:14ComposableOTel40TelemetryOperationalEventRecordingResultO"
+  },
+  {
+    "declaration" : "case contractRejected",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryOperationalEventRecordingResult.contractRejected",
+    "preciseIdentifier" : "s:14ComposableOTel40TelemetryOperationalEventRecordingResultO16contractRejectedyA2CmF"
+  },
+  {
+    "declaration" : "case dropped",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryOperationalEventRecordingResult.dropped",
+    "preciseIdentifier" : "s:14ComposableOTel40TelemetryOperationalEventRecordingResultO7droppedyA2CmF"
+  },
+  {
+    "declaration" : "case disabled",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryOperationalEventRecordingResult.disabled",
+    "preciseIdentifier" : "s:14ComposableOTel40TelemetryOperationalEventRecordingResultO8disabledyA2CmF"
+  },
+  {
+    "declaration" : "case recorded",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryOperationalEventRecordingResult.recorded",
+    "preciseIdentifier" : "s:14ComposableOTel40TelemetryOperationalEventRecordingResultO8recordedyA2CmF"
   },
   {
     "declaration" : "typealias RouteID = TelemetryIdentifier<RouteIdentifierKind>",

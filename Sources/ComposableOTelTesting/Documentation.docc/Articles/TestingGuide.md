@@ -82,6 +82,10 @@ Assert exact field sets and ``TelemetryDecodedScalar`` cases, integer contract v
 body, fixed EventName/severity, recording order, delta counter temporality/unit/value, resource
 environment, and nil instrumentation-scope schema URLs.
 
+Assert `TelemetryOperationalEventRecordingResult` separately when testing disabled clients,
+contract rejection, or bounded drop-newest behavior. `.recorded` means synchronous queue acceptance,
+not successful network export.
+
 Use ``InMemoryEncodedRequestCollector`` as the production runtime transport to inspect encoded
 request signal/body size without network access.
 

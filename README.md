@@ -93,7 +93,7 @@ let policy = TelemetryPolicy(schema: schema, catalog: catalog)
 
 try await telemetry.withSpan(flowSpan, payload: payload) {
   try telemetry.record(flowCompletedLog, payload: payload)
-  try telemetry.record(operationEvent, payload: payload)
+  telemetry.record(operationEvent, payload: payload)
   try telemetry.add(flowCounter, delta: .init(1), payload: payload)
 }
 ```
@@ -106,7 +106,9 @@ declared cardinality.
 `operationalEventsEnabled` control is independent from `logsEnabled`, so an application can record
 registered operational events through the bounded log queue without enabling package-owned TCA
 logs. Validation and queue insertion happen synchronously before `record` returns; export remains
-bounded and asynchronous.
+bounded and asynchronous. Recording is nonthrowing and returns
+`TelemetryOperationalEventRecordingResult`: `.recorded`, `.disabled`, `.dropped`, or
+`.contractRejected`.
 
 `TelemetryRuntime.Configuration` accepts a finite `TelemetryDeploymentEnvironment`
 (`development`, `test`, `staging`, or `production`) through `TelemetryResourceMode`. `.native`

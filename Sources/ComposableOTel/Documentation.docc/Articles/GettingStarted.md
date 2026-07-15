@@ -97,13 +97,14 @@ let policy = TelemetryPolicy(
   signals: TelemetrySignalConfiguration(
     tracesEnabled: true,
     metricsEnabled: true,
-    logsEnabled: false
+    logsEnabled: false,
+    operationalEventsEnabled: false
   )
 )
 ```
 
-Each signal is independent. Logs are disabled by default, and trace sampling never suppresses
-metrics.
+Each signal is independent. Package logs and registered operational events are disabled by default,
+and trace sampling never suppresses metrics.
 
 ## Test
 

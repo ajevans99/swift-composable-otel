@@ -326,7 +326,14 @@ public final class TelemetryRuntime: @unchecked Sendable {
       logger: logger,
       policy: configuration.policy,
       contractCounters: contractCounters,
-      contractProviderRetention: customMeterProvider
+      contractProviderRetention: customMeterProvider,
+      operationalEventRecorder: makeRuntimeOperationalEventRecorder(
+        queue: logQueue,
+        boundary: boundary,
+        diagnostics: diagnosticsState,
+        resource: resource,
+        now: dependencies.clock.now
+      )
     )
 
     Task {
@@ -465,6 +472,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
         logs: result(
           for: .logs,
           enabled: self.configuration.policy.signals.logsEnabled
+            || self.configuration.policy.signals.operationalEventsEnabled
         ),
         persistedItems: deliveryOutcome.remainingPersistedItems
       )
@@ -534,7 +542,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
         enabled: configuration.policy.signals.metricsEnabled,
         extraFailure: !metricSucceeded
       ),
-      logs: result(for: .logs, enabled: configuration.policy.signals.logsEnabled),
+      logs: result(
+        for: .logs,
+        enabled: configuration.policy.signals.logsEnabled
+          || configuration.policy.signals.operationalEventsEnabled
+      ),
       persistedItems: current.persistedItems
     )
   }

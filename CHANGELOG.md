@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- watchOS 9 support for all public library products, with platform-relevant host tests and generic
+  watchOS builds in CI.
+- Typed registered operational events with nonthrowing synchronous bounded-queue results, independent
+  enablement from package-owned logs, exact test captures, and the existing privacy/deletion boundary.
+
+### Changed
+
+- TCA-specific reducer and effect conveniences are excluded on watchOS to avoid the upstream
+  `swift-composable-architecture` watch lifecycle isolation failure; contract, client, exporter,
+  runtime, and testing APIs remain available.
+
 ## [0.3.1] - 2026-07-15
 
 ### Fixed

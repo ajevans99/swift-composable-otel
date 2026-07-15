@@ -5,9 +5,10 @@ dictionaries, or raw OpenTelemetry handles.
 
 ## Register an immutable catalog
 
-A ``TelemetryContractCatalog`` owns one integer contract version plus finite span, bodyless/fixed-body
-log, monotonic counter, and resource definitions. A definition fixes its name, exact field keys,
-scalar types, allowed enum values or numeric ranges, optionality, and conditional validation rule.
+A ``TelemetryContractCatalog`` owns one integer contract version plus finite span,
+bodyless/fixed-body log, bodyless operational-event, monotonic counter, and resource definitions. A
+definition fixes its name, exact field keys, scalar types, allowed enum values or numeric ranges,
+optionality, and conditional validation rule.
 
 ```swift
 struct FlowPayload: Sendable {
@@ -34,6 +35,10 @@ let log = try TelemetryLogDefinition(
   bodyPolicy: .none,
   fields: fields
 )
+let event = try TelemetryOperationalEventDefinition(
+  eventName: .init("flow.event"),
+  fields: fields
+)
 let counter = try TelemetryCounterDefinition(
   name: .init("flow.events"),
   unit: .init("{event}"),
@@ -45,6 +50,7 @@ let catalog = try TelemetryContractCatalog(
   contractVersion: .init(1),
   spans: [.init(span)],
   logs: [.init(log)],
+  operationalEvents: [.init(event)],
   counters: [.init(counter)]
 )
 ```
@@ -55,6 +61,7 @@ definition plus its payload:
 ```swift
 try await telemetry.withSpan(span, payload: payload) {
   try telemetry.record(log, payload: payload)
+  telemetry.record(event, payload: payload)
   try telemetry.add(counter, delta: .init(1), payload: payload)
 }
 ```
@@ -67,7 +74,17 @@ unchanged.
 
 ``TelemetryClient/withSynchronousSpan(_:payload:operation:)`` preserves synchronous execution;
 ``TelemetryClient/withSpan(_:payload:operation:)`` preserves async execution. Disabled and no-op
-clients execute either operation unchanged and make log/counter recording a no-op.
+clients execute either operation unchanged and make log/counter/operational-event recording a no-op.
+
+Operational events are bodyless info records. Enable them with
+`TelemetrySignalConfiguration(operationalEventsEnabled: true)`. This is independent from
+`logsEnabled`, so registered operational events do not enable package-owned action, navigation, or
+error logs. `TelemetryClient.record(_:payload:)` validates and inserts an operational event into
+the runtime's bounded log queue before returning; export remains asynchronous. It is nonthrowing and
+returns ``TelemetryOperationalEventRecordingResult`` so callers and tests can distinguish recorded,
+disabled, overflow-dropped, and contract-rejected events without coupling sync behavior to telemetry
+success. Contract rejection fails closed and increments the runtime log dropped-item diagnostic.
+Field extraction closures are nonthrowing; returning `nil` for a required field rejects the payload.
 
 ## Validate conditional fields
 
@@ -75,6 +92,9 @@ Definitions can validate the typed payload and independently validate decoded sc
 export boundary. Give a conditional rule a stable `validationRule` identifier so it participates in
 definition identity. Error-with-code or mutually exclusive fields can therefore be rejected both
 before recording and after an unsafe raw SDK attempts to imitate a registered signal.
+
+Integer field ranges must fit signed 32-bit values so one registered contract has identical behavior
+on iOS, macOS, and watchOS.
 
 Counter dimensions must have statically finite cardinality. Enum, bounded integer, and boolean
 fields declare finite series; unbounded string/double dimensions are rejected from counter
@@ -118,5 +138,5 @@ series in one custom collection (50 by default). Runtime creation rejects a cata
 and the exporter independently partitions metric records by actual point count. A single metric
 record above the cap is dropped without transport and produces a bounded diagnostic.
 
-`ComposableOTelTesting` exposes decoded contract spans, logs, delta counters, and resources plus
-`InMemoryEncodedRequestCollector` for no-network request assertions.
+`ComposableOTelTesting` exposes decoded contract spans, logs, operational events, delta counters,
+and resources plus `InMemoryEncodedRequestCollector` for no-network request assertions.

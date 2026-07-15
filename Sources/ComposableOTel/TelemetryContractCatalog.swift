@@ -100,14 +100,14 @@ public enum TelemetryScalarValue: Equatable, Sendable {
   case double(Double)
   case boolean(Bool)
 
-  package var attributeValue: AttributeValue {
+  package var attributeValue: AttributeValue? {
     switch self {
     case .string(let value):
       .string(value.rawValue)
     case .enumeration(let value):
       .string(value.rawValue)
     case .integer(let value):
-      .int(Int(value))
+      Int(exactly: value).map(AttributeValue.int)
     case .double(let value):
       .double(value)
     case .boolean(let value):
@@ -242,7 +242,11 @@ public struct TelemetryField<Payload: Sendable>: @unchecked Sendable {
     presence: TelemetryFieldPresence = .required,
     _ extract: @escaping @Sendable (Payload) -> Int64?
   ) throws -> Self {
-    guard range.lowerBound <= range.upperBound else {
+    guard
+      range.lowerBound >= Int64(Int32.min),
+      range.upperBound <= Int64(Int32.max),
+      range.lowerBound <= range.upperBound
+    else {
       throw TelemetryContractError.invalidDefinition
     }
     return Self(
@@ -339,10 +343,10 @@ public struct TelemetryField<Payload: Sendable>: @unchecked Sendable {
       }
       return nil
     }
-    guard validateValue(value) else {
+    guard validateValue(value), let attributeValue = value.attributeValue else {
       throw TelemetryContractError.invalidPayload(field: key)
     }
-    return (key.rawValue, value.attributeValue)
+    return (key.rawValue, attributeValue)
   }
 
   package func accepts(_ value: AttributeValue) -> Bool {
@@ -383,6 +387,7 @@ public struct TelemetryCounterDelta: Equatable, Sendable {
 package enum TelemetryContractKind: String, Sendable {
   case span
   case log
+  case operationalEvent
   case counter
   case resource
 }
@@ -672,6 +677,73 @@ public struct TelemetryLogDefinition<Payload: Sendable>: @unchecked Sendable {
   }
 }
 
+/// A registered, bodyless operational event with exact typed fields.
+///
+/// Operational events use the OTLP logs signal internally, but are enabled independently from
+/// package-owned TCA logs. Event names and attributes can only come from this registered definition.
+public struct TelemetryOperationalEventDefinition<Payload: Sendable>: @unchecked Sendable {
+  public let eventName: TelemetryContractName
+  private let fields: [TelemetryField<Payload>]
+  private let validatePayload: @Sendable (Payload) -> Bool
+  private let validateWireFields: @Sendable ([TelemetryFieldKey: TelemetryScalarValue]) -> Bool
+  package let identity: TelemetryContractIdentity
+
+  public init(
+    eventName: TelemetryContractName,
+    fields: [TelemetryField<Payload>],
+    validate: @escaping @Sendable (Payload) -> Bool = { _ in true },
+    validationRule: TelemetryContractName? = nil,
+    validateFields: @escaping @Sendable ([TelemetryFieldKey: TelemetryScalarValue]) -> Bool = {
+      _ in true
+    }
+  ) throws {
+    self.eventName = eventName
+    self.fields = fields
+    validatePayload = validate
+    validateWireFields = validateFields
+    identity = try validatedDefinition(
+      kind: .operationalEvent,
+      name: eventName,
+      fields: fields,
+      suffix: "operational-event:\(validationRule?.rawValue ?? "none")"
+    )
+  }
+
+  package func attributes(
+    for payload: Payload,
+    version: TelemetryContractVersion
+  ) throws -> [String: AttributeValue] {
+    let attributes = try contractAttributes(
+      fields: fields,
+      payload: payload,
+      validate: validatePayload,
+      version: version
+    )
+    guard schema.sanitizedAttributes(attributes, version: version) != nil else {
+      throw TelemetryContractError.invalidPayload(field: nil)
+    }
+    return attributes
+  }
+
+  package var schema: TelemetryContractRecordSchema {
+    let metadata = fieldMetadata(fields)
+    return TelemetryContractRecordSchema(
+      identity: identity,
+      fieldKeys: metadata.keys,
+      requiredKeys: metadata.required,
+      fieldValidators: metadata.validators,
+      fieldDecoders: metadata.decoders,
+      validateFields: { validateDecodedFields($0, validate: validateWireFields) },
+      fixedBody: nil,
+      bodyIsNil: true,
+      severity: .info,
+      unit: nil,
+      description: nil,
+      maximumSeries: nil
+    )
+  }
+}
+
 public struct TelemetryCounterDefinition<Payload: Sendable>: @unchecked Sendable {
   public let name: TelemetryContractName
   public let unit: TelemetryStringValue
@@ -862,6 +934,13 @@ public struct AnyTelemetryLogDefinition: Sendable {
   }
 }
 
+public struct AnyTelemetryOperationalEventDefinition: Sendable {
+  package let schema: TelemetryContractRecordSchema
+  public init<Payload>(_ definition: TelemetryOperationalEventDefinition<Payload>) {
+    schema = definition.schema
+  }
+}
+
 public struct AnyTelemetryCounterDefinition: Sendable {
   package let schema: TelemetryContractRecordSchema
   public init<Payload>(_ definition: TelemetryCounterDefinition<Payload>) {
@@ -883,6 +962,7 @@ public struct TelemetryContractCatalog: Sendable {
   public let contractVersion: TelemetryContractVersion
   package let spans: [String: TelemetryContractRecordSchema]
   package let logs: [String: TelemetryContractRecordSchema]
+  package let operationalEvents: [String: TelemetryContractRecordSchema]
   package let counters: [String: TelemetryContractRecordSchema]
   package let resources: [TelemetryContractIdentity: TelemetryContractRecordSchema]
 
@@ -893,7 +973,31 @@ public struct TelemetryContractCatalog: Sendable {
     counters: [AnyTelemetryCounterDefinition] = [],
     resources: [AnyTelemetryResourceDefinition] = []
   ) throws {
-    guard spans.count <= 64, logs.count <= 64, counters.count <= 32, resources.count <= 1 else {
+    try self.init(
+      contractVersion: contractVersion,
+      spans: spans,
+      logs: logs,
+      operationalEvents: [],
+      counters: counters,
+      resources: resources
+    )
+  }
+
+  public init(
+    contractVersion: TelemetryContractVersion,
+    spans: [AnyTelemetrySpanDefinition] = [],
+    logs: [AnyTelemetryLogDefinition] = [],
+    operationalEvents: [AnyTelemetryOperationalEventDefinition],
+    counters: [AnyTelemetryCounterDefinition] = [],
+    resources: [AnyTelemetryResourceDefinition] = []
+  ) throws {
+    guard
+      spans.count <= 64,
+      logs.count <= 64,
+      operationalEvents.count <= 64,
+      counters.count <= 32,
+      resources.count <= 1
+    else {
       throw TelemetryContractError.invalidDefinition
     }
     let reservedNames =
@@ -913,6 +1017,7 @@ public struct TelemetryContractCatalog: Sendable {
     guard
       spans.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
       logs.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
+      operationalEvents.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
       counters.allSatisfy({ !reservedNames.contains($0.schema.identity.name) }),
       resources.allSatisfy({
         $0.schema.requiredKeys.contains("deployment.environment.name")
@@ -924,14 +1029,19 @@ public struct TelemetryContractCatalog: Sendable {
     self.contractVersion = contractVersion
     self.spans = try Self.records(spans.map(\.schema))
     self.logs = try Self.records(logs.map(\.schema))
+    self.operationalEvents = try Self.records(operationalEvents.map(\.schema))
     self.counters = try Self.records(counters.map(\.schema))
     self.resources = try Self.resources(resources.map(\.schema))
+    guard Set(self.logs.keys).isDisjoint(with: self.operationalEvents.keys) else {
+      throw TelemetryContractError.duplicateDefinition
+    }
   }
 
   package func contains(_ identity: TelemetryContractIdentity) -> Bool {
     switch identity.kind {
     case .span: spans[identity.name]?.identity == identity
     case .log: logs[identity.name]?.identity == identity
+    case .operationalEvent: operationalEvents[identity.name]?.identity == identity
     case .counter: counters[identity.name]?.identity == identity
     case .resource: resources[identity] != nil
     }
@@ -1102,6 +1212,35 @@ extension TelemetryClient {
       _ = builder.setBody(body)
     }
     builder.emit()
+  }
+
+  /// Synchronously validates and records a registered operational event.
+  ///
+  /// Acceptance into a production runtime occurs on the caller before this method returns. Export
+  /// remains asynchronous and bounded by the runtime's log batch configuration.
+  @discardableResult
+  public func record<Payload: Sendable>(
+    _ definition: TelemetryOperationalEventDefinition<Payload>,
+    payload: Payload
+  ) -> TelemetryOperationalEventRecordingResult {
+    guard policy.signals.operationalEventsEnabled else { return .disabled }
+    guard contracts.catalog.contains(definition.identity) else {
+      return rejectOperationalEventContract()
+    }
+    guard
+      let attributes = try? definition.attributes(
+        for: payload,
+        version: contracts.catalog.contractVersion
+      )
+    else {
+      return rejectOperationalEventContract()
+    }
+    return recordOperationalEvent(
+      TelemetryOperationalEventRecord(
+        eventName: definition.eventName.rawValue,
+        attributes: attributes
+      )
+    )
   }
 
   public func add<Payload: Sendable>(

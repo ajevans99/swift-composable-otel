@@ -25,6 +25,12 @@ public struct DecodedContractLog: Equatable, Sendable {
   public let fields: [String: TelemetryDecodedScalar]
 }
 
+public struct DecodedOperationalEvent: Equatable, Sendable {
+  public let eventName: String
+  public let contractVersion: Int
+  public let fields: [String: TelemetryDecodedScalar]
+}
+
 public enum TelemetryDecodedTemporality: Equatable, Sendable {
   case delta
   case cumulative
@@ -120,6 +126,27 @@ extension TestCollectors {
         eventName: record.eventName ?? definition.eventName.rawValue,
         severity: severity,
         body: record.body.flatMap(decodeScalar),
+        contractVersion: decoded.version,
+        fields: decoded.fields
+      )
+    }
+  }
+
+  /// Returns exact accepted values for a registered operational event in recording order.
+  public func decodedOperationalEvents<Payload>(
+    for definition: TelemetryOperationalEventDefinition<Payload>
+  ) -> [DecodedOperationalEvent] {
+    logs.allRecords.compactMap { record in
+      guard
+        record.eventName == definition.eventName.rawValue,
+        record.severity == .info,
+        record.body == nil,
+        let decoded = decodeRecord(record.attributes)
+      else {
+        return nil
+      }
+      return DecodedOperationalEvent(
+        eventName: definition.eventName.rawValue,
         contractVersion: decoded.version,
         fields: decoded.fields
       )

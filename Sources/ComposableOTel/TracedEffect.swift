@@ -1,91 +1,94 @@
-import ComposableArchitecture
 import Dependencies
 import Foundation
 import OpenTelemetryApi
 
-extension Effect {
-  /// Adds a bounded initiation marker without observing the effect lifecycle.
-  public func traceStart(effect: EffectID) -> Self {
-    let parentContext = ReducerTraceContext.spanContext
-    let signalEffect: Self = .run { _ in
-      @Dependency(\.composableOTel) var telemetry
+#if canImport(ComposableArchitecture)
+  import ComposableArchitecture
 
-      let effect = telemetry.policy.schema.bounded(effect)
-      let attributes: [String: AttributeValue] = [
-        TCAAttributes.effectName: .string(effect.rawValue),
-        TCAAttributes.effectLongLived: .bool(false),
-        TCAAttributes.effectMarker: .bool(true),
-      ]
+  extension Effect {
+    /// Adds a bounded initiation marker without observing the effect lifecycle.
+    public func traceStart(effect: EffectID) -> Self {
+      let parentContext = ReducerTraceContext.spanContext
+      let signalEffect: Self = .run { _ in
+        @Dependency(\.composableOTel) var telemetry
 
-      if telemetry.policy.signals.tracesEnabled {
-        let spanBuilder = telemetry.tracer
-          .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
-          .setSpanKind(spanKind: .internal)
-          .setAttributes(telemetry.policy.sanitizedSpanAttributes(attributes))
-        if let parentContext {
-          spanBuilder.setParent(parentContext)
-        } else {
-          spanBuilder.setNoParent()
+        let effect = telemetry.policy.schema.bounded(effect)
+        let attributes: [String: AttributeValue] = [
+          TCAAttributes.effectName: .string(effect.rawValue),
+          TCAAttributes.effectLongLived: .bool(false),
+          TCAAttributes.effectMarker: .bool(true),
+        ]
+
+        if telemetry.policy.signals.tracesEnabled {
+          let spanBuilder = telemetry.tracer
+            .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
+            .setSpanKind(spanKind: .internal)
+            .setAttributes(telemetry.policy.sanitizedSpanAttributes(attributes))
+          if let parentContext {
+            spanBuilder.setParent(parentContext)
+          } else {
+            spanBuilder.setNoParent()
+          }
+          spanBuilder.withActiveSpan { span in
+            span.status = .ok
+            span.addEvent(name: ComposableOTelSemantics.Events.effectStarted)
+          }
         }
-        spanBuilder.withActiveSpan { span in
-          span.status = .ok
-          span.addEvent(name: ComposableOTelSemantics.Events.effectStarted)
-        }
-      }
 
-      if telemetry.policy.signals.metricsEnabled {
-        var counter = telemetry.metrics.effectsStarted
-        counter.add(
-          value: 1,
-          attributes: telemetry.policy.sanitizedMetricAttributes(
-            attributes,
-            instrumentName: ComposableOTelSemantics.Metrics.effectsStarted
+        if telemetry.policy.signals.metricsEnabled {
+          var counter = telemetry.metrics.effectsStarted
+          counter.add(
+            value: 1,
+            attributes: telemetry.policy.sanitizedMetricAttributes(
+              attributes,
+              instrumentName: ComposableOTelSemantics.Metrics.effectsStarted
+            )
           )
-        )
+        }
       }
-    }
-    return merge(with: signalEffect)
-  }
-}
-
-extension Effect {
-  /// Creates a one-shot effect with bounded lifecycle telemetry.
-  public static func tracedRun(
-    effect: EffectID,
-    priority: TaskPriority? = nil,
-    operation: @escaping @Sendable (Send<Action>) async throws -> Void
-  ) -> Self {
-    tracedRun(effect: effect, priority: priority, longLived: false, operation: operation)
-  }
-
-  /// Creates a long-lived effect with bounded lifecycle telemetry.
-  public static func tracedLongLivedRun(
-    effect: EffectID,
-    priority: TaskPriority? = nil,
-    operation: @escaping @Sendable (Send<Action>) async throws -> Void
-  ) -> Self {
-    tracedRun(effect: effect, priority: priority, longLived: true, operation: operation)
-  }
-
-  private static func tracedRun(
-    effect: EffectID,
-    priority: TaskPriority?,
-    longLived: Bool,
-    operation: @escaping @Sendable (Send<Action>) async throws -> Void
-  ) -> Self {
-    let parentContext = ReducerTraceContext.spanContext
-    return .run(priority: priority, name: effect.rawValue) { send in
-      @Dependency(\.composableOTel) var telemetry
-      try await telemetry.withEffectTrace(
-        effect: effect,
-        longLived: longLived,
-        parentContext: parentContext
-      ) {
-        try await operation(send)
-      }
+      return merge(with: signalEffect)
     }
   }
-}
+
+  extension Effect {
+    /// Creates a one-shot effect with bounded lifecycle telemetry.
+    public static func tracedRun(
+      effect: EffectID,
+      priority: TaskPriority? = nil,
+      operation: @escaping @Sendable (Send<Action>) async throws -> Void
+    ) -> Self {
+      tracedRun(effect: effect, priority: priority, longLived: false, operation: operation)
+    }
+
+    /// Creates a long-lived effect with bounded lifecycle telemetry.
+    public static func tracedLongLivedRun(
+      effect: EffectID,
+      priority: TaskPriority? = nil,
+      operation: @escaping @Sendable (Send<Action>) async throws -> Void
+    ) -> Self {
+      tracedRun(effect: effect, priority: priority, longLived: true, operation: operation)
+    }
+
+    private static func tracedRun(
+      effect: EffectID,
+      priority: TaskPriority?,
+      longLived: Bool,
+      operation: @escaping @Sendable (Send<Action>) async throws -> Void
+    ) -> Self {
+      let parentContext = ReducerTraceContext.spanContext
+      return .run(priority: priority, name: effect.rawValue) { send in
+        @Dependency(\.composableOTel) var telemetry
+        try await telemetry.withEffectTrace(
+          effect: effect,
+          longLived: longLived,
+          parentContext: parentContext
+        ) {
+          try await operation(send)
+        }
+      }
+    }
+  }
+#endif
 
 extension TelemetryClient {
   func withEffectTrace<T: Sendable>(

@@ -73,13 +73,14 @@ resource value as production.
 collectors.forceFlush()
 let spans = collectors.decodedSpans(for: spanDefinition)
 let logs = collectors.decodedLogs(for: logDefinition)
+let events = collectors.decodedOperationalEvents(for: operationalEventDefinition)
 let counters = collectors.decodedCounters(for: counterDefinition)
 let resource = collectors.decodedResource(for: resourceDefinition)
 ```
 
-Assert exact field sets and ``TelemetryDecodedScalar`` cases, integer contract version, nil log body,
-fixed EventName/severity, delta counter temporality/unit/value, resource environment, and nil
-instrumentation-scope schema URLs.
+Assert exact field sets and ``TelemetryDecodedScalar`` cases, integer contract version, nil log/event
+body, fixed EventName/severity, recording order, delta counter temporality/unit/value, resource
+environment, and nil instrumentation-scope schema URLs.
 
 Use ``InMemoryEncodedRequestCollector`` as the production runtime transport to inspect encoded
 request signal/body size without network access.

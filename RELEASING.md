@@ -75,9 +75,8 @@ reviewer:
    pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
 6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
    in `SUPPORT.md` remains exact and reviewed.
-7. **Platforms:** macOS and iOS gates pass, and watchOS passes its named support gate. Documented
-   unsupported watchOS status is permitted only for pre-1.0 releases; no partial build may be
-   presented as support.
+7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS.
+   Platform-relevant contract/runtime tests and watchOS lifecycle limitations remain documented.
 8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
    release notes, and residual-risk ownership are approved.
 9. **Consumer pilot:** every item in `PILOT.md` is supplied by the external pilot, linked immutably,

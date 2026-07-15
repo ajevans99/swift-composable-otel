@@ -7,6 +7,7 @@ let package = Package(
   platforms: [
     .iOS(.v17),
     .macOS(.v14),
+    .watchOS(.v9),
   ],
   products: [
     .library(name: "ComposableOTel", targets: ["ComposableOTel"]),
@@ -45,7 +46,11 @@ let package = Package(
       name: "ComposableOTel",
       dependencies: [
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+        .product(
+          name: "ComposableArchitecture",
+          package: "swift-composable-architecture",
+          condition: .when(platforms: [.iOS, .macOS])
+        ),
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),
       ]
@@ -77,7 +82,11 @@ let package = Package(
         "ComposableOTel",
         "ComposableOTelExporters",
         "ComposableOTelTesting",
-        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+        .product(
+          name: "ComposableArchitecture",
+          package: "swift-composable-architecture",
+          condition: .when(platforms: [.iOS, .macOS])
+        ),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ]
     ),
@@ -86,7 +95,11 @@ let package = Package(
       dependencies: [
         "ComposableOTel",
         "ComposableOTelExporters",
-        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+        .product(
+          name: "ComposableArchitecture",
+          package: "swift-composable-architecture",
+          condition: .when(platforms: [.iOS, .macOS])
+        ),
         .product(name: "Dependencies", package: "swift-dependencies"),
       ],
       path: "Benchmarks/ComposableOTelBenchmarks",

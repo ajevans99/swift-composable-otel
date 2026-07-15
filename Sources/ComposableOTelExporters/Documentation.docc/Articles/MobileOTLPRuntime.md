@@ -62,6 +62,8 @@ persistence or the host transport.
 Queue size, batch size, schedule delay, exporter timeout, pending request count, encoded request
 bytes, request timeout, overflow policy, retry attempts, backoff, jitter, metric interval, and flush
 deadlines are finite and configurable. `.dropOldest` and `.dropNewest` make overflow deterministic.
+Registered operational events share the bounded log queue and delivery signal, while their
+`operationalEventsEnabled` acceptance control remains independent from package-owned logs.
 Sanitized signal arrays are officially encoded and recursively split in order before persistence and
 transport until every request fits `maximumEncodedRequestBytes`. A single record whose encoded body
 still exceeds the ceiling, or an unmeasurable body stream, is dropped with bounded diagnostics.
@@ -135,8 +137,10 @@ behavior and can be retried by calling the operation again.
 
 ## Treat delivery as best-effort
 
-iOS can suspend or terminate the process before a schedule fires, a retry completes, an atomic write
-finishes, or a flush returns. No package code can export while suspended or after force-quit,
+iOS and watchOS can suspend or terminate the process before a schedule fires, a retry completes, an
+atomic write finishes, or a flush returns. watchOS background execution is especially constrained;
+the host must forward its actual remaining lifecycle budget and must not assume periodic or
+post-suspension delivery. No package code can export while suspended or after force-quit,
 termination, crash, or device shutdown. Persistence creates another bounded opportunity after
 relaunch; it is not a delivery guarantee.
 

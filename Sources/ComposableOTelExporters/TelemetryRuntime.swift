@@ -428,6 +428,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
         logs: result(
           for: .logs,
           enabled: self.configuration.policy.signals.logsEnabled
+            || self.configuration.policy.signals.operationalEventsEnabled
         ),
         persistedItems: deliveryOutcome.remainingPersistedItems
       )
@@ -497,7 +498,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
         enabled: configuration.policy.signals.metricsEnabled,
         extraFailure: !metricSucceeded
       ),
-      logs: result(for: .logs, enabled: configuration.policy.signals.logsEnabled),
+      logs: result(
+        for: .logs,
+        enabled: configuration.policy.signals.logsEnabled
+          || configuration.policy.signals.operationalEventsEnabled
+      ),
       persistedItems: current.persistedItems
     )
   }

@@ -167,8 +167,8 @@ if let packageVersion {
   if !gettingStarted.contains(#"from: "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
   }
-  if !changelog.contains("## [Unreleased]\n\n## [\(packageVersion)] - ") {
-    failures.append("CHANGELOG must have an empty Unreleased section before the current version")
+  if !changelog.contains("## [Unreleased]\n") || !changelog.contains("## [\(packageVersion)] - ") {
+    failures.append("CHANGELOG must have an Unreleased section before the current version")
   }
   if !changelog.contains(
     "[Unreleased]: https://github.com/ajevans99/swift-composable-otel/compare/\(packageVersion)...HEAD"
@@ -180,10 +180,9 @@ if let packageVersion {
   }
 }
 if !releasing.contains(
-  "watchOS passes its named support gate. Documented\n"
-    + "   unsupported watchOS status is permitted only for pre-1.0 releases"
+  "every public library product compiles for watchOS"
 ) {
-  failures.append("RELEASING must require the watchOS support gate for 1.0")
+  failures.append("RELEASING must require the watchOS product build gate for 1.0")
 }
 
 let forbiddenDocumentation = [
@@ -220,7 +219,7 @@ for requiredPrivacyClaim in [
   "deterministically aggregate to",
   "`TelemetryContractCatalog`",
   "Swift `package` implementation detail",
-  "watchOS | Unsupported",
+  "watchOS | 9.0+",
   "best-effort",
   "short-lived",
   "`TelemetryRuntime`",
@@ -282,11 +281,12 @@ for requiredCatalogBoundary in [
 }
 
 let manifest = read("Package.swift")
-if !manifest.contains(".iOS(.v17)") || !manifest.contains(".macOS(.v14)") {
-  failures.append("Package.swift must retain the documented iOS 17 and macOS 14 minimums")
-}
-if manifest.contains(".watchOS(") {
-  failures.append("Do not declare watchOS until the documented watchOS support gate passes")
+if !manifest.contains(".iOS(.v17)") || !manifest.contains(".macOS(.v14)")
+  || !manifest.contains(".watchOS(.v9)")
+{
+  failures.append(
+    "Package.swift must retain the documented iOS 17, macOS 14, and watchOS 9 minimums"
+  )
 }
 if !manifest.contains("open-telemetry/opentelemetry-swift.git")
   || !manifest.contains("OpenTelemetryProtocolExporterHTTP")

@@ -83,7 +83,8 @@ error logs. `TelemetryClient.record(_:payload:)` validates and inserts an operat
 the runtime's bounded log queue before returning; export remains asynchronous. It is nonthrowing and
 returns ``TelemetryOperationalEventRecordingResult`` so callers and tests can distinguish recorded,
 disabled, overflow-dropped, and contract-rejected events without coupling sync behavior to telemetry
-success.
+success. Contract rejection fails closed and increments the runtime log dropped-item diagnostic.
+Field extraction closures are nonthrowing; returning `nil` for a required field rejects the payload.
 
 ## Validate conditional fields
 

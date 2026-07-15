@@ -108,7 +108,9 @@ registered operational events through the bounded log queue without enabling pac
 logs. Validation and queue insertion happen synchronously before `record` returns; export remains
 bounded and asynchronous. Recording is nonthrowing and returns
 `TelemetryOperationalEventRecordingResult`: `.recorded`, `.disabled`, `.dropped`, or
-`.contractRejected`.
+`.contractRejected`. Contract rejection fails closed and increments the runtime log dropped-item
+diagnostic. Field extraction closures are nonthrowing; returning `nil` for a required field rejects
+the payload.
 
 `TelemetryRuntime.Configuration` accepts a finite `TelemetryDeploymentEnvironment`
 (`development`, `test`, `staging`, or `production`) through `TelemetryResourceMode`. `.native`

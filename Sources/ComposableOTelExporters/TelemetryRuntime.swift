@@ -293,6 +293,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       operationalEventRecorder: makeRuntimeOperationalEventRecorder(
         queue: logQueue,
         boundary: boundary,
+        diagnostics: diagnosticsState,
         resource: resource,
         now: dependencies.clock.now
       )

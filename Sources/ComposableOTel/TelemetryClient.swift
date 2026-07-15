@@ -155,19 +155,27 @@ package struct TelemetryOperationalEventRecord: Sendable {
 package struct TelemetryOperationalEventRecorder: Sendable {
   private let operation:
     @Sendable (TelemetryOperationalEventRecord) -> TelemetryOperationalEventRecordingResult
+  private let contractRejection: @Sendable () -> Void
 
   package init(
     _ operation:
       @escaping @Sendable (TelemetryOperationalEventRecord) ->
-      TelemetryOperationalEventRecordingResult
+      TelemetryOperationalEventRecordingResult,
+    contractRejection: @escaping @Sendable () -> Void = {}
   ) {
     self.operation = operation
+    self.contractRejection = contractRejection
   }
 
   package func record(
     _ event: TelemetryOperationalEventRecord
   ) -> TelemetryOperationalEventRecordingResult {
     operation(event)
+  }
+
+  package func rejectContract() -> TelemetryOperationalEventRecordingResult {
+    contractRejection()
+    return .contractRejected
   }
 
   fileprivate static func logger(_ logger: SendableLogger) -> Self {
@@ -299,6 +307,10 @@ public struct TelemetryClient: Sendable {
     _ event: TelemetryOperationalEventRecord
   ) -> TelemetryOperationalEventRecordingResult {
     operationalEventRecorder.record(event)
+  }
+
+  package func rejectOperationalEventContract() -> TelemetryOperationalEventRecordingResult {
+    operationalEventRecorder.rejectContract()
   }
 }
 

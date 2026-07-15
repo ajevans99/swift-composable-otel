@@ -1225,7 +1225,7 @@ extension TelemetryClient {
   ) -> TelemetryOperationalEventRecordingResult {
     guard policy.signals.operationalEventsEnabled else { return .disabled }
     guard contracts.catalog.contains(definition.identity) else {
-      return .contractRejected
+      return rejectOperationalEventContract()
     }
     guard
       let attributes = try? definition.attributes(
@@ -1233,7 +1233,7 @@ extension TelemetryClient {
         version: contracts.catalog.contractVersion
       )
     else {
-      return .contractRejected
+      return rejectOperationalEventContract()
     }
     return recordOperationalEvent(
       TelemetryOperationalEventRecord(

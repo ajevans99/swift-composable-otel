@@ -336,33 +336,40 @@ final class RuntimeLogRecordProcessor: LogRecordProcessor, @unchecked Sendable {
 func makeRuntimeOperationalEventRecorder(
   queue: RuntimeBatchQueue<ReadableLogRecord>,
   boundary: TelemetryPrivacyBoundary,
+  diagnostics: RuntimeDiagnosticsState,
   resource: Resource,
   now: @escaping @Sendable () -> Date
 ) -> TelemetryOperationalEventRecorder {
-  TelemetryOperationalEventRecorder { event in
-    let record = ReadableLogRecord(
-      resource: resource,
-      instrumentationScopeInfo: InstrumentationScopeInfo(
-        name: ComposableOTelMetadata.instrumentationName,
-        version: ComposableOTelMetadata.version
-      ),
-      timestamp: now(),
-      spanContext: OpenTelemetry.instance.contextProvider.activeSpan?.context,
-      severity: .info,
-      body: nil,
-      attributes: event.attributes,
-      eventName: event.eventName
-    )
-    guard let sanitized = boundary.sanitizedLogs([record]).first else {
-      return .dropped
+  TelemetryOperationalEventRecorder(
+    { event in
+      let record = ReadableLogRecord(
+        resource: resource,
+        instrumentationScopeInfo: InstrumentationScopeInfo(
+          name: ComposableOTelMetadata.instrumentationName,
+          version: ComposableOTelMetadata.version
+        ),
+        timestamp: now(),
+        spanContext: OpenTelemetry.instance.contextProvider.activeSpan?.context,
+        severity: .info,
+        body: nil,
+        attributes: event.attributes,
+        eventName: event.eventName
+      )
+      guard let sanitized = boundary.sanitizedLogs([record]).first else {
+        diagnostics.recordDrop(signal: .logs)
+        return .dropped
+      }
+      switch queue.offer(sanitized) {
+      case .accepted:
+        return .recorded
+      case .dropped:
+        return .dropped
+      case .stopped:
+        return .disabled
+      }
+    },
+    contractRejection: {
+      diagnostics.recordDrop(signal: .logs)
     }
-    switch queue.offer(sanitized) {
-    case .accepted:
-      return .recorded
-    case .dropped:
-      return .dropped
-    case .stopped:
-      return .disabled
-    }
-  }
+  )
 }

@@ -132,6 +132,33 @@ struct OperationalEventTests {
     #expect(collectors.logs.allRecords.isEmpty)
   }
 
+  @Test("reports production contract rejections through runtime diagnostics")
+  func reportsContractRejectionDiagnostics() throws {
+    let fixture = try OperationalEventFixture.make()
+    let runtime = try TelemetryRuntime(
+      configuration: runtimeConfiguration(
+        fixture: fixture,
+        logs: .init(scheduledDelay: .seconds(60))
+      ),
+      transport: InMemoryEncodedRequestCollector().transport,
+      authenticator: .none
+    )
+    let unknown = try TelemetryOperationalEventDefinition<OperationalEventPayload>(
+      eventName: .init("app.operation.unknown"),
+      fields: []
+    )
+
+    #expect(
+      runtime.client.record(unknown, payload: try fixture.payload("queued")) == .contractRejected
+    )
+    #expect(
+      runtime.client.record(fixture.definition, payload: try fixture.payload("unknown"))
+        == .contractRejected
+    )
+    #expect(runtime.diagnostics.logs.droppedItems == 2)
+    #expect(runtime.diagnostics.logs.queueDepth == 0)
+  }
+
   @Test("rejects missing, extra, unknown, and malformed wire attributes")
   func rejectsInvalidWireShapes() throws {
     let fixture = try OperationalEventFixture.make()
@@ -289,6 +316,7 @@ struct OperationalEventTests {
     let recorder = makeRuntimeOperationalEventRecorder(
       queue: queue,
       boundary: TelemetryPrivacyBoundary(policy: fixture.policy),
+      diagnostics: diagnostics,
       resource: Resource(attributes: [:]),
       now: { Date(timeIntervalSince1970: 1) }
     )
@@ -318,6 +346,7 @@ struct OperationalEventTests {
   @Test("production queue records the active span context")
   func preservesActiveSpanContext() async throws {
     let fixture = try OperationalEventFixture.make()
+    let diagnostics = RuntimeDiagnosticsState(handler: nil)
     let collector = InMemoryLogCollector()
     let exporter = PrivacyPreservingLogRecordExporter(
       exporter: collector,
@@ -326,7 +355,7 @@ struct OperationalEventTests {
     let queue = RuntimeBatchQueue<ReadableLogRecord>(
       configuration: .init(maximumQueueSize: 1, maximumBatchSize: 1),
       signal: .logs,
-      diagnostics: RuntimeDiagnosticsState(handler: nil),
+      diagnostics: diagnostics,
       clock: .live,
       export: { records, timeout in
         exporter.export(logRecords: records, explicitTimeout: timeout) == .success
@@ -338,6 +367,7 @@ struct OperationalEventTests {
     let recorder = makeRuntimeOperationalEventRecorder(
       queue: queue,
       boundary: TelemetryPrivacyBoundary(policy: fixture.policy),
+      diagnostics: diagnostics,
       resource: Resource(attributes: [:]),
       now: { Date(timeIntervalSince1970: 1) }
     )

@@ -7,6 +7,14 @@ public enum TelemetryRuntimeSignal: String, Codable, CaseIterable, Sendable {
   case logs
 }
 
+/// Controls which URL schemes ``TelemetryRuntime`` accepts for OTLP endpoints.
+public enum TelemetryEndpointSecurityPolicy: Sendable {
+  /// Requires HTTPS for every endpoint.
+  case requireHTTPS
+  /// Allows HTTP only for loopback endpoints in development or test environments.
+  case allowInsecureHTTPForLoopbackInDevelopmentOrTest
+}
+
 /// Standard OTLP/HTTP endpoints for each signal.
 public struct OTLPEndpoints: Equatable, Sendable {
   public let traces: URL

@@ -84,6 +84,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV11serviceName0G7Version9endpoints13samplingRatio6policy12resourceMode6traces4logs20metricExportInterval8delivery11persistence19defaultFlushTimeout010backgroundxY0AE0aB00D10IdentifierVyAS21ServiceIdentifierKindOG_AUyAS07ServiceI14IdentifierKindOGSgAA13OTLPEndpointsVSdAS0D6PolicyVAS0d8ResourceO0OAA0d5BatchF0VA8_s8DurationVAA0d8DeliveryF0VAA0d11PersistenceF0VSgA10_A10_tcfc"
   },
   {
+    "declaration" : "init(serviceName: ServiceID, serviceVersion: ServiceVersionID? = nil, endpoints: OTLPEndpoints, endpointSecurity: TelemetryEndpointSecurityPolicy, samplingRatio: Double = 0.1, policy: TelemetryPolicy = .init(), resourceMode: TelemetryResourceMode = .native(environment: .production), traces: TelemetryBatchConfiguration = .init(), logs: TelemetryBatchConfiguration = .init(), metricExportInterval: Duration = .seconds(60), delivery: TelemetryDeliveryConfiguration = .init(), persistence: TelemetryPersistenceConfiguration? = nil, defaultFlushTimeout: Duration = .seconds(10), backgroundFlushTimeout: Duration = .seconds(5))",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntime.Configuration.init(serviceName:serviceVersion:endpoints:endpointSecurity:samplingRatio:policy:resourceMode:traces:logs:metricExportInterval:delivery:persistence:defaultFlushTimeout:backgroundFlushTimeout:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV11serviceName0G7Version9endpoints16endpointSecurity13samplingRatio6policy12resourceMode6traces4logs20metricExportInterval8delivery11persistence19defaultFlushTimeout010backgroundZ7TimeoutAE0aB00D10IdentifierVyAT21ServiceIdentifierKindOG_AVyAT07ServiceI14IdentifierKindOGSgAA13OTLPEndpointsVAA0d8EndpointL6PolicyOSdAT0D6PolicyVAT0d8ResourceQ0OAA0d5BatchF0VA11_s8DurationVAA0d8DeliveryF0VAA0d11PersistenceF0VSgA13_A13_tcfc"
+  },
+  {
     "declaration" : "var serviceName: ServiceID",
     "kind" : "swift.property",
     "module" : "ComposableOTelExporters",
@@ -110,6 +117,13 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryRuntime.Configuration.serviceVersion",
     "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV14serviceVersion0aB00D10IdentifierVyAG07ServicehI4KindOGSgvp"
+  },
+  {
+    "declaration" : "var endpointSecurity: TelemetryEndpointSecurityPolicy",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntime.Configuration.endpointSecurity",
+    "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV16endpointSecurityAA0d8EndpointH6PolicyOvp"
   },
   {
     "declaration" : "var defaultFlushTimeout: Duration",
@@ -838,6 +852,27 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetrySignalOperationResult.status",
     "preciseIdentifier" : "s:23ComposableOTelExporters30TelemetrySignalOperationResultV6statusAC6StatusOvp"
+  },
+  {
+    "declaration" : "enum TelemetryEndpointSecurityPolicy",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryEndpointSecurityPolicy",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryEndpointSecurityPolicyO"
+  },
+  {
+    "declaration" : "case requireHTTPS",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryEndpointSecurityPolicy.requireHTTPS",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryEndpointSecurityPolicyO12requireHTTPSyA2CmF"
+  },
+  {
+    "declaration" : "case allowInsecureHTTPForLoopbackInDevelopmentOrTest",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryEndpointSecurityPolicy.allowInsecureHTTPForLoopbackInDevelopmentOrTest",
+    "preciseIdentifier" : "s:23ComposableOTelExporters31TelemetryEndpointSecurityPolicyO47allowInsecureHTTPForLoopbackInDevelopmentOrTestyA2CmF"
   },
   {
     "declaration" : "struct TelemetryRuntimeDiagnosticEvent",

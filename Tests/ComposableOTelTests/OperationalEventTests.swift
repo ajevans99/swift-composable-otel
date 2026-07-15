@@ -259,9 +259,16 @@ struct OperationalEventTests {
         exporter.shutdown(explicitTimeout: timeout)
       }
     )
-    func queuedRecord(_ phase: String, attempt: Int64 = 0) throws -> ReadableLogRecord {
-      record(
-        name: fixture.definition.eventName.rawValue,
+    let recorder = makeRuntimeOperationalEventRecorder(
+      queue: queue,
+      boundary: TelemetryPrivacyBoundary(policy: fixture.policy),
+      diagnostics: diagnostics,
+      resource: Resource(attributes: [:]),
+      now: { Date(timeIntervalSince1970: 1) }
+    )
+    func event(_ phase: String, attempt: Int64 = 0) throws -> TelemetryOperationalEventRecord {
+      TelemetryOperationalEventRecord(
+        eventName: fixture.definition.eventName.rawValue,
         attributes: try fixture.definition.attributes(
           for: fixture.payload(phase, attempt: attempt),
           version: fixture.policy.catalog.contractVersion
@@ -269,12 +276,12 @@ struct OperationalEventTests {
       )
     }
 
-    #expect(queue.offer(try queuedRecord("queued")) == .accepted)
-    #expect(queue.offer(try queuedRecord("started", attempt: 1)) == .accepted)
+    #expect(recorder.record(try event("queued")) == .recorded)
+    #expect(recorder.record(try event("started", attempt: 1)) == .recorded)
     #expect(await waitForOperationalExport(firstExportStarted) == .success)
-    #expect(queue.offer(try queuedRecord("completed", attempt: 2)) == .accepted)
-    #expect(queue.offer(try queuedRecord("queued", attempt: 3)) == .accepted)
-    #expect(queue.offer(try queuedRecord("started", attempt: 1)) == .accepted)
+    #expect(recorder.record(try event("completed", attempt: 2)) == .recorded)
+    #expect(recorder.record(try event("queued", attempt: 3)) == .recorded)
+    #expect(recorder.record(try event("started", attempt: 1)) == .recorded)
     releaseFirstExport.signal()
     await queue.forceFlush()
 

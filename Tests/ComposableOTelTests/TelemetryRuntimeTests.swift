@@ -13,6 +13,175 @@ private let runtimeSentinelSecret = "runtime-sentinel-secret"
 struct TelemetryRuntimeTests {
   @Suite("Configuration")
   struct ConfigurationTests {
+    @Test("rejects loopback HTTP without an explicit opt-in")
+    func rejectsHTTPByDefault() {
+      var configuration = runtimeConfiguration()
+      configuration.endpoints = .init(
+        baseURL: URL(string: "http://localhost:4318")!
+      )
+      configuration.resourceMode = .native(environment: .development)
+
+      #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .traces)) {
+        _ = try makeRuntime(configuration: configuration)
+      }
+    }
+
+    @Test("allows loopback HTTP in development and test")
+    func allowsDevelopmentAndTestLoopbackHTTP() async throws {
+      let cases: [(TelemetryDeploymentEnvironment, String)] = [
+        (.development, "localhost"),
+        (.development, "LOCALHOST"),
+        (.development, "127.0.0.1"),
+        (.development, "127.255.255.254"),
+        (.development, "[::1]"),
+        (.test, "localhost"),
+      ]
+
+      for (environment, host) in cases {
+        let configuration = TelemetryRuntime.Configuration(
+          serviceName: "test-suite",
+          serviceVersion: "1.2.3",
+          endpoints: .init(baseURL: URL(string: "http://\(host):4318")!),
+          endpointSecurity: .allowInsecureHTTPForLoopbackInDevelopmentOrTest,
+          samplingRatio: 1,
+          policy: testPolicy(),
+          resourceMode: .native(environment: environment),
+          traces: .init(scheduledDelay: .milliseconds(10)),
+          logs: .init(scheduledDelay: .milliseconds(10)),
+          metricExportInterval: .seconds(3_600)
+        )
+
+        let runtime = try makeRuntime(configuration: configuration)
+        _ = await runtime.shutdown(timeout: .seconds(1))
+      }
+
+      var mixedConfiguration = runtimeConfiguration()
+      mixedConfiguration.endpoints = .init(
+        traces: URL(string: "http://localhost:4318/v1/traces")!,
+        metrics: URL(string: "https://127.0.0.1:4318/v1/metrics")!,
+        logs: URL(string: "http://[::1]:4318/v1/logs")!
+      )
+      mixedConfiguration.endpointSecurity = .allowInsecureHTTPForLoopbackInDevelopmentOrTest
+      mixedConfiguration.resourceMode = .native(environment: .test)
+      let mixedRuntime = try makeRuntime(configuration: mixedConfiguration)
+      _ = await mixedRuntime.shutdown(timeout: .seconds(1))
+    }
+
+    @Test("rejects loopback HTTP in staging and production")
+    func rejectsStagingAndProductionHTTP() {
+      for environment in [
+        TelemetryDeploymentEnvironment.staging,
+        .production,
+      ] {
+        var configuration = runtimeConfiguration()
+        configuration.endpoints = .init(
+          baseURL: URL(string: "http://localhost:4318")!
+        )
+        configuration.endpointSecurity = .allowInsecureHTTPForLoopbackInDevelopmentOrTest
+        configuration.resourceMode = .native(environment: environment)
+
+        #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .traces)) {
+          _ = try makeRuntime(configuration: configuration)
+        }
+      }
+    }
+
+    @Test("rejects LAN and non-loopback HTTP hosts")
+    func rejectsNonLoopbackHTTP() {
+      for host in [
+        "192.168.1.10",
+        "10.0.2.2",
+        "gateway.example.test",
+        "[::ffff:127.0.0.1]",
+        "2130706433",
+      ] {
+        var configuration = runtimeConfiguration()
+        configuration.endpoints = .init(
+          baseURL: URL(string: "http://\(host):4318")!
+        )
+        configuration.endpointSecurity = .allowInsecureHTTPForLoopbackInDevelopmentOrTest
+        configuration.resourceMode = .native(environment: .development)
+
+        #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .traces)) {
+          _ = try makeRuntime(configuration: configuration)
+        }
+      }
+    }
+
+    @Test("rejects mixed endpoint sets unless every host is loopback")
+    func rejectsMixedEndpoints() {
+      let localHTTP = URL(string: "http://localhost:4318/v1/traces")!
+      let localMetrics = URL(string: "http://127.0.0.1:4318/v1/metrics")!
+
+      var configuration = runtimeConfiguration()
+      configuration.endpoints = .init(
+        traces: localHTTP,
+        metrics: localMetrics,
+        logs: URL(string: "http://192.168.1.10:4318/v1/logs")!
+      )
+      configuration.endpointSecurity = .allowInsecureHTTPForLoopbackInDevelopmentOrTest
+      configuration.resourceMode = .native(environment: .test)
+      #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .logs)) {
+        _ = try makeRuntime(configuration: configuration)
+      }
+
+      configuration.endpoints = .init(
+        traces: localHTTP,
+        metrics: URL(string: "https://gateway.example.test/v1/metrics")!,
+        logs: URL(string: "https://localhost:4318/v1/logs")!
+      )
+      #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .traces)) {
+        _ = try makeRuntime(configuration: configuration)
+      }
+    }
+
+    @Test("uses the strict resource deployment environment for HTTP policy")
+    func strictResourceEnvironment() async throws {
+      struct ResourcePayload: Sendable {
+        let environment: TelemetryEnumValue
+      }
+
+      let environmentKey = try TelemetryFieldKey("deployment.environment.name")
+      let definition = try TelemetryResourceDefinition<ResourcePayload>(
+        name: .init("runtime.local"),
+        fields: [
+          try .enumeration(
+            environmentKey,
+            allowedValues: [try .init("development"), try .init("production")]
+          ) { $0.environment }
+        ]
+      )
+      let catalog = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        resources: [.init(definition)]
+      )
+
+      for environment in [
+        TelemetryDeploymentEnvironment.development,
+        .production,
+      ] {
+        let resource = try definition.makeValue(
+          ResourcePayload(environment: try .init(environment.rawValue))
+        )
+        var configuration = runtimeConfiguration()
+        configuration.endpoints = .init(
+          baseURL: URL(string: "http://localhost:4318")!
+        )
+        configuration.endpointSecurity = .allowInsecureHTTPForLoopbackInDevelopmentOrTest
+        configuration.policy = .init(schema: testSchema, catalog: catalog)
+        configuration.resourceMode = .strict(resource)
+
+        if environment == .development {
+          let runtime = try makeRuntime(configuration: configuration)
+          _ = await runtime.shutdown(timeout: .seconds(1))
+        } else {
+          #expect(throws: TelemetryRuntimeConfigurationError.endpointMustUseTLS(signal: .traces)) {
+            _ = try makeRuntime(configuration: configuration)
+          }
+        }
+      }
+    }
+
     @Test("rejects insecure and malformed production endpoints")
     func rejectsInvalidEndpoints() throws {
       let valid = URL(string: "https://gateway.example.test/otlp")!

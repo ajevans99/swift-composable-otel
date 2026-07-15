@@ -5,7 +5,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 
 > [!IMPORTANT]
 > The current tagged release is
-> [`0.3.0`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.0).
+> [`0.3.1`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.1).
 > This release remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -15,7 +15,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    from: "0.3.0"
+    from: "0.3.1"
   )
 ]
 ```
@@ -168,11 +168,27 @@ let store = Store(initialState: AppFeature.State()) {
 }
 ```
 
-Production endpoints must be HTTPS URLs with a host and no embedded credentials, query, or
+Endpoints require HTTPS by default and must have a host with no embedded credentials, query, or
 fragment. Invalid configuration throws before providers or exporters are created. The runtime never
 accepts static header dictionaries. Its authenticator runs immediately before every attempt, so the
 host can refresh short-lived credentials without placing a backend or vendor key in source, package
 configuration, an application bundle, or persisted telemetry. Authorization is never persisted.
+
+For a local simulator collector, plain HTTP requires an explicit, narrowly validated opt-in:
+
+```swift
+let configuration = TelemetryRuntime.Configuration(
+  serviceName: "example-app",
+  endpoints: OTLPEndpoints(baseURL: URL(string: "http://localhost:4318")!),
+  endpointSecurity: .allowInsecureHTTPForLoopbackInDevelopmentOrTest,
+  resourceMode: .native(environment: .development)
+)
+```
+
+This policy permits HTTP only when the runtime resource environment is `development` or `test` and
+every trace, metric, and log endpoint host is exactly `localhost`, an address in `127.0.0.0/8`, or
+`::1`. Staging, production, LAN and other non-loopback hosts, mixed local/remote endpoint sets, and
+alternate numeric host spellings remain rejected. HTTPS remains accepted in every environment.
 
 A recommended deployment sends OTLP/HTTP to an application-owned ingestion gateway. The app obtains
 a narrow, expiring credential from its backend, optionally after App Attest or DeviceCheck
@@ -467,9 +483,9 @@ See [SUPPORT.md](SUPPORT.md), [CHANGELOG.md](CHANGELOG.md), and
 
 ## Release evidence
 
-The 0.3.0 package quality layer includes:
+The 0.3.1 package quality layer includes:
 
-- 83 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
+- 95 externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;
@@ -481,7 +497,7 @@ The 0.3.0 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.3.0 and required
+consumer evidence and repository protection remain accepted residual risks for 0.3.1 and required
 no-go items for 1.0.
 
 ## License

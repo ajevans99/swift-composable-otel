@@ -405,6 +405,11 @@ private enum ReleaseBenchmarks {
         }
       }
     )
+    let sampledToUnsampledRatio = await measureRatio(iterations: 5_000) {
+      fullRuntime.client.recordNavigation(.push, route: "benchmark-route")
+    } denominator: {
+      unsampledRuntime.client.recordNavigation(.push, route: "benchmark-route")
+    }
     results.append(
       try await measure(name: "sampledSpan", iterations: 5_000, budget: budgets) {
         {
@@ -444,14 +449,11 @@ private enum ReleaseBenchmarks {
       )
     }
 
-    let sampled = try value(named: "sampledSpan", in: results)
-    let unsampled = max(1, try value(named: "unsampledSpan", in: results))
-    let ratio = Double(sampled) / Double(unsampled)
-    if ratio > budgets.maximumSampledToUnsampledRatio {
+    if sampledToUnsampledRatio > budgets.maximumSampledToUnsampledRatio {
       throw BenchmarkFailure.regression(
         String(
           format: "Sampled/unsampled ratio %.2f exceeds %.2f",
-          ratio,
+          sampledToUnsampledRatio,
           budgets.maximumSampledToUnsampledRatio
         )
       )
@@ -464,7 +466,7 @@ private enum ReleaseBenchmarks {
           + "\(result.passed ? "PASS" : "FAIL"))"
       )
     }
-    print(String(format: "sampled/unsampled ratio: %.2f", ratio))
+    print(String(format: "sampled/unsampled ratio: %.2f", sampledToUnsampledRatio))
     print(
       "queue: depth \(queueDiagnostics.queueDepth), drops \(queueDiagnostics.droppedItems), "
         + "successes \(queueDiagnostics.successes), "
@@ -595,11 +597,45 @@ private enum ReleaseBenchmarks {
     return result
   }
 
-  private static func value(named name: String, in results: [Result]) throws -> UInt64 {
-    guard let result = results.first(where: { $0.name == name }) else {
-      throw BenchmarkFailure.invalidBudgets
+  @MainActor
+  private static func measureRatio(
+    iterations: Int,
+    numerator: @MainActor () async -> Void,
+    denominator: @MainActor () async -> Void
+  ) async -> Double {
+    for _ in 0..<100 {
+      await numerator()
+      await denominator()
     }
-    return result.nanosecondsPerOperation
+
+    func measure(_ operation: @MainActor () async -> Void) async -> UInt64 {
+      let clock = ContinuousClock()
+      let start = clock.now
+      for _ in 0..<iterations {
+        await operation()
+      }
+      let components = (clock.now - start).components
+      return UInt64(max(0, components.seconds)) * 1_000_000_000
+        + UInt64(max(0, components.attoseconds / 1_000_000_000))
+    }
+
+    var ratios: [Double] = []
+    for sample in 0..<5 {
+      let numeratorNanoseconds: UInt64
+      let denominatorNanoseconds: UInt64
+      if sample.isMultiple(of: 2) {
+        numeratorNanoseconds = await measure(numerator)
+        denominatorNanoseconds = await measure(denominator)
+      } else {
+        denominatorNanoseconds = await measure(denominator)
+        numeratorNanoseconds = await measure(numerator)
+      }
+      ratios.append(
+        Double(numeratorNanoseconds) / Double(max(1, denominatorNanoseconds))
+      )
+    }
+    ratios.sort()
+    return ratios[ratios.count / 2]
   }
 
   private static func residentHighWaterBytes() -> Int64 {

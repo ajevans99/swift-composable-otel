@@ -53,7 +53,9 @@ exporter receives only policy-sanitized values through a package-owned processor
 Observer failures are isolated from OTLP status and delivery. Force flush and graceful shutdown
 flush observers; shutdown and terminal discard shut them down exactly once, while discard never
 collects pending metrics. Data already accepted by an observer is a completed export and cannot be
-retracted by runtime discard.
+retracted by runtime discard. Each supplied exporter belongs to exactly one runtime or bootstrap
+lifetime. Never reuse an exporter instance across separately configured pipelines; vend fresh
+exporters that may share independently retained stores.
 
 Resource mode defaults to `.native(environment: .production)`, preserving
 service/environment/Darwin/OpenTelemetry

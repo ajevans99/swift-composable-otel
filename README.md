@@ -192,6 +192,9 @@ Runtime force-flush, graceful shutdown, and terminal discard propagate to observ
 discard does not flush. Like any completed export, data already accepted by an observer cannot be
 retracted by `disableAndDiscardPending()`. Keep on-device stores bounded, apply host retention and
 consent policy, and omit the inspector products from non-debug targets when they are not required.
+Each supplied exporter is owned by exactly one bootstrap or runtime lifetime. Never reuse exporter
+instances across separate configurations; create fresh exporter bundles that may share retained
+stores.
 
 ## Production OTLP/HTTP runtime
 

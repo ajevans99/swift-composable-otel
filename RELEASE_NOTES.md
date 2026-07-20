@@ -29,7 +29,9 @@ one lifecycle for each supplied metric exporter.
 Observer failure results are isolated from normal stdout and OTLP export. Runtime force flush and
 graceful shutdown flush observers; graceful shutdown and terminal discard shut them down exactly
 once. Terminal discard does not collect pending observer metrics. Data already accepted by any
-exporter is a completed export and cannot be retracted.
+exporter is a completed export and cannot be retracted. Each supplied exporter transfers lifecycle
+ownership to one bootstrap or runtime; separate configurations must use fresh exporter instances,
+though those exporters may share independently retained stores.
 
 ## Compatibility and migration
 

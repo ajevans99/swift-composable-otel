@@ -7,6 +7,11 @@ import OpenTelemetrySdk
 /// Each exporter is registered independently from stdout or OTLP export. Observer failures do not
 /// suppress the package-owned export path. Exporters never receive values before `TelemetryPolicy`
 /// has been applied.
+///
+/// Supplying an exporter transfers its lifecycle ownership to exactly one ``TelemetryBootstrap`` or
+/// ``TelemetryRuntime`` pipeline. Do not reuse an exporter instance across separately configured
+/// bootstrap or runtime lifetimes. Create fresh exporters that may share independently retained
+/// stores instead.
 public struct TelemetryObserverExporters: Sendable {
   public let spanExporters: [any SpanExporter]
   public let logRecordExporters: [any LogRecordExporter]

@@ -565,6 +565,48 @@ struct TelemetryContractCatalogTests {
     _ = await runtime.shutdown(timeout: .seconds(1))
   }
 
+  @Test("one observer metric lifecycle covers native and delta contract readers")
+  func observerMetricLifecycle() async throws {
+    let fixture = try ContractFixture.make()
+    let capture = InMemoryEncodedRequestCollector()
+    let observer = ObserverMetricExporter()
+    let configuration = TelemetryRuntime.Configuration(
+      serviceName: "test-suite",
+      endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
+      samplingRatio: 1,
+      policy: fixture.policy,
+      resourceMode: .strict(fixture.resourceValue),
+      traces: .init(maximumQueueSize: 1, maximumBatchSize: 1),
+      logs: .init(maximumQueueSize: 1, maximumBatchSize: 1),
+      metricExportInterval: .seconds(3_600),
+      observerExporters: .init(metricExporters: [observer])
+    )
+    let runtime = try TelemetryRuntime(
+      configuration: configuration,
+      transport: capture.transport,
+      authenticator: .none
+    )
+    let payload = try fixture.payload()
+
+    runtime.client.recordNavigation(.push, route: "settings")
+    try runtime.client.add(fixture.counter, delta: .init(1), payload: payload)
+    let result = await runtime.shutdown(timeout: .seconds(2))
+
+    #expect(result.succeeded)
+    let native = try #require(
+      observer.metrics.first {
+        $0.name == ComposableOTelSemantics.Metrics.navigationTransitions
+      }
+    )
+    #expect(native.data.aggregationTemporality == .cumulative)
+    let contract = try #require(
+      observer.metrics.first { $0.name == fixture.counter.name.rawValue }
+    )
+    #expect(contract.data.aggregationTemporality == .delta)
+    #expect(observer.flushCount == 1)
+    #expect(observer.shutdownCount == 1)
+  }
+
   @Test("rejects invalid conditional payloads and unregistered definitions")
   func validationAndRegistration() async throws {
     let fixture = try ContractFixture.make()

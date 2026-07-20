@@ -104,9 +104,11 @@ requires that exact field remains unsupported until the upstream model/encoder a
 ## Public SDK boundary
 
 Normal products intentionally omit raw SDK client/instrument factories, dictionary sanitizer
-methods, privacy exporter wrappers, and metric-view builders. Swift package-access hooks support
-internal exporter/testing targets. CI checks the public symbol graph and compiles a negative consumer
-fixture that must fail when referencing those implementation symbols.
+methods, privacy exporter wrappers, processors, readers, and metric-view builders.
+`TelemetryObserverExporters` is the narrow exception: it accepts standard exporters only after the
+package privacy boundary. Swift package-access hooks support all remaining internal
+exporter/testing wiring. CI checks the public symbol graph and compiles a negative consumer fixture
+that must fail when referencing those implementation symbols.
 
 ## `Package.resolved`
 

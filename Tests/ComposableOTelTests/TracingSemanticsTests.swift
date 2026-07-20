@@ -595,6 +595,48 @@ struct TracingSemanticsTests {
       ObjectIdentifier(OpenTelemetry.instance.loggerProvider as AnyObject) == globalLoggerProvider
     )
   }
+
+  @Test("bootstrap observers receive only sanitized values and share provider lifecycle")
+  func bootstrapObservers() throws {
+    TelemetryBootstrap.resetForTesting()
+    defer { TelemetryBootstrap.resetForTesting() }
+    let spanExporter = ObserverSpanExporter()
+    let logExporter = ObserverLogRecordExporter()
+    let metricExporter = ObserverMetricExporter()
+    let privateRoute = try #require(RouteID(validating: "private-route"))
+    let client = try TelemetryBootstrap.configure(
+      serviceName: "test-suite",
+      policy: testPolicy(
+        signals: .init(tracesEnabled: true, metricsEnabled: true, logsEnabled: true)
+      ),
+      observerExporters: .init(
+        spanExporters: [spanExporter],
+        logRecordExporters: [logExporter],
+        metricExporters: [metricExporter]
+      )
+    )
+
+    client.recordNavigation(.push, route: privateRoute)
+    TelemetryBootstrap.forceFlushForTesting()
+
+    let span = try #require(
+      spanExporter.spans.first { $0.name == ComposableOTelSemantics.Spans.navigation }
+    )
+    #expect(span.attributes[TCAAttributes.navigationRoute] == .string("other"))
+    let log = try #require(logExporter.records.first)
+    #expect(log.attributes[TCAAttributes.navigationRoute] == .string("other"))
+    let metric = try #require(
+      metricExporter.metrics.first {
+        $0.name == ComposableOTelSemantics.Metrics.navigationTransitions
+      }
+    )
+    #expect(metric.data.points.first?.attributes[TCAAttributes.navigationRoute] == .string("other"))
+
+    TelemetryBootstrap.resetForTesting()
+    #expect(spanExporter.shutdownCount == 1)
+    #expect(logExporter.shutdownCount == 1)
+    #expect(metricExporter.shutdownCount == 1)
+  }
 }
 
 private func currentTelemetryClient() -> TelemetryClient {

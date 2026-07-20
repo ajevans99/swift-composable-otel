@@ -338,7 +338,8 @@ func makeRuntimeOperationalEventRecorder(
   boundary: TelemetryPrivacyBoundary,
   diagnostics: RuntimeDiagnosticsState,
   resource: Resource,
-  now: @escaping @Sendable () -> Date
+  now: @escaping @Sendable () -> Date,
+  observerPipeline: TelemetryObserverPipeline? = nil
 ) -> TelemetryOperationalEventRecorder {
   TelemetryOperationalEventRecorder(
     { event in
@@ -361,6 +362,7 @@ func makeRuntimeOperationalEventRecorder(
       }
       switch queue.offer(sanitized) {
       case .accepted:
+        observerPipeline?.emit(logRecord: sanitized)
         return .recorded
       case .dropped:
         return .dropped

@@ -9,10 +9,15 @@ public enum TelemetryBootstrap {
   private final class State: @unchecked Sendable {
     private let lock = NSLock()
     private var client: TelemetryClient?
+    private var forceFlush: (() -> Void)?
     private var shutdown: (() -> Void)?
 
     func configure(
-      _ makeClient: () throws -> (client: TelemetryClient, shutdown: () -> Void)
+      _ makeClient: () throws -> (
+        client: TelemetryClient,
+        forceFlush: () -> Void,
+        shutdown: () -> Void
+      )
     ) rethrows -> TelemetryClient {
       lock.lock()
       defer { lock.unlock() }
@@ -22,14 +27,21 @@ public enum TelemetryBootstrap {
       let configured = try makeClient()
       let client = configured.client
       self.client = client
+      forceFlush = configured.forceFlush
       shutdown = configured.shutdown
       return client
+    }
+
+    func forceFlushForTesting() {
+      let forceFlush = lock.withLock { self.forceFlush }
+      forceFlush?()
     }
 
     func resetForTesting() {
       let shutdown = lock.withLock {
         let shutdown = self.shutdown
         client = nil
+        forceFlush = nil
         self.shutdown = nil
         return shutdown
       }
@@ -41,12 +53,16 @@ public enum TelemetryBootstrap {
   package static func resetForTesting() {
     state.resetForTesting()
   }
+  package static func forceFlushForTesting() {
+    state.forceFlushForTesting()
+  }
 
   /// Configures development-only, bounded stdout telemetry once for the process.
   ///
   /// The first call owns the cached package client; OpenTelemetry process globals remain untouched.
   /// The policy controls each signal independently, and logs are disabled by default. Values
-  /// outside the policy schema aggregate to `other`.
+  /// outside the policy schema aggregate to `other`. Optional observers receive only
+  /// policy-sanitized values and do not replace stdout export.
   @discardableResult
   public static func configure(
     serviceName: ServiceID,
@@ -55,13 +71,34 @@ public enum TelemetryBootstrap {
     resourceMode: TelemetryResourceMode = .native(environment: .development),
     policy: TelemetryPolicy = .init()
   ) throws -> TelemetryClient {
+    try configure(
+      serviceName: serviceName,
+      serviceVersion: serviceVersion,
+      samplingRatio: samplingRatio,
+      resourceMode: resourceMode,
+      policy: policy,
+      observerExporters: .init()
+    )
+  }
+
+  /// Configures development stdout plus independent, privacy-sanitized observer exporters.
+  @discardableResult
+  public static func configure(
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID? = nil,
+    samplingRatio: Double? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .development),
+    policy: TelemetryPolicy = .init(),
+    observerExporters: TelemetryObserverExporters
+  ) throws -> TelemetryClient {
     try state.configure {
       try makeClient(
         serviceName: serviceName,
         serviceVersion: serviceVersion,
         samplingRatio: samplingRatio,
         resourceMode: resourceMode,
-        policy: policy
+        policy: policy,
+        observerExporters: observerExporters
       )
     }
   }
@@ -71,8 +108,9 @@ public enum TelemetryBootstrap {
     serviceVersion: ServiceVersionID?,
     samplingRatio: Double?,
     resourceMode: TelemetryResourceMode,
-    policy: TelemetryPolicy
-  ) throws -> (client: TelemetryClient, shutdown: () -> Void) {
+    policy: TelemetryPolicy,
+    observerExporters: TelemetryObserverExporters
+  ) throws -> (client: TelemetryClient, forceFlush: () -> Void, shutdown: () -> Void) {
     let resource = try makeResource(
       serviceName: serviceName,
       serviceVersion: serviceVersion,
@@ -82,6 +120,10 @@ public enum TelemetryBootstrap {
 
     let ratio = samplingRatio ?? 1
     let sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: ratio))
+    let observerPipeline = TelemetryObserverPipeline(
+      exporters: observerExporters,
+      policy: policy
+    )
 
     let rawSpanExporter: any SpanExporter = StdoutSpanExporter(isDebug: true)
     let spanExporter = PrivacyPreservingSpanExporter(
@@ -98,12 +140,15 @@ public enum TelemetryBootstrap {
       .settingLinkCountLimit(0)
       .settingAttributePerEventCountLimit(8)
       .settingAttributePerLinkCountLimit(0)
-    let tracerProvider = TracerProviderBuilder()
+    let tracerBuilder = TracerProviderBuilder()
       .with(resource: resource)
       .with(spanLimits: spanLimits)
       .with(sampler: sampler)
       .add(spanProcessor: spanProcessor)
-      .build()
+    for processor in observerPipeline.spanProcessors {
+      _ = tracerBuilder.add(spanProcessor: processor)
+    }
+    let tracerProvider = tracerBuilder.build()
 
     let rawMetricExporter: any MetricExporter = StdoutMetricExporter(isDebug: true)
     let metricExporter = PrivacyPreservingMetricExporter(
@@ -116,6 +161,7 @@ public enum TelemetryBootstrap {
     let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
       .registerMetricReader(reader: metricReader)
+    observerPipeline.registerMetricReaders(on: meterBuilder, interval: 5)
     ComposableOTelMetricConfiguration.registerViews(on: meterBuilder, policy: policy)
     let meterProvider = meterBuilder.build()
     let customMeterProvider: MeterProviderSdk?
@@ -135,6 +181,11 @@ public enum TelemetryBootstrap {
       let customBuilder = MeterProviderSdk.builder()
         .setResource(resource: resource)
         .registerMetricReader(reader: customReader)
+      observerPipeline.registerMetricReaders(
+        on: customBuilder,
+        interval: 5,
+        forceDeltaCounters: true
+      )
       ComposableOTelMetricConfiguration.registerViews(on: customBuilder, policy: policy)
       let provider = customBuilder.build()
       let customMeter =
@@ -157,7 +208,8 @@ public enum TelemetryBootstrap {
     let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logExporter)
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
-      logRecordProcessors: [logProcessor]
+      logRecordProcessors: [logProcessor as any LogRecordProcessor]
+        + observerPipeline.logRecordProcessors
     )
 
     let tracer = tracerProvider.get(
@@ -186,9 +238,20 @@ public enum TelemetryBootstrap {
     return (
       client,
       {
+        tracerProvider.forceFlush()
+        _ = meterProvider.forceFlush()
+        _ = customMeterProvider?.forceFlush()
+        _ = logProcessor.forceFlush()
+        observerPipeline.forceFlushLogs(explicitTimeout: nil)
+        observerPipeline.forceFlushMetrics()
+      },
+      {
         tracerProvider.shutdown()
         _ = meterProvider.shutdown()
         _ = customMeterProvider?.shutdown()
+        _ = logProcessor.shutdown()
+        observerPipeline.shutdownLogs(explicitTimeout: nil)
+        observerPipeline.shutdownMetrics()
       }
     )
   }

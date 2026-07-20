@@ -38,9 +38,11 @@ gateway access, retention, deletion, regional routing, and incident response. A 
 by the identifier grammar does not make it non-sensitive; only pre-reviewed schema constants belong
 in production.
 
-Raw SDK client/instrument factories, dictionary sanitizers, privacy processors, and metric-view
-builders are not public in normal products. They use Swift `package` access for exporter/testing
-wiring. A host that integrates OpenTelemetry directly is outside this package's enforcement.
+Raw SDK client/instrument factories, dictionary sanitizers, privacy processors, readers, and
+metric-view builders are not public in normal products. `TelemetryObserverExporters` accepts only
+standard exporters, and package-owned processors/readers ensure they receive values after the same
+privacy boundary. A host that integrates OpenTelemetry directly is outside this package's
+enforcement.
 
 ## Consent revocation and opt-out
 
@@ -54,6 +56,11 @@ For opt-out or a privacy kill switch, the host must first replace its facade/dep
 cancels delivery/retry work, rejects later signals, deletes in-memory and persisted telemetry, shuts
 down providers, and cannot be reversed by lifecycle or export-condition updates. Deletion failures
 remain visible in the operation result and diagnostics and must be retried/reviewed.
+
+Terminal discard shuts observer exporters down without collecting pending metrics. It cannot retract
+data that an observer already accepted, just as it cannot retract a completed network export or
+stdout write. Hosts using an on-device store remain responsible for that store's deletion and
+retention policy.
 
 ## Release and pilot evidence
 

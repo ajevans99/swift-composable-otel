@@ -403,6 +403,37 @@ struct OperationalEventTests {
     provider.shutdown()
   }
 
+  @Test("production observers receive accepted sanitized operational events")
+  func observerReceivesOperationalEvents() async throws {
+    let fixture = try OperationalEventFixture.make()
+    let observer = ObserverLogRecordExporter()
+    var configuration = runtimeConfiguration(
+      fixture: fixture,
+      logs: .init(maximumQueueSize: 1, maximumBatchSize: 1)
+    )
+    configuration.observerExporters = .init(logRecordExporters: [observer])
+    let runtime = try TelemetryRuntime(
+      configuration: configuration,
+      transport: InMemoryEncodedRequestCollector().transport,
+      authenticator: .none
+    )
+
+    #expect(
+      runtime.client.record(fixture.definition, payload: try fixture.payload("started"))
+        == .recorded
+    )
+
+    let record = try #require(observer.records.first)
+    #expect(record.eventName == fixture.definition.eventName.rawValue)
+    #expect(record.body == nil)
+    _ = await runtime.disableAndDiscardPending()
+    #expect(
+      runtime.client.record(fixture.definition, payload: try fixture.payload("completed"))
+        == .disabled
+    )
+    #expect(observer.records.count == 1)
+  }
+
   @Test("discard stops synchronous acceptance and deletes pending events")
   func discardPending() async throws {
     let fixture = try OperationalEventFixture.make()

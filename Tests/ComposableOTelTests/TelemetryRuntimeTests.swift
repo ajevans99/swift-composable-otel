@@ -1456,6 +1456,56 @@ struct TelemetryRuntimeTests {
       #expect(first.operation == .shutdown)
     }
 
+    @Test("observer failures do not affect sanitized OTLP export or lifecycle")
+    func observerFailureIsolation() async throws {
+      let spanExporter = ObserverSpanExporter(result: .failure)
+      let logExporter = ObserverLogRecordExporter(result: .failure)
+      let metricExporter = ObserverMetricExporter(result: .failure)
+      let transport = ScriptedTransport(Array(repeating: .status(202), count: 16))
+      var configuration = runtimeConfiguration(
+        signals: .init(tracesEnabled: true, metricsEnabled: true, logsEnabled: true)
+      )
+      configuration.observerExporters = .init(
+        spanExporters: [spanExporter],
+        logRecordExporters: [logExporter],
+        metricExporters: [metricExporter]
+      )
+      let runtime = try makeRuntime(
+        configuration: configuration,
+        transport: transport.transport
+      )
+      let privateRoute = try #require(RouteID(validating: "private-route"))
+
+      runtime.client.recordNavigation(.push, route: privateRoute)
+      let flush = await runtime.forceFlush(timeout: .seconds(1))
+
+      #expect(flush.succeeded)
+      #expect(await transport.requestCount >= 3)
+      let span = try #require(
+        spanExporter.spans.first { $0.name == ComposableOTelSemantics.Spans.navigation }
+      )
+      #expect(span.attributes[TCAAttributes.navigationRoute] == .string("other"))
+      let log = try #require(logExporter.records.first)
+      #expect(log.attributes[TCAAttributes.navigationRoute] == .string("other"))
+      let metric = try #require(
+        metricExporter.metrics.first {
+          $0.name == ComposableOTelSemantics.Metrics.navigationTransitions
+        }
+      )
+      #expect(
+        metric.data.points.first?.attributes[TCAAttributes.navigationRoute] == .string("other")
+      )
+
+      let shutdown = await runtime.shutdown(timeout: .seconds(1))
+      #expect(shutdown.succeeded)
+      #expect(spanExporter.shutdownCount == 1)
+      #expect(logExporter.shutdownCount == 1)
+      #expect(metricExporter.shutdownCount == 1)
+      let observedLogCount = logExporter.records.count
+      runtime.client.recordNavigation(.push, route: "settings")
+      #expect(logExporter.records.count == observedLogCount)
+    }
+
     @Test("background lifecycle uses the tighter host deadline")
     func backgroundUsesRemainingTime() async throws {
       let clock = TestRuntimeClock()

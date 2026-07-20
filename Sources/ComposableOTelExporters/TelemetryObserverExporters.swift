@@ -12,7 +12,7 @@ import OpenTelemetrySdk
 /// ``TelemetryRuntime`` pipeline. Do not reuse an exporter instance across separately configured
 /// bootstrap or runtime lifetimes. Create fresh exporters that may share independently retained
 /// stores instead.
-public struct TelemetryObserverExporters: Sendable {
+public struct TelemetryObserverExporters: @unchecked Sendable {
   public let spanExporters: [any SpanExporter]
   public let logRecordExporters: [any LogRecordExporter]
   public let metricExporters: [any MetricExporter]

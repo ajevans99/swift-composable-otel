@@ -24,44 +24,13 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var persistence: TelemetryPersistenceConfiguration?
     public var defaultFlushTimeout: Duration
     public var backgroundFlushTimeout: Duration
+    /// Optional exporters that independently observe policy-sanitized runtime signals.
+    public var observerExporters: TelemetryObserverExporters
 
     public init(
       serviceName: ServiceID,
       serviceVersion: ServiceVersionID? = nil,
       endpoints: OTLPEndpoints,
-      samplingRatio: Double = 0.1,
-      policy: TelemetryPolicy = .init(),
-      resourceMode: TelemetryResourceMode = .native(environment: .production),
-      traces: TelemetryBatchConfiguration = .init(),
-      logs: TelemetryBatchConfiguration = .init(),
-      metricExportInterval: Duration = .seconds(60),
-      delivery: TelemetryDeliveryConfiguration = .init(),
-      persistence: TelemetryPersistenceConfiguration? = nil,
-      defaultFlushTimeout: Duration = .seconds(10),
-      backgroundFlushTimeout: Duration = .seconds(5)
-    ) {
-      self.serviceName = serviceName
-      self.serviceVersion = serviceVersion
-      self.endpoints = endpoints
-      self.endpointSecurity = .requireHTTPS
-      self.samplingRatio = samplingRatio
-      self.policy = policy
-      self.resourceMode = resourceMode
-      self.traces = traces
-      self.logs = logs
-      self.metricExportInterval = metricExportInterval
-      self.delivery = delivery
-      self.persistence = persistence
-      self.defaultFlushTimeout = defaultFlushTimeout
-      self.backgroundFlushTimeout = backgroundFlushTimeout
-    }
-
-    /// Creates a configuration with an explicit endpoint security policy.
-    public init(
-      serviceName: ServiceID,
-      serviceVersion: ServiceVersionID? = nil,
-      endpoints: OTLPEndpoints,
-      endpointSecurity: TelemetryEndpointSecurityPolicy,
       samplingRatio: Double = 0.1,
       policy: TelemetryPolicy = .init(),
       resourceMode: TelemetryResourceMode = .native(environment: .production),
@@ -86,7 +55,114 @@ public final class TelemetryRuntime: @unchecked Sendable {
         delivery: delivery,
         persistence: persistence,
         defaultFlushTimeout: defaultFlushTimeout,
-        backgroundFlushTimeout: backgroundFlushTimeout
+        backgroundFlushTimeout: backgroundFlushTimeout,
+        observerExporters: .init()
+      )
+    }
+
+    /// Creates a configuration with independent, privacy-sanitized observer exporters.
+    public init(
+      serviceName: ServiceID,
+      serviceVersion: ServiceVersionID? = nil,
+      endpoints: OTLPEndpoints,
+      samplingRatio: Double = 0.1,
+      policy: TelemetryPolicy = .init(),
+      resourceMode: TelemetryResourceMode = .native(environment: .production),
+      traces: TelemetryBatchConfiguration = .init(),
+      logs: TelemetryBatchConfiguration = .init(),
+      metricExportInterval: Duration = .seconds(60),
+      delivery: TelemetryDeliveryConfiguration = .init(),
+      persistence: TelemetryPersistenceConfiguration? = nil,
+      defaultFlushTimeout: Duration = .seconds(10),
+      backgroundFlushTimeout: Duration = .seconds(5),
+      observerExporters: TelemetryObserverExporters
+    ) {
+      self.serviceName = serviceName
+      self.serviceVersion = serviceVersion
+      self.endpoints = endpoints
+      self.endpointSecurity = .requireHTTPS
+      self.samplingRatio = samplingRatio
+      self.policy = policy
+      self.resourceMode = resourceMode
+      self.traces = traces
+      self.logs = logs
+      self.metricExportInterval = metricExportInterval
+      self.delivery = delivery
+      self.persistence = persistence
+      self.defaultFlushTimeout = defaultFlushTimeout
+      self.backgroundFlushTimeout = backgroundFlushTimeout
+      self.observerExporters = observerExporters
+    }
+
+    /// Creates a configuration with an explicit endpoint security policy.
+    public init(
+      serviceName: ServiceID,
+      serviceVersion: ServiceVersionID? = nil,
+      endpoints: OTLPEndpoints,
+      endpointSecurity: TelemetryEndpointSecurityPolicy,
+      samplingRatio: Double = 0.1,
+      policy: TelemetryPolicy = .init(),
+      resourceMode: TelemetryResourceMode = .native(environment: .production),
+      traces: TelemetryBatchConfiguration = .init(),
+      logs: TelemetryBatchConfiguration = .init(),
+      metricExportInterval: Duration = .seconds(60),
+      delivery: TelemetryDeliveryConfiguration = .init(),
+      persistence: TelemetryPersistenceConfiguration? = nil,
+      defaultFlushTimeout: Duration = .seconds(10),
+      backgroundFlushTimeout: Duration = .seconds(5)
+    ) {
+      self.init(
+        serviceName: serviceName,
+        serviceVersion: serviceVersion,
+        endpoints: endpoints,
+        endpointSecurity: endpointSecurity,
+        samplingRatio: samplingRatio,
+        policy: policy,
+        resourceMode: resourceMode,
+        traces: traces,
+        logs: logs,
+        metricExportInterval: metricExportInterval,
+        delivery: delivery,
+        persistence: persistence,
+        defaultFlushTimeout: defaultFlushTimeout,
+        backgroundFlushTimeout: backgroundFlushTimeout,
+        observerExporters: .init()
+      )
+    }
+
+    /// Creates a configuration with endpoint policy and privacy-sanitized observer exporters.
+    public init(
+      serviceName: ServiceID,
+      serviceVersion: ServiceVersionID? = nil,
+      endpoints: OTLPEndpoints,
+      endpointSecurity: TelemetryEndpointSecurityPolicy,
+      samplingRatio: Double = 0.1,
+      policy: TelemetryPolicy = .init(),
+      resourceMode: TelemetryResourceMode = .native(environment: .production),
+      traces: TelemetryBatchConfiguration = .init(),
+      logs: TelemetryBatchConfiguration = .init(),
+      metricExportInterval: Duration = .seconds(60),
+      delivery: TelemetryDeliveryConfiguration = .init(),
+      persistence: TelemetryPersistenceConfiguration? = nil,
+      defaultFlushTimeout: Duration = .seconds(10),
+      backgroundFlushTimeout: Duration = .seconds(5),
+      observerExporters: TelemetryObserverExporters
+    ) {
+      self.init(
+        serviceName: serviceName,
+        serviceVersion: serviceVersion,
+        endpoints: endpoints,
+        samplingRatio: samplingRatio,
+        policy: policy,
+        resourceMode: resourceMode,
+        traces: traces,
+        logs: logs,
+        metricExportInterval: metricExportInterval,
+        delivery: delivery,
+        persistence: persistence,
+        defaultFlushTimeout: defaultFlushTimeout,
+        backgroundFlushTimeout: backgroundFlushTimeout,
+        observerExporters: observerExporters
       )
       self.endpointSecurity = endpointSecurity
     }
@@ -103,6 +179,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
   private let meterProvider: UncheckedSendableBox<MeterProviderSdk>
   private let customMeterProvider: UncheckedSendableBox<MeterProviderSdk>?
   private let loggerProvider: UncheckedSendableBox<LoggerProviderSdk>
+  private let observerPipeline: TelemetryObserverPipeline
   private let shutdownCoordinator = RuntimeShutdownCoordinator()
   private let discardCoordinator = RuntimeDiscardCoordinator()
   private let clock: TelemetryRuntimeClock
@@ -157,6 +234,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
     self.delivery = delivery
 
     let boundary = TelemetryPrivacyBoundary(policy: configuration.policy)
+    let observerPipeline = TelemetryObserverPipeline(
+      exporters: configuration.observerExporters,
+      policy: configuration.policy
+    )
+    self.observerPipeline = observerPipeline
     let traceHTTPClient = RuntimeOTLPHTTPClient(signal: .traces, delivery: delivery)
     let traceExporter = PrivacyPreservingSpanExporter(
       exporter: RuntimeByteBoundedSpanExporter(
@@ -236,17 +318,24 @@ public final class TelemetryRuntime: @unchecked Sendable {
       .settingLinkCountLimit(0)
       .settingAttributePerEventCountLimit(8)
       .settingAttributePerLinkCountLimit(0)
-    let tracerProvider = TracerProviderBuilder()
+    let tracerBuilder = TracerProviderBuilder()
       .with(resource: resource)
       .with(spanLimits: spanLimits)
       .with(sampler: sampler)
       .add(spanProcessor: spanProcessor)
-      .build()
+    for processor in observerPipeline.spanProcessors {
+      _ = tracerBuilder.add(spanProcessor: processor)
+    }
+    let tracerProvider = tracerBuilder.build()
     self.tracerProvider = UncheckedSendableBox(tracerProvider)
 
     let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
       .registerMetricReader(reader: metricReader)
+    observerPipeline.registerMetricReaders(
+      on: meterBuilder,
+      interval: configuration.metricExportInterval.runtimeSeconds
+    )
     ComposableOTelMetricConfiguration.registerViews(
       on: meterBuilder,
       policy: configuration.policy
@@ -278,6 +367,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
       let customBuilder = MeterProviderSdk.builder()
         .setResource(resource: resource)
         .registerMetricReader(reader: customReader)
+      observerPipeline.registerMetricReaders(
+        on: customBuilder,
+        interval: configuration.metricExportInterval.runtimeSeconds,
+        forceDeltaCounters: true
+      )
       ComposableOTelMetricConfiguration.registerViews(
         on: customBuilder,
         policy: configuration.policy
@@ -300,7 +394,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
 
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
-      logRecordProcessors: [logProcessor]
+      logRecordProcessors: [logProcessor as any LogRecordProcessor]
+        + observerPipeline.logRecordProcessors
     )
     self.loggerProvider = UncheckedSendableBox(loggerProvider)
 
@@ -332,7 +427,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
         boundary: boundary,
         diagnostics: diagnosticsState,
         resource: resource,
-        now: dependencies.clock.now
+        now: dependencies.clock.now,
+        observerPipeline: observerPipeline
       )
     )
 
@@ -403,8 +499,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
       async let logs: Void = self.logQueue.shutdown()
       _ = await (spans, logs)
       await self.performProviderOperation {
+        self.tracerProvider.value.shutdown()
         _ = self.meterProvider.value.shutdown()
         _ = self.customMeterProvider?.value.shutdown()
+        self.observerPipeline.shutdownLogs(explicitTimeout: nil)
+        self.observerPipeline.shutdownMetrics()
       }
 
       await self.delivery.shutdown(retainPersisted: self.configuration.persistence != nil)
@@ -431,6 +530,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
         self.tracerProvider.value.shutdown()
         _ = self.meterProvider.value.shutdown()
         _ = self.customMeterProvider?.value.shutdown()
+        self.observerPipeline.shutdownLogs(explicitTimeout: nil)
+        self.observerPipeline.shutdownMetrics()
       }
 
       let current = self.diagnosticsState.snapshot()
@@ -486,8 +587,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
     async let spans: Void = spanQueue.forceFlush()
     async let logs: Void = logQueue.forceFlush()
     async let metricsSucceeded: Bool = performProviderOperation {
+      self.observerPipeline.forceFlushSpans(explicitTimeout: nil)
       let native = self.meterProvider.value.forceFlush() == .success
       let custom = self.customMeterProvider?.value.forceFlush() != .failure
+      self.observerPipeline.forceFlushLogs(explicitTimeout: nil)
+      self.observerPipeline.forceFlushMetrics()
       return native && custom
     }
     _ = await (spans, logs)

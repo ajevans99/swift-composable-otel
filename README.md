@@ -5,7 +5,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 
 > [!IMPORTANT]
 > The current tagged release is
-> [`0.3.2`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.2).
+> [`0.3.3`](https://github.com/ajevans99/swift-composable-otel/tree/0.3.3).
 > This release remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -15,7 +15,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    from: "0.3.2"
+    from: "0.3.3"
   )
 ]
 ```
@@ -144,6 +144,62 @@ let store = Store(initialState: AppFeature.State()) {
 
 `TelemetryBootstrap` is development-only. It has no production environment and cannot select a
 remote or production stdout exporter.
+
+### Observe sanitized telemetry on device
+
+Debug tooling can inspect the same sampled signals without replacing stdout or OTLP export. Supply
+standard OpenTelemetry exporters through `TelemetryObserverExporters`:
+
+```swift
+#if DEBUG
+let inspector = InspectorTelemetry()
+let exporterSet = inspector.makeExporters()
+let observerExporters = TelemetryObserverExporters(
+  spanExporters: [exporterSet.spanExporter],
+  logRecordExporters: [exporterSet.logExporter],
+  metricExporters: [exporterSet.metricExporter]
+)
+#else
+let observerExporters = TelemetryObserverExporters()
+#endif
+```
+
+Retain `inspector` in app-level state for its stores and UI. Each `exporterSet` is lifecycle-scoped:
+pass it to exactly one `TelemetryBootstrap` or `TelemetryRuntime` lifetime and call
+`inspector.makeExporters()` again for any separate configuration.
+
+Pass the value to either local bootstrap:
+
+```swift
+let telemetry = try TelemetryBootstrap.configure(
+  serviceName: "example-app",
+  policy: policy,
+  observerExporters: observerExporters
+)
+```
+
+or production runtime configuration:
+
+```swift
+let configuration = TelemetryRuntime.Configuration(
+  serviceName: "example-app",
+  endpoints: endpoints,
+  policy: policy,
+  observerExporters: observerExporters
+)
+```
+
+The package registers each observer independently behind its privacy boundary. Observers receive
+only policy-sanitized, signal-enabled, sampled data; observer failure results do not suppress or
+change stdout/OTLP export. Metric exporters receive native metrics and registered delta counters
+through separate package-owned readers while the supplied exporter is flushed and shut down once.
+Runtime force-flush, graceful shutdown, and terminal discard propagate to observer lifecycle;
+discard does not flush. Like any completed export, data already accepted by an observer cannot be
+retracted by `disableAndDiscardPending()`. Keep on-device stores bounded, apply host retention and
+consent policy, and omit the inspector products from non-debug targets when they are not required.
+Each supplied exporter is owned by exactly one bootstrap or runtime lifetime. Never reuse exporter
+instances across separate configurations; create fresh exporter bundles that may share retained
+stores.
 
 ## Production OTLP/HTTP runtime
 
@@ -419,9 +475,11 @@ before collection, and sanitizes every signal again before OTLP encoding, persis
 delivery.
 
 The normal package products do not expose arbitrary `info`, `error`, raw body, raw attribute,
-tracer, logger, meter, sanitizer, processor, view, or exporter factories. Cross-target SDK wiring is
+tracer, logger, meter, sanitizer, processor, or view factories. The narrow observer surface accepts
+standard exporters only after package privacy filtering. All other cross-target SDK wiring is a
 Swift `package` implementation detail and is checked by symbol-graph plus expected-failure compile
-gates. Applications that integrate OpenTelemetry directly own that separate SDK trust boundary.
+gates.
+Applications that integrate OpenTelemetry directly own that separate SDK trust boundary.
 
 The package does not offer a raw-payload development mode. Applications that create raw
 OpenTelemetry data directly own its classification, consent, redaction, retention, and exporter
@@ -494,7 +552,7 @@ See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.3.2 package quality layer includes:
+The 0.3.3 package quality layer includes:
 
 - externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
@@ -508,7 +566,7 @@ The 0.3.2 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.3.2 and required
+consumer evidence and repository protection remain accepted residual risks for 0.3.3 and required
 no-go items for 1.0.
 
 ## License

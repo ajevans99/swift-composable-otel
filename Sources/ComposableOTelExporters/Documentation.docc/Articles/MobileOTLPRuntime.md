@@ -26,7 +26,39 @@ let runtime = try TelemetryRuntime(
 ```
 
 Inject `runtime.client` into TCA dependencies. The runtime keeps tracer, meter, logger, processors,
-readers, exporters, queues, persistence, and shutdown state private.
+readers, package-owned exporters, queues, persistence, and shutdown state private.
+
+### Add a debug observer
+
+Use ``TelemetryObserverExporters`` when an on-device debug tool needs the same runtime signals while
+OTLP delivery continues unchanged:
+
+```swift
+let inspector = InspectorTelemetry()
+let exporterSet = inspector.makeExporters()
+let observers = TelemetryObserverExporters(
+  spanExporters: [exporterSet.spanExporter],
+  logRecordExporters: [exporterSet.logExporter],
+  metricExporters: [exporterSet.metricExporter]
+)
+
+let configuration = TelemetryRuntime.Configuration(
+  serviceName: "example-app",
+  endpoints: endpoints,
+  policy: policy,
+  observerExporters: observers
+)
+```
+
+Construct these values under `#if DEBUG` when the inspector must not ship in production. Retain
+`inspector` in app-level state for its stores and UI. Scope `exporterSet` to exactly one runtime or
+bootstrap lifetime, calling `inspector.makeExporters()` again for a separate configuration. Each
+standard exporter receives only policy-sanitized values through a package-owned processor or reader.
+Observer failures are isolated from OTLP status and delivery. Force flush and graceful shutdown
+flush observers; shutdown and terminal discard shut them down exactly once, while discard never
+collects pending metrics. Data already accepted by an observer is a completed export and cannot be
+retracted by runtime discard. Each supplied exporter belongs to exactly one runtime or bootstrap
+lifetime. Never reuse an exporter instance across separately configured pipelines.
 
 Resource mode defaults to `.native(environment: .production)`, preserving
 service/environment/Darwin/OpenTelemetry

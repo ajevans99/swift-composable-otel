@@ -14,8 +14,9 @@ process-global OpenTelemetry providers.
 
 Package-only processors rebuild spans, logs, metrics, and resources from native or catalog
 allowlists before encoding. Metric views are drop-by-default with exact dimensions, descriptions,
-units, temporality, and histograms. These implementation hooks are intentionally absent from the
-normal public API.
+units, temporality, and histograms. ``TelemetryObserverExporters`` is the narrow public extension
+point for standard exporters that must see only this sanitized data; processors, readers, privacy
+wrappers, and views remain package-owned.
 
 Read <doc:MobileOTLPRuntime>, <doc:OperationalRunbook>, and <doc:ProductionReadiness> before enabling
 remote export. Mobile delivery remains best-effort: suspension and termination can interrupt every
@@ -30,6 +31,7 @@ sanitized by the same policy. Otherwise they are outside the package trust bound
 
 - ``TelemetryBootstrap``
 - ``TelemetryRuntime``
+- ``TelemetryObserverExporters``
 - ``OTLPEndpoints``
 - ``TelemetryHTTPTransport``
 - ``TelemetryRequestAuthenticator``

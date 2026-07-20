@@ -151,17 +151,22 @@ Debug tooling can inspect the same sampled signals without replacing stdout or O
 standard OpenTelemetry exporters through `TelemetryObserverExporters`:
 
 ```swift
-let observerExporters: TelemetryObserverExporters
 #if DEBUG
-observerExporters = TelemetryObserverExporters(
-  spanExporters: [InspectorSpanExporter(store: traceStore)],
-  logRecordExporters: [InspectorLogExporter(store: logStore)],
-  metricExporters: [InspectorMetricExporter(store: metricStore)]
+let inspector = InspectorTelemetry()
+let exporterSet = inspector.makeExporters()
+let observerExporters = TelemetryObserverExporters(
+  spanExporters: [exporterSet.spanExporter],
+  logRecordExporters: [exporterSet.logExporter],
+  metricExporters: [exporterSet.metricExporter]
 )
 #else
-observerExporters = .init()
+let observerExporters = TelemetryObserverExporters()
 #endif
 ```
+
+Retain `inspector` in app-level state for its stores and UI. Each `exporterSet` is lifecycle-scoped:
+pass it to exactly one `TelemetryBootstrap` or `TelemetryRuntime` lifetime and call
+`inspector.makeExporters()` again for any separate configuration.
 
 Pass the value to either local bootstrap:
 

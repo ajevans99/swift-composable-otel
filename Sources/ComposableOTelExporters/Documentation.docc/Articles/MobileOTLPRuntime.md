@@ -34,10 +34,12 @@ Use ``TelemetryObserverExporters`` when an on-device debug tool needs the same r
 OTLP delivery continues unchanged:
 
 ```swift
+let inspector = InspectorTelemetry()
+let exporterSet = inspector.makeExporters()
 let observers = TelemetryObserverExporters(
-  spanExporters: [InspectorSpanExporter(store: traceStore)],
-  logRecordExporters: [InspectorLogExporter(store: logStore)],
-  metricExporters: [InspectorMetricExporter(store: metricStore)]
+  spanExporters: [exporterSet.spanExporter],
+  logRecordExporters: [exporterSet.logExporter],
+  metricExporters: [exporterSet.metricExporter]
 )
 
 let configuration = TelemetryRuntime.Configuration(
@@ -48,14 +50,15 @@ let configuration = TelemetryRuntime.Configuration(
 )
 ```
 
-Construct this value under `#if DEBUG` when the inspector must not ship in production. Each standard
-exporter receives only policy-sanitized values through a package-owned processor or reader.
+Construct these values under `#if DEBUG` when the inspector must not ship in production. Retain
+`inspector` in app-level state for its stores and UI. Scope `exporterSet` to exactly one runtime or
+bootstrap lifetime, calling `inspector.makeExporters()` again for a separate configuration. Each
+standard exporter receives only policy-sanitized values through a package-owned processor or reader.
 Observer failures are isolated from OTLP status and delivery. Force flush and graceful shutdown
 flush observers; shutdown and terminal discard shut them down exactly once, while discard never
 collects pending metrics. Data already accepted by an observer is a completed export and cannot be
 retracted by runtime discard. Each supplied exporter belongs to exactly one runtime or bootstrap
-lifetime. Never reuse an exporter instance across separately configured pipelines; vend fresh
-exporters that may share independently retained stores.
+lifetime. Never reuse an exporter instance across separately configured pipelines.
 
 Resource mode defaults to `.native(environment: .production)`, preserving
 service/environment/Darwin/OpenTelemetry

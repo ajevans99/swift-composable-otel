@@ -9,17 +9,20 @@ extension point for on-device debug tooling.
 `SpanExporter`, `LogRecordExporter`, and `MetricExporter` values:
 
 ```swift
+let inspector = InspectorTelemetry()
+let exporterSet = inspector.makeExporters()
 let observers = TelemetryObserverExporters(
-  spanExporters: [InspectorSpanExporter(store: traceStore)],
-  logRecordExporters: [InspectorLogExporter(store: logStore)],
-  metricExporters: [InspectorMetricExporter(store: metricStore)]
+  spanExporters: [exporterSet.spanExporter],
+  logRecordExporters: [exporterSet.logExporter],
+  metricExporters: [exporterSet.metricExporter]
 )
 ```
 
 Pass `observerExporters: observers` to `TelemetryBootstrap.configure` for development stdout or to
 `TelemetryRuntime.Configuration` for the bounded OTLP runtime. The original overloads remain
 unchanged and construct an empty observer set, so existing call sites and production behavior remain
-unchanged.
+unchanged. Retain `inspector` for its stores and UI. Scope `exporterSet` to exactly one bootstrap or
+runtime lifetime; call `inspector.makeExporters()` again for a separate configuration.
 
 Package-owned processors and readers keep every observer behind the same `TelemetryPolicy` privacy
 boundary as stdout and OTLP. Observers see only enabled, sampled, sanitized spans, logs, resources,

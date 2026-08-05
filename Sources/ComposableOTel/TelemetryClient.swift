@@ -199,6 +199,7 @@ public struct TelemetryClient: Sendable {
   let metrics: MetricInstruments
   let logger: SendableLogger
   private let operationalEventRecorder: TelemetryOperationalEventRecorder
+  private let privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder
   package let contracts: TelemetryContractRuntime
 
   public let policy: TelemetryPolicy
@@ -209,13 +210,15 @@ public struct TelemetryClient: Sendable {
     logger: any Logger,
     policy: TelemetryPolicy,
     contracts: TelemetryContractRuntime,
-    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil
+    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil,
+    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil
   ) {
     let logger = SendableLogger(underlying: logger)
     self.tracer = SendableTracer(underlying: tracer)
     self.metrics = metrics
     self.logger = logger
     self.operationalEventRecorder = operationalEventRecorder ?? .logger(logger)
+    self.privacyAwareLogRecorder = privacyAwareLogRecorder ?? .logger(logger)
     self.policy = policy
     self.contracts = contracts
   }
@@ -251,7 +254,8 @@ public struct TelemetryClient: Sendable {
     policy: TelemetryPolicy,
     contractCounters: [TelemetryContractIdentity: any LongCounter],
     contractProviderRetention: AnyObject? = nil,
-    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil
+    operationalEventRecorder: TelemetryOperationalEventRecorder? = nil,
+    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil
   ) -> TelemetryClient {
     TelemetryClient(
       tracer: tracer,
@@ -263,7 +267,8 @@ public struct TelemetryClient: Sendable {
         counters: contractCounters,
         providerRetention: contractProviderRetention
       ),
-      operationalEventRecorder: operationalEventRecorder
+      operationalEventRecorder: operationalEventRecorder,
+      privacyAwareLogRecorder: privacyAwareLogRecorder
     )
   }
 
@@ -301,6 +306,28 @@ public struct TelemetryClient: Sendable {
       .setBody(policy.sanitizedLogBody(.string(body)))
       .setAttributes(policy.sanitizedLogAttributes(attributes))
       .emit()
+  }
+
+  /// Synchronously records a privacy-aware interpolated log.
+  ///
+  /// Unannotated interpolations are replaced by ``TelemetryLogMessage/redactionToken`` before this
+  /// method receives the message. Explicit public values are schema-bounded where applicable.
+  @discardableResult
+  public func log(
+    _ severity: TelemetryLogSeverity,
+    _ message: TelemetryLogMessage
+  ) -> TelemetryLogRecordingResult {
+    guard policy.signals.logsEnabled else { return .disabled }
+    guard
+      let record = TelemetryLogWireFormat.makeRecord(
+        from: message,
+        severity: severity,
+        policy: policy
+      )
+    else {
+      return .invalidMessage
+    }
+    return privacyAwareLogRecorder.record(record)
   }
 
   package func recordOperationalEvent(

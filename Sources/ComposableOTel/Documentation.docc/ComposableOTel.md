@@ -5,9 +5,9 @@ Instrument The Composable Architecture with bounded, privacy-safe OpenTelemetry 
 ## Overview
 
 ComposableOTel emits fixed-name reducer, effect, dependency, and navigation spans plus bounded
-metrics and optional fixed-body logs. Applications provide a finite ``TelemetrySchema`` and typed
-identifiers. Unknown values aggregate to `other`; invalid dynamic values cannot become telemetry
-identifiers.
+metrics, fixed-body logs, and privacy-aware interpolated application logs. Applications provide a
+finite ``TelemetrySchema`` and typed identifiers. Unknown values aggregate to `other`; invalid
+dynamic values cannot become telemetry identifiers.
 
 The default ``TelemetrySignalConfiguration`` enables traces and metrics independently and disables
 logs. Reducer actions and state are never reflected. Optional state-change reporting compares
@@ -27,6 +27,7 @@ exporter-boundary filtering and metric views.
   `Effect.tracedLongLivedRun(effect:priority:operation:)`.
 - Use `tracedCall(dependency:operation:operation:)` for dependency work.
 - Call ``TelemetryClient/recordNavigation(_:route:)`` with route names that contain no parameters.
+- Call ``TelemetryClient/log(_:_:)`` for prose whose interpolations must be private by default.
 - Test through `ComposableOTelTesting`.
 
 ## Topics
@@ -41,6 +42,13 @@ exporter-boundary filtering and metric views.
 - ``TelemetryOutcome``
 - ``NavigationOperation``
 - ``StateChangeToken``
+- ``TelemetryLogMessage``
+- ``TelemetryLogPrivacy``
+- ``TelemetryLogRecordingResult``
+- ``TelemetryLogInteger``
+- ``TelemetryLogDuration``
+- ``TelemetryLogCountBucket``
+- ``TelemetryCorrelationID``
 - ``TelemetryContractCatalog``
 - ``TelemetrySpanDefinition``
 - ``TelemetryLogDefinition``
@@ -68,3 +76,4 @@ exporter-boundary filtering and metric views.
 - <doc:GettingStarted>
 - <doc:SemanticConventions>
 - <doc:TypedContracts>
+- <doc:PrivacyAwareLogs>

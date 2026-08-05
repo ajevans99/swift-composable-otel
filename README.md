@@ -72,6 +72,43 @@ Schema construction rejects limits above 32 features, 128 actions, 64 effects, 6
 128 operations, 64 routes, 32 error types, 32 error categories, 64 error codes, 8 services, or 16
 service versions. Rejected values are never printed.
 
+## Privacy-aware interpolated logs
+
+`TelemetryClient.log` accepts OSLog-style interpolation without allowing private values into retained
+telemetry:
+
+```swift
+let planID = response.planID
+let outcome = TelemetryOutcome.success
+
+telemetry.log(
+  .info,
+  "Plan \(planID) save finished with \(outcome, privacy: .public)"
+)
+```
+
+Every unannotated interpolation is private. It becomes the fixed `<private>` token while
+`TelemetryLogMessage` is constructed; the original value is not evaluated, described, or retained.
+The exported record uses the stable `app.log` event name and carries a canonical literal template,
+deterministic template identity, redacted rendered body, severity, typed public values, and active
+trace/span context. Dynamic values therefore do not fragment template-based aggregation.
+
+`.public` is deliberately unavailable for `String`, arbitrary `CustomStringConvertible`, `Error`,
+`URL`, `TelemetryStringValue`, consumer-defined `TelemetryIdentifier` kinds, and other unconstrained
+values. Approved overloads cover the package's concrete finite identifier domains,
+`TelemetryOutcome`, `NavigationOperation`, `Bool`, and explicit `TelemetryLogInteger`,
+`TelemetryLogDuration`, `TelemetryLogCountBucket`, and `TelemetryCorrelationID` wrappers. Identifier
+values still pass through `TelemetrySchema`; valid but unregistered values become `other`.
+
+Templates are limited to 512 UTF-8 bytes, rendered bodies to 1,024 UTF-8 bytes, interpolations to 16,
+and public values to 8. An invalid message returns `.invalidMessage` without entering a logger,
+observer, queue, exporter, or persistence path. `.recorded` means synchronous acceptance by the
+configured pipeline, not successful remote delivery.
+
+Private-value local rendering is intentionally deferred. There is no debug switch that could
+accidentally route private values into observer stores, tail buffers, persistence, test collectors,
+or OTLP; local and remote paths receive the same redacted record.
+
 ## Typed exact-wire contracts
 
 Applications that need stable external wire fields can register an immutable

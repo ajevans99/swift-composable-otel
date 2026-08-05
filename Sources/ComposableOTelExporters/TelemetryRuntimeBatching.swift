@@ -375,3 +375,41 @@ func makeRuntimeOperationalEventRecorder(
     }
   )
 }
+
+func makeRuntimePrivacyAwareLogRecorder(
+  queue: RuntimeBatchQueue<ReadableLogRecord>,
+  boundary: TelemetryPrivacyBoundary,
+  diagnostics: RuntimeDiagnosticsState,
+  resource: Resource,
+  now: @escaping @Sendable () -> Date,
+  observerPipeline: TelemetryObserverPipeline? = nil
+) -> TelemetryPrivacyAwareLogRecorder {
+  TelemetryPrivacyAwareLogRecorder { log in
+    let record = ReadableLogRecord(
+      resource: resource,
+      instrumentationScopeInfo: InstrumentationScopeInfo(
+        name: ComposableOTelMetadata.instrumentationName,
+        version: ComposableOTelMetadata.version
+      ),
+      timestamp: now(),
+      spanContext: OpenTelemetry.instance.contextProvider.activeSpan?.context,
+      severity: log.severity.otelSeverity,
+      body: .string(log.body),
+      attributes: log.attributes,
+      eventName: TelemetryLogWireFormat.eventName
+    )
+    guard let sanitized = boundary.sanitizedLogs([record]).first else {
+      diagnostics.recordDrop(signal: .logs)
+      return .invalidMessage
+    }
+    switch queue.offer(sanitized) {
+    case .accepted:
+      observerPipeline?.emit(logRecord: sanitized)
+      return .recorded
+    case .dropped:
+      return .dropped
+    case .stopped:
+      return .disabled
+    }
+  }
+}

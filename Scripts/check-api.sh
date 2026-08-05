@@ -47,3 +47,4 @@ xcrun swift Scripts/check-api.swift \
   --baseline API/PublicAPI.json
 
 bash Scripts/check-unsafe-api.sh
+bash Scripts/check-privacy-aware-log-api.sh

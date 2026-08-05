@@ -306,6 +306,34 @@ struct TelemetryPrivacyBoundary: Sendable {
           eventName: eventName
         )
       }
+      if record.eventName == TelemetryLogWireFormat.eventName {
+        guard
+          policy.signals.logsEnabled,
+          isSafeInstrumentationScope(record.instrumentationScopeInfo),
+          let severity = record.severity,
+          severity == Severity.info || severity == Severity.error,
+          let sanitized = TelemetryLogWireFormat.sanitize(
+            body: record.body,
+            attributes: record.attributes,
+            policy: policy
+          )
+        else {
+          return nil
+        }
+        return ReadableLogRecord(
+          resource: Resource(
+            attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
+          ),
+          instrumentationScopeInfo: safeInstrumentationScope,
+          timestamp: record.timestamp,
+          observedTimestamp: record.observedTimestamp,
+          spanContext: record.spanContext,
+          severity: severity,
+          body: sanitized.body,
+          attributes: sanitized.attributes,
+          eventName: TelemetryLogWireFormat.eventName
+        )
+      }
       guard policy.signals.logsEnabled else { return nil }
       return ReadableLogRecord(
         resource: Resource(

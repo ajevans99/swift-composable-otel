@@ -14,6 +14,7 @@ public enum ComposableOTelSemantics {
     public static let effectCancelled = "tca.effect.cancelled"
     public static let exception = "exception"
     public static let navigationChanged = "tca.navigation.changed"
+    public static let applicationLog = "app.log"
   }
 
   public enum LogBodies {

@@ -297,6 +297,12 @@ struct TelemetryContractCatalogTests {
       bodyPolicy: .none,
       fields: []
     )
+    let applicationLog = try TelemetryLogDefinition<Void>(
+      eventName: .init(ComposableOTelSemantics.Events.applicationLog),
+      severity: .info,
+      bodyPolicy: .none,
+      fields: []
+    )
     let counter = try TelemetryCounterDefinition<Void>(
       name: .init(ComposableOTelSemantics.Metrics.actionsDispatched),
       unit: .init("{event}"),
@@ -315,6 +321,12 @@ struct TelemetryContractCatalogTests {
       _ = try TelemetryContractCatalog(
         contractVersion: .init(1),
         logs: [.init(log)]
+      )
+    }
+    #expect(throws: TelemetryContractError.invalidDefinition) {
+      _ = try TelemetryContractCatalog(
+        contractVersion: .init(1),
+        logs: [.init(applicationLog)]
       )
     }
     #expect(throws: TelemetryContractError.invalidDefinition) {

@@ -22,7 +22,7 @@ and the mobile runtime operational runbook. Production delivery remains bounded 
 runtime does not guarantee export before suspension, termination, force-quit, crash, or device
 shutdown.
 
-## Adopting privacy-aware logs after 0.3.3
+## Adopting privacy-aware logs in 0.4.0-rc.1
 
 The interpolated logging API is additive. Existing fixed package logs, registered log contracts, and
 operational events remain source-compatible.

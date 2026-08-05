@@ -130,7 +130,7 @@ for requiredClause in [
 
 let metadata = read("Sources/ComposableOTel/ComposableOTelMetadata.swift")
 let versionExpression = try NSRegularExpression(
-  pattern: #"public static let version = \"([0-9]+\.[0-9]+\.[0-9]+)\""#
+  pattern: #"public static let version = \"([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)\""#
 )
 let metadataRange = NSRange(metadata.startIndex..., in: metadata)
 let versionMatch = versionExpression.firstMatch(in: metadata, range: metadataRange)
@@ -150,10 +150,11 @@ if !readme.contains("[MIT License](LICENSE), SPDX identifier `MIT`") {
   failures.append("README must reference the approved MIT license and SPDX identifier")
 }
 if let packageVersion {
+  let requirementLabel = packageVersion.contains("-") ? "exact" : "from"
   let expectedInstallation =
     #".package("# + "\n"
     + #"    url: "https://github.com/ajevans99/swift-composable-otel.git","# + "\n"
-    + #"    from: "\#(packageVersion)""#
+    + #"    \#(requirementLabel): "\#(packageVersion)""#
   if !readme.contains(expectedInstallation) {
     failures.append("README installation does not use ComposableOTelMetadata.version")
   }
@@ -162,7 +163,7 @@ if let packageVersion {
   ) {
     failures.append("README current release link does not use ComposableOTelMetadata.version")
   }
-  if !gettingStarted.contains(#"from: "\#(packageVersion)""#) {
+  if !gettingStarted.contains(#"\#(requirementLabel): "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
   }
   if !releaseNotes.hasPrefix("# swift-composable-otel \(packageVersion)\n") {

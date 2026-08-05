@@ -2,10 +2,11 @@
 
 0.4.0-rc.5 supersedes 0.4.0-rc.4.
 rc.4 was published with stale embedded rc.3 metadata and documentation.
-Its tag and release remain immutable and must not be moved or reused. rc.5 carries the bounded metric
-trace exemplar APIs with correct release metadata and changes or removes no public APIs. It remains a
-pre-1.0 candidate for Momentum integration and production-like validation; it is not the 0.4.0 final
-release.
+Do not adopt rc.4: its embedded package and instrumentation version and its installation and release
+documentation still identify rc.3. Its tag and release remain immutable and must not be moved or
+reused. rc.5 carries the bounded metric trace exemplar APIs with correct release metadata and changes
+or removes no public APIs. It remains a pre-1.0 candidate for Momentum integration and production-like
+validation; it is not the 0.4.0 final release.
 
 ## Default-off bounded metric trace exemplars
 

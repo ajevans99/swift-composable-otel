@@ -298,6 +298,7 @@ for requiredMigration in [
 for requiredReleaseClaim in [
   "0.4.0-rc.5",
   "rc.4 was published with stale embedded rc.3 metadata and documentation",
+  "Do not adopt rc.4",
   "TelemetryMetricExemplarPolicy",
   "one or two exemplars per metric data point",
   "valid SDK trace and span context",

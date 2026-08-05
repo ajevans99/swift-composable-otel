@@ -59,10 +59,10 @@ publish a new patch version as appropriate.
 ### Recovering with and promoting 0.4.0-rc.5
 
 The published `0.4.0-rc.4` tag and release remain immutable even though that candidate contains stale
-embedded rc.3 metadata and documentation. Do not move or reuse rc.4. `0.4.0-rc.5` is published only
-after its release-preparation pull request merges and hosted CI passes on the merge commit. Momentum
-then pins rc.5 and proves the production vertical slice and its CI against the immutable rc.5 tag in
-its existing adoption pull request. If that evidence is accepted,
+embedded rc.3 metadata and documentation. Do not adopt, move, or reuse rc.4. `0.4.0-rc.5` is published
+only after its release-preparation pull request merges and hosted CI passes on the merge commit.
+Momentum then pins rc.5 and proves the production vertical slice and its CI against the immutable
+rc.5 tag in its existing adoption pull request. If that evidence is accepted,
 `0.4.0` final must be an annotated tag of the exact same upstream commit:
 
 ```sh

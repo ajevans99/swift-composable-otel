@@ -33,6 +33,12 @@ func normalizedDeclaration(_ declaration: String, path: String) -> String {
   ] {
     result = result.replacingOccurrences(of: qualification, with: "")
   }
+  if path == "TelemetryMetricExemplarPolicy.traceContext(maximumPerDataPoint:)" {
+    result = result.replacingOccurrences(
+      of: "TelemetryMetricExemplarPolicy.MaximumPerDataPoint",
+      with: "MaximumPerDataPoint"
+    )
+  }
   if path.hasSuffix(".other"), result.hasPrefix("static var other:") {
     return "static var other: Self { get }"
   }

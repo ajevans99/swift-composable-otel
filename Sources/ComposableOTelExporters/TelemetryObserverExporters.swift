@@ -37,6 +37,7 @@ struct TelemetryObserverPipeline: @unchecked Sendable {
   init(
     exporters: TelemetryObserverExporters,
     policy: TelemetryPolicy,
+    metricExemplars: TelemetryMetricExemplarPolicy = .disabled,
     preserveErrorCorrelation: Bool = false
   ) {
     spanExporters = exporters.spanExporters.map {
@@ -52,7 +53,11 @@ struct TelemetryObserverPipeline: @unchecked Sendable {
       )
     }
     metricLifecycles = exporters.metricExporters.map {
-      ObserverMetricExporterLifecycle(exporter: $0, policy: policy)
+      ObserverMetricExporterLifecycle(
+        exporter: $0,
+        policy: policy,
+        metricExemplars: metricExemplars
+      )
     }
   }
 
@@ -172,8 +177,16 @@ private final class ObserverMetricExporterLifecycle: @unchecked Sendable {
   private let exporter: PrivacyPreservingMetricExporter
   private var isShutdown = false
 
-  init(exporter: any MetricExporter, policy: TelemetryPolicy) {
-    self.exporter = PrivacyPreservingMetricExporter(exporter: exporter, policy: policy)
+  init(
+    exporter: any MetricExporter,
+    policy: TelemetryPolicy,
+    metricExemplars: TelemetryMetricExemplarPolicy
+  ) {
+    self.exporter = PrivacyPreservingMetricExporter(
+      exporter: exporter,
+      policy: policy,
+      metricExemplars: metricExemplars
+    )
   }
 
   func makeReaderExporter() -> any MetricExporter {

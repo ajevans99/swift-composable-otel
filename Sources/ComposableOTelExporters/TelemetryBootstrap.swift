@@ -77,6 +77,28 @@ public enum TelemetryBootstrap {
       samplingRatio: samplingRatio,
       resourceMode: resourceMode,
       policy: policy,
+      metricExemplars: .disabled,
+      observerExporters: .init()
+    )
+  }
+
+  /// Configures development stdout with an explicit bounded metric exemplar policy.
+  @discardableResult
+  public static func configure(
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID? = nil,
+    samplingRatio: Double? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .development),
+    policy: TelemetryPolicy = .init(),
+    metricExemplars: TelemetryMetricExemplarPolicy
+  ) throws -> TelemetryClient {
+    try configure(
+      serviceName: serviceName,
+      serviceVersion: serviceVersion,
+      samplingRatio: samplingRatio,
+      resourceMode: resourceMode,
+      policy: policy,
+      metricExemplars: metricExemplars,
       observerExporters: .init()
     )
   }
@@ -91,6 +113,28 @@ public enum TelemetryBootstrap {
     policy: TelemetryPolicy = .init(),
     observerExporters: TelemetryObserverExporters
   ) throws -> TelemetryClient {
+    try configure(
+      serviceName: serviceName,
+      serviceVersion: serviceVersion,
+      samplingRatio: samplingRatio,
+      resourceMode: resourceMode,
+      policy: policy,
+      metricExemplars: .disabled,
+      observerExporters: observerExporters
+    )
+  }
+
+  /// Configures development stdout and observers with bounded, privacy-sanitized trace exemplars.
+  @discardableResult
+  public static func configure(
+    serviceName: ServiceID,
+    serviceVersion: ServiceVersionID? = nil,
+    samplingRatio: Double? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .development),
+    policy: TelemetryPolicy = .init(),
+    metricExemplars: TelemetryMetricExemplarPolicy,
+    observerExporters: TelemetryObserverExporters
+  ) throws -> TelemetryClient {
     try state.configure {
       try makeClient(
         serviceName: serviceName,
@@ -98,6 +142,7 @@ public enum TelemetryBootstrap {
         samplingRatio: samplingRatio,
         resourceMode: resourceMode,
         policy: policy,
+        metricExemplars: metricExemplars,
         observerExporters: observerExporters
       )
     }
@@ -109,6 +154,7 @@ public enum TelemetryBootstrap {
     samplingRatio: Double?,
     resourceMode: TelemetryResourceMode,
     policy: TelemetryPolicy,
+    metricExemplars: TelemetryMetricExemplarPolicy,
     observerExporters: TelemetryObserverExporters
   ) throws -> (client: TelemetryClient, forceFlush: () -> Void, shutdown: () -> Void) {
     let resource = try makeResource(
@@ -122,7 +168,8 @@ public enum TelemetryBootstrap {
     let sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: ratio))
     let observerPipeline = TelemetryObserverPipeline(
       exporters: observerExporters,
-      policy: policy
+      policy: policy,
+      metricExemplars: metricExemplars
     )
 
     let rawSpanExporter: any SpanExporter = StdoutSpanExporter(isDebug: true)
@@ -153,13 +200,15 @@ public enum TelemetryBootstrap {
     let rawMetricExporter: any MetricExporter = StdoutMetricExporter(isDebug: true)
     let metricExporter = PrivacyPreservingMetricExporter(
       exporter: rawMetricExporter,
-      policy: policy
+      policy: policy,
+      metricExemplars: metricExemplars
     )
     let metricReader = PeriodicMetricReaderBuilder(exporter: metricExporter)
       .setInterval(timeInterval: 5)
       .build()
     let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
+      .setExemplarFilter(exemplarFilter: metricExemplars.sdkFilter)
       .registerMetricReader(reader: metricReader)
     observerPipeline.registerMetricReaders(on: meterBuilder, interval: 5)
     ComposableOTelMetricConfiguration.registerViews(on: meterBuilder, policy: policy)
@@ -173,13 +222,15 @@ public enum TelemetryBootstrap {
       let rawCustomExporter: any MetricExporter = StdoutMetricExporter(isDebug: true)
       let customExporter = PrivacyPreservingMetricExporter(
         exporter: DeltaCounterMetricExporter(exporter: rawCustomExporter),
-        policy: policy
+        policy: policy,
+        metricExemplars: metricExemplars
       )
       let customReader = PeriodicMetricReaderBuilder(exporter: customExporter)
         .setInterval(timeInterval: 5)
         .build()
       let customBuilder = MeterProviderSdk.builder()
         .setResource(resource: resource)
+        .setExemplarFilter(exemplarFilter: metricExemplars.sdkFilter)
         .registerMetricReader(reader: customReader)
       observerPipeline.registerMetricReaders(
         on: customBuilder,

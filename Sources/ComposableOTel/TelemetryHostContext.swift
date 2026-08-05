@@ -43,7 +43,7 @@ public enum TelemetryHostPlatform: String, CaseIterable, Sendable {
   case watchOS = "watchos"
 
   /// The platform on which this package is currently executing.
-  public static var current: Self {
+  public static var current: TelemetryHostPlatform {
     #if os(iOS)
       .iOS
     #elseif os(watchOS)

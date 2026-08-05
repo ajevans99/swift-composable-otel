@@ -4,9 +4,8 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture).
 
 > [!IMPORTANT]
-> The current tagged release is
-> [`0.4.0-rc.3`](https://github.com/ajevans99/swift-composable-otel/tree/0.4.0-rc.3).
-> This release remains pre-1.0. Production OTLP delivery is
+> This revision prepares `0.4.0-rc.3`; publish that immutable tag only after its release pull request
+> merges and hosted CI passes on the merge commit. The candidate remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
 ## Installation
@@ -678,21 +677,22 @@ See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.4.0-rc.2 package quality layer includes:
+The 0.4.0-rc.3 package quality layer includes:
 
 - externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
   `TelemetryRuntime*` delivery paths;
 - a checked public API baseline and an explicit semantic-convention review lock;
-- release benchmarks for reducers, effects, dependencies, logs, metrics, sampled/unsampled spans,
-  state tokens, batching, memory, and queue pressure; and
+- release benchmarks for reducers, effects, dependencies, event creation, logs, metrics,
+  sampled/unsampled spans, state tokens, runtime configuration/startup, tail-buffer memory, batching,
+  and queue pressure; and
 - current iOS simulator tests, generic iOS product builds, minimum/latest dependency endpoints, and
   all-product DocC builds.
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.2 and required
+consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.3 and required
 no-go items for 1.0.
 
 ## License

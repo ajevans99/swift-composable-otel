@@ -883,7 +883,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     }
   }
 
-  var tailSamplingSnapshot: RuntimeTailSamplingSnapshot? {
+  package var tailSamplingSnapshot: RuntimeTailSamplingSnapshot? {
     tailSampling?.snapshot
   }
 }

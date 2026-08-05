@@ -158,10 +158,8 @@ if let packageVersion {
   if !readme.contains(expectedInstallation) {
     failures.append("README installation does not use ComposableOTelMetadata.version")
   }
-  if !readme.contains(
-    "[`\(packageVersion)`](https://github.com/ajevans99/swift-composable-otel/tree/\(packageVersion))"
-  ) {
-    failures.append("README current release link does not use ComposableOTelMetadata.version")
+  if !readme.contains("This revision prepares `\(packageVersion)`") {
+    failures.append("README staged release notice does not use ComposableOTelMetadata.version")
   }
   if !gettingStarted.contains(#"\#(requirementLabel): "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
@@ -302,7 +300,8 @@ for requiredReleaseClaim in [
   "Bounded tail promotion",
   "DEBUG builds",
   "No general histogram API was added",
-  "Do not tag 0.4.0 final",
+  "exact same upstream commit",
+  "same Momentum pull request",
 ] where !releaseNotes.contains(requiredReleaseClaim) {
   failures.append("RELEASE_NOTES is missing rc.3 claim: \(requiredReleaseClaim)")
 }

@@ -4431,7 +4431,7 @@
     "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO5macOSyA2CmF"
   },
   {
-    "declaration" : "static var current: `Self` { get }",
+    "declaration" : "static var current: TelemetryHostPlatform { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryHostPlatform.current",

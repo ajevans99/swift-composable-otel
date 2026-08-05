@@ -73,4 +73,8 @@ enabling host context, tail promotion, or DEBUG private rendering.
 | Exact empty `severity_text` unsupported | The upstream OpenTelemetry Swift model cannot represent an explicitly empty severity-text through supported APIs. No raw OTLP bypass was added. | `ajevans99` | `ajevans99` | 2026-10-13 |
 
 Recommend creating the immutable `0.4.0-rc.3` tag only after this pull request is merged and every
-hosted release gate passes on the merge commit. Do not tag 0.4.0 final from this change.
+hosted release gate passes on the merge commit. Momentum must then prove its production vertical slice
+against that rc.3 tag in its existing adoption pull request. If the evidence is accepted, create the
+`0.4.0` final tag from the exact same upstream commit and update that same Momentum pull request; do not
+make a separate final-code or release-metadata change. The final alias therefore intentionally retains
+the candidate's `0.4.0-rc.3` embedded telemetry version so the validated bits remain identical.

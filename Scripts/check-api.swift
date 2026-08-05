@@ -36,6 +36,12 @@ func normalizedDeclaration(_ declaration: String, path: String) -> String {
   if path.hasSuffix(".other"), result.hasPrefix("static var other:") {
     return "static var other: Self { get }"
   }
+  // Some supported Swift toolchains spell this enum's explicit `Self` return as its concrete type.
+  if path == "TelemetryHostPlatform.current",
+    result == "static var current: TelemetryHostPlatform { get }"
+  {
+    return "static var current: `Self` { get }"
+  }
   return result
 }
 

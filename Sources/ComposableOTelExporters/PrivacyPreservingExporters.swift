@@ -136,9 +136,13 @@ package final class PrivacyPreservingMetricExporter: MetricExporter, @unchecked 
   private let exporter: any MetricExporter
   private let boundary: TelemetryPrivacyBoundary
 
-  public init(exporter: any MetricExporter, policy: TelemetryPolicy) {
+  public init(
+    exporter: any MetricExporter,
+    policy: TelemetryPolicy,
+    metricExemplars: TelemetryMetricExemplarPolicy = .disabled
+  ) {
     self.exporter = exporter
-    boundary = TelemetryPrivacyBoundary(policy: policy)
+    boundary = TelemetryPrivacyBoundary(policy: policy, metricExemplars: metricExemplars)
   }
 
   public func export(metrics: [MetricData]) -> ExportResult {
@@ -221,9 +225,14 @@ package final class DeltaCounterMetricExporter: MetricExporter, @unchecked Senda
 
 package struct TelemetryPrivacyBoundary: Sendable {
   package let policy: TelemetryPolicy
+  package let metricExemplars: TelemetryMetricExemplarPolicy
 
-  package init(policy: TelemetryPolicy) {
+  package init(
+    policy: TelemetryPolicy,
+    metricExemplars: TelemetryMetricExemplarPolicy = .disabled
+  ) {
     self.policy = policy
+    self.metricExemplars = metricExemplars
   }
 
   package func sanitizedSpans(_ spans: [SpanData]) -> [SpanData] {
@@ -429,7 +438,7 @@ package struct TelemetryPrivacyBoundary: Sendable {
             return nil
           }
           point.attributes = attributes
-          point.exemplars = []
+          point.exemplars = sanitizedExemplars(point.exemplars)
         }
         return metric
       }
@@ -441,10 +450,32 @@ package struct TelemetryPrivacyBoundary: Sendable {
           point.attributes,
           instrumentName: metric.name
         )
-        point.exemplars = []
+        point.exemplars = sanitizedExemplars(point.exemplars)
       }
       return metric
     }
+  }
+
+  private func sanitizedExemplars(_ exemplars: [ExemplarData]) -> [ExemplarData] {
+    let maximum = metricExemplars.maximumPerDataPoint
+    guard maximum > 0 else { return [] }
+
+    var selected: [ExemplarData] = []
+    selected.reserveCapacity(maximum)
+    for exemplar in exemplars {
+      guard let context = exemplar.spanContext, context.isValid else { continue }
+      exemplar.filteredAttributes = [:]
+
+      let insertionIndex =
+        selected.firstIndex { exemplarRanksBefore(exemplar, $0) } ?? selected.endIndex
+      if insertionIndex < maximum {
+        selected.insert(exemplar, at: insertionIndex)
+        if selected.count > maximum {
+          selected.removeLast()
+        }
+      }
+    }
+    return selected
   }
 }
 
@@ -458,4 +489,17 @@ private func isSafeInstrumentationScope(_ scope: InstrumentationScopeInfo) -> Bo
     && scope.version == ComposableOTelMetadata.version
     && scope.schemaUrl == nil
     && (scope.attributes?.isEmpty ?? true)
+}
+
+private func exemplarRanksBefore(_ lhs: ExemplarData, _ rhs: ExemplarData) -> Bool {
+  if lhs.epochNanos != rhs.epochNanos {
+    return lhs.epochNanos > rhs.epochNanos
+  }
+  guard let lhsContext = lhs.spanContext, let rhsContext = rhs.spanContext else {
+    return false
+  }
+  if lhsContext.traceId != rhsContext.traceId {
+    return lhsContext.traceId < rhsContext.traceId
+  }
+  return lhsContext.spanId < rhsContext.spanId
 }

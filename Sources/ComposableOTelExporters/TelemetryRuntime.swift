@@ -22,6 +22,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var traces: TelemetryBatchConfiguration
     public var logs: TelemetryBatchConfiguration
     public var metricExportInterval: Duration
+    /// Default-off, finite trace-context retention for metric exemplars.
+    public var metricExemplars: TelemetryMetricExemplarPolicy
     public var delivery: TelemetryDeliveryConfiguration
     public var persistence: TelemetryPersistenceConfiguration?
     public var defaultFlushTimeout: Duration
@@ -90,6 +92,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.traces = traces
       self.logs = logs
       self.metricExportInterval = metricExportInterval
+      metricExemplars = .disabled
       self.delivery = delivery
       self.persistence = persistence
       self.defaultFlushTimeout = defaultFlushTimeout
@@ -241,6 +244,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let observerPipeline = TelemetryObserverPipeline(
       exporters: configuration.observerExporters,
       policy: configuration.policy,
+      metricExemplars: configuration.metricExemplars,
       preserveErrorCorrelation: configuration.tailSampling.policy != nil
     )
     self.observerPipeline = observerPipeline
@@ -273,7 +277,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
         maximumEncodedRequestBytes: configuration.delivery.maximumEncodedRequestBytes,
         deliveryClient: metricHTTPClient
       ),
-      policy: configuration.policy
+      policy: configuration.policy,
+      metricExemplars: configuration.metricExemplars
     )
     let metricReader = PeriodicMetricReaderBuilder(exporter: metricExporter)
       .setInterval(timeInterval: configuration.metricExportInterval.runtimeSeconds)
@@ -363,6 +368,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
 
     let meterBuilder = MeterProviderSdk.builder()
       .setResource(resource: resource)
+      .setExemplarFilter(exemplarFilter: configuration.metricExemplars.sdkFilter)
       .registerMetricReader(reader: metricReader)
     observerPipeline.registerMetricReaders(
       on: meterBuilder,
@@ -391,13 +397,15 @@ public final class TelemetryRuntime: @unchecked Sendable {
       )
       let customMetricExporter = PrivacyPreservingMetricExporter(
         exporter: DeltaCounterMetricExporter(exporter: customRawExporter),
-        policy: configuration.policy
+        policy: configuration.policy,
+        metricExemplars: configuration.metricExemplars
       )
       let customReader = PeriodicMetricReaderBuilder(exporter: customMetricExporter)
         .setInterval(timeInterval: configuration.metricExportInterval.runtimeSeconds)
         .build()
       let customBuilder = MeterProviderSdk.builder()
         .setResource(resource: resource)
+        .setExemplarFilter(exemplarFilter: configuration.metricExemplars.sdkFilter)
         .registerMetricReader(reader: customReader)
       observerPipeline.registerMetricReaders(
         on: customBuilder,

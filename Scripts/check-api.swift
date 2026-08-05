@@ -33,6 +33,7 @@ func normalizedDeclaration(_ declaration: String, path: String) -> String {
   ] {
     result = result.replacingOccurrences(of: qualification, with: "")
   }
+  // Xcode 26.6 qualifies this nested type while earlier supported toolchains do not.
   if path == "TelemetryMetricExemplarPolicy.traceContext(maximumPerDataPoint:)" {
     result = result.replacingOccurrences(
       of: "TelemetryMetricExemplarPolicy.MaximumPerDataPoint",

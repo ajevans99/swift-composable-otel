@@ -15,7 +15,9 @@ views, own local providers, and never replace process-global OpenTelemetry provi
 
 ``InMemoryLogCollector/privacyAwareLogs`` decodes interpolated logs into
 ``CapturedTelemetryLog`` values with exact template, identity, redacted body, severity, ordered typed
-public values, and trace correlation.
+public values, host context, and trace correlation. ``InMemorySpanCollector/spanTrees`` provides exact
+parent/child captures, and ``InMemoryMetricReader/containsHostContext`` proves session context is
+absent from metric points.
 
 For registered contracts, use decoded span/log/counter/resource helpers and
 ``InMemoryEncodedRequestCollector``. Captures preserve scalar wire types and contract version without
@@ -41,6 +43,12 @@ exposing production credentials or performing network I/O.
 - ``CapturedTelemetryLog``
 - ``CapturedTelemetryLogPublicValue``
 - ``CapturedTelemetryLogValueKind``
+- ``CapturedTelemetryHostContext``
+- ``CapturedTelemetrySpan``
+- ``CapturedTelemetrySpanTree``
+- ``TelemetrySpanTreeExpectation``
+- ``CapturedTelemetryLogRecord``
+- ``TestTailSamplingState``
 
 ### Assertions
 

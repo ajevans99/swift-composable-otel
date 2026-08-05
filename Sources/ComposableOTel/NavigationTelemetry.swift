@@ -3,6 +3,7 @@ import OpenTelemetryApi
 extension TelemetryClient {
   /// Records a bounded navigation transition without route parameters or payloads.
   public func recordNavigation(_ operation: NavigationOperation, route: RouteID) {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return }
     let route = policy.schema.bounded(route)
     let attributes: [String: AttributeValue] = [
       TCAAttributes.navigationOperation: .string(operation.rawValue),

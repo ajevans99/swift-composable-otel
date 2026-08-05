@@ -210,6 +210,24 @@ private enum ReleaseBenchmarks {
       signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
     )
     await unsampledRuntime.setExportCondition(.unavailable)
+    let tailRuntime = try runtime(
+      schema: schema,
+      endpoint: endpoint,
+      transport: transport,
+      samplingRatio: 0,
+      signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false),
+      tailSampling: .enabled(
+        try .init(
+          slowTraceThreshold: .seconds(1),
+          maximumTraceCount: 32,
+          maximumRetainedSpanCount: 256,
+          maximumRetainedBreadcrumbCount: 128,
+          maximumRetainedBytes: 512 * 1_024,
+          maximumAge: .seconds(30)
+        )
+      )
+    )
+    await tailRuntime.setExportCondition(.unavailable)
     let loggingRuntime = try runtime(
       schema: schema,
       endpoint: endpoint,
@@ -425,6 +443,13 @@ private enum ReleaseBenchmarks {
       }
     )
     results.append(
+      try await measure(name: "tailRetainedSpan", iterations: 5_000, budget: budgets) {
+        {
+          tailRuntime.client.recordNavigation(.push, route: "benchmark-route")
+        }
+      }
+    )
+    results.append(
       try await measure(name: "batching", iterations: 5_000, budget: budgets) {
         {
           batchingRuntime.client.recordNavigation(.push, route: "benchmark-route")
@@ -494,6 +519,7 @@ private enum ReleaseBenchmarks {
     _ = await fullRuntime.shutdown(timeout: .milliseconds(100))
     _ = await disabledRuntime.shutdown(timeout: .milliseconds(100))
     _ = await unsampledRuntime.shutdown(timeout: .milliseconds(100))
+    _ = await tailRuntime.shutdown(timeout: .milliseconds(100))
     _ = await loggingRuntime.shutdown(timeout: .milliseconds(100))
     _ = await metricsRuntime.shutdown(timeout: .milliseconds(100))
     _ = await queueRuntime.shutdown(timeout: .milliseconds(100))
@@ -515,37 +541,40 @@ private enum ReleaseBenchmarks {
     samplingRatio: Double,
     signals: TelemetrySignalConfiguration,
     catalog: TelemetryContractCatalog = .empty,
+    tailSampling: TelemetryTailSamplingConfiguration = .disabled,
     maximumQueueSize: Int = 65_536,
     maximumBatchSize: Int? = nil,
     maximumPendingBatches: Int = 1024,
     maximumEncodedRequestBytes: Int = 64 * 1_024,
     requestTimeout: Duration = .seconds(10)
   ) throws -> TelemetryRuntime {
-    try TelemetryRuntime(
-      configuration: .init(
-        serviceName: "benchmark",
-        endpoints: .init(baseURL: endpoint),
-        samplingRatio: samplingRatio,
-        policy: TelemetryPolicy(schema: schema, catalog: catalog, signals: signals),
-        traces: .init(
-          maximumQueueSize: maximumQueueSize,
-          maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
-          scheduledDelay: .seconds(60)
-        ),
-        logs: .init(
-          maximumQueueSize: maximumQueueSize,
-          maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
-          scheduledDelay: .seconds(60)
-        ),
-        metricExportInterval: .seconds(60),
-        delivery: .init(
-          maximumPendingBatches: maximumPendingBatches,
-          maximumEncodedRequestBytes: maximumEncodedRequestBytes,
-          requestTimeout: requestTimeout
-        ),
-        defaultFlushTimeout: .milliseconds(100),
-        backgroundFlushTimeout: .milliseconds(100)
+    var configuration = TelemetryRuntime.Configuration(
+      serviceName: "benchmark",
+      endpoints: .init(baseURL: endpoint),
+      samplingRatio: samplingRatio,
+      policy: TelemetryPolicy(schema: schema, catalog: catalog, signals: signals),
+      traces: .init(
+        maximumQueueSize: maximumQueueSize,
+        maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
+        scheduledDelay: .seconds(60)
       ),
+      logs: .init(
+        maximumQueueSize: maximumQueueSize,
+        maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
+        scheduledDelay: .seconds(60)
+      ),
+      metricExportInterval: .seconds(60),
+      delivery: .init(
+        maximumPendingBatches: maximumPendingBatches,
+        maximumEncodedRequestBytes: maximumEncodedRequestBytes,
+        requestTimeout: requestTimeout
+      ),
+      defaultFlushTimeout: .milliseconds(100),
+      backgroundFlushTimeout: .milliseconds(100)
+    )
+    configuration.tailSampling = tailSampling
+    return try TelemetryRuntime(
+      configuration: configuration,
       transport: transport,
       authenticator: .none
     )

@@ -21,6 +21,15 @@ public enum TCAAttributes {
   public static let errorRetryable = "error.retryable"
   public static let navigationOperation = "tca.navigation.operation"
   public static let navigationRoute = "tca.navigation.route"
+  public static let processSessionID = "app.process.session.id"
+  public static let hostPlatform = "app.host.platform"
+  public static let hostProcessKind = "app.host.process_kind"
+
+  package static let hostContextKeys: Set<String> = [
+    processSessionID,
+    hostPlatform,
+    hostProcessKind,
+  ]
 }
 
 extension SpanBuilder {

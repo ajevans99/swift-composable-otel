@@ -8,6 +8,9 @@ public func tracedCall<T: Sendable>(
   operation operationID: OperationID,
   operation: @Sendable () async throws -> T
 ) async throws -> T {
+  if ReducerTraceContext.instrumentationSuppressed {
+    return try await operation()
+  }
   @Dependency(\.composableOTel) var telemetry
   return try await telemetry.withDependencyTrace(
     dependency: dependency,
@@ -22,6 +25,9 @@ public func tracedCall<T: Sendable>(
   operation operationID: OperationID,
   operation: @Sendable () async -> T
 ) async -> T {
+  if ReducerTraceContext.instrumentationSuppressed {
+    return await operation()
+  }
   @Dependency(\.composableOTel) var telemetry
   return await telemetry.withDependencyTrace(
     dependency: dependency,
@@ -73,16 +79,21 @@ extension TelemetryClient {
         .spanBuilder(spanName: ComposableOTelSemantics.Spans.dependency)
         .setSpanKind(spanKind: .internal)
         .setAttributes(policy.sanitizedSpanAttributes(attributes))
+      if let parentContext = ReducerTraceContext.spanContext {
+        spanBuilder.setParent(parentContext)
+      }
       return try await spanBuilder.withActiveSpan { span in
-        try await runThrowingDependencyOperation(
-          operationBody,
-          dependency: dependency,
-          operationID: operation,
-          attributes: metricAttributes,
-          startTime: startTime,
-          clock: clock,
-          span: span
-        )
+        try await ReducerTraceContext.$spanContext.withValue(span.context) {
+          try await runThrowingDependencyOperation(
+            operationBody,
+            dependency: dependency,
+            operationID: operation,
+            attributes: metricAttributes,
+            startTime: startTime,
+            clock: clock,
+            span: span
+          )
+        }
       }
     }
 
@@ -123,15 +134,20 @@ extension TelemetryClient {
         .spanBuilder(spanName: ComposableOTelSemantics.Spans.dependency)
         .setSpanKind(spanKind: .internal)
         .setAttributes(policy.sanitizedSpanAttributes(attributes))
+      if let parentContext = ReducerTraceContext.spanContext {
+        spanBuilder.setParent(parentContext)
+      }
       return await spanBuilder.withActiveSpan { span in
-        let result = await operationBody()
-        span.status = .ok
-        recordDependencyDuration(
-          from: startTime,
-          clock: clock,
-          attributes: metricAttributes
-        )
-        return result
+        await ReducerTraceContext.$spanContext.withValue(span.context) {
+          let result = await operationBody()
+          span.status = .ok
+          recordDependencyDuration(
+            from: startTime,
+            clock: clock,
+            attributes: metricAttributes
+          )
+          return result
+        }
       }
     }
 

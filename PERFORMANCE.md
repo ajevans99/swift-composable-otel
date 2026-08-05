@@ -21,13 +21,17 @@ checked budget in `Benchmarks/ComposableOTelBenchmarks/Budgets.json`.
 | Registered catalog span | 2,000,000 ns/span |
 | Registered bodyless log | 250,000 ns/record |
 | Registered delta counter | 250,000 ns/add |
+| Tail-retained sanitized span | 500,000 ns/span |
 | Conservative gateway trace batch | 25 items and at most 64 KiB encoded |
 | Sampled versus unsampled | At most 5.0× |
 | Queue high-water growth | At most 64 MiB while accounting for 4,096 offered spans |
+| Default tail retention | 32 traces, 256 spans, 128 breadcrumbs, 512 KiB, 30 seconds |
 
 The queue scenario requires every offered item to be represented by current queue depth, successful
 delivery, or a drop; requires both accepted and dropped work under pressure; and enforces the
 configured 2,048-item delivery ceiling. Results are uploaded from CI as a deterministic JSON report.
+Tail fixtures independently enforce trace, span, breadcrumb, byte-estimate, and age limits and prove
+that evicted unpromoted entries never reach persistence or transport.
 
 ## Baseline and interpretation
 
@@ -45,6 +49,10 @@ The 2026-07-12 typed-catalog baseline measured 1.18 milliseconds per active cust
 microseconds per bodyless log, and 2.8 microseconds per delta counter add under concurrent local build
 load. Their checked ceilings include hosted-runner headroom and remain regression gates rather than
 application latency guarantees.
+
+The 2026-08-05 rc.3 probe measured a sanitized head-missed span retained by the bounded tail
+coordinator at 37.5 microseconds per operation against the 500-microsecond gate. Its queue and gateway
+fixtures retained the existing 64 MiB memory ceiling and 64 KiB encoded-request ceiling.
 
 These ceilings are regression gates, not latency, battery, memory, network, or delivery SLAs for an
 application. A 1.0 decision requires reviewed hosted-CI results plus real consumer-pilot measurements

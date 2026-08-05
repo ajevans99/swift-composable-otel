@@ -4,6 +4,21 @@ import OpenTelemetrySdk
 // MARK: - Span assertions
 
 extension InMemorySpanCollector {
+  /// Assert the complete captured span forest, including exact parent/child ordering.
+  public func assertSpanTrees(
+    exactly expected: [TelemetrySpanTreeExpectation],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let actual = spanTreeExpectations
+    guard actual != expected else { return }
+    fail(
+      "Expected span trees \(expected), found \(actual)",
+      file: file,
+      line: line
+    )
+  }
+
   /// Assert that at least one span with the given name exists.
   ///
   /// Optionally checks that the span carries the specified string attributes.
@@ -66,6 +81,20 @@ extension InMemorySpanCollector {
 // MARK: - Metric assertions
 
 extension InMemoryMetricReader {
+  /// Assert that registered host/session context is absent from every metric point.
+  public func assertHostContextExcluded(
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    if containsHostContext {
+      fail(
+        "Expected host/session context to be excluded from all metric points",
+        file: file,
+        line: line
+      )
+    }
+  }
+
   /// Assert that at least one metric with the given name has been recorded.
   public func assertMetricExists(
     named name: String,

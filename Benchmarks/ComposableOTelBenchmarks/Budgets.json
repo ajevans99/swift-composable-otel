@@ -13,6 +13,7 @@
     "reducerDisabled": 50000,
     "sampledSpan": 250000,
     "stateChange": 300000,
+    "tailRetainedSpan": 500000,
     "unsampledSpan": 100000
   },
   "gateway": {

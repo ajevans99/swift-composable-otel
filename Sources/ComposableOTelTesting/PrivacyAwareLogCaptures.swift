@@ -49,6 +49,7 @@ public struct CapturedTelemetryLog: Equatable, Sendable {
   public let severity: TelemetryLogSeverity
   public let publicValues: [CapturedTelemetryLogPublicValue]
   public let spanContext: SpanContext?
+  public let hostContext: CapturedTelemetryHostContext?
 
   public init(
     eventName: String,
@@ -59,6 +60,28 @@ public struct CapturedTelemetryLog: Equatable, Sendable {
     publicValues: [CapturedTelemetryLogPublicValue],
     spanContext: SpanContext?
   ) {
+    self.init(
+      eventName: eventName,
+      template: template,
+      templateID: templateID,
+      body: body,
+      severity: severity,
+      publicValues: publicValues,
+      spanContext: spanContext,
+      hostContext: nil
+    )
+  }
+
+  public init(
+    eventName: String,
+    template: String,
+    templateID: String,
+    body: String,
+    severity: TelemetryLogSeverity,
+    publicValues: [CapturedTelemetryLogPublicValue],
+    spanContext: SpanContext?,
+    hostContext: CapturedTelemetryHostContext?
+  ) {
     self.eventName = eventName
     self.template = template
     self.templateID = templateID
@@ -66,6 +89,7 @@ public struct CapturedTelemetryLog: Equatable, Sendable {
     self.severity = severity
     self.publicValues = publicValues
     self.spanContext = spanContext
+    self.hostContext = hostContext
   }
 }
 
@@ -105,7 +129,8 @@ extension InMemoryLogCollector {
         body: body,
         severity: severity,
         publicValues: publicValues,
-        spanContext: record.spanContext
+        spanContext: record.spanContext,
+        hostContext: capturedHostContext(record.attributes)
       )
     }
   }

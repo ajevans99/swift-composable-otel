@@ -9,7 +9,7 @@ import OpenTelemetryApi
   public struct InstrumentedReducer<Base: Reducer>: Reducer {
     @usableFromInline let base: Base
     @usableFromInline let feature: FeatureID
-    @usableFromInline let actionID: @Sendable (Base.Action) -> ActionID
+    @usableFromInline let actionID: @Sendable (Base.Action) -> ActionID?
     @usableFromInline let stateChangeToken: (@Sendable (Base.State) -> StateChangeToken)?
 
     @Dependency(\.composableOTel) var telemetry
@@ -23,7 +23,21 @@ import OpenTelemetryApi
     ) {
       self.base = base
       self.feature = feature
-      self.actionID = action
+      actionID = { action($0) }
+      self.stateChangeToken = stateChangeToken
+    }
+
+    /// Creates instrumentation that completely suppresses signals for actions mapped to `nil`.
+    @inlinable
+    public init(
+      base: Base,
+      feature: FeatureID,
+      selectiveAction: @escaping @Sendable (Base.Action) -> ActionID?,
+      stateChangeToken: (@Sendable (Base.State) -> StateChangeToken)? = nil
+    ) {
+      self.base = base
+      self.feature = feature
+      actionID = selectiveAction
       self.stateChangeToken = stateChangeToken
     }
 
@@ -31,8 +45,23 @@ import OpenTelemetryApi
       into state: inout Base.State,
       action: Base.Action
     ) -> Effect<Base.Action> {
+      guard let actionID = actionID(action) else {
+        return ReducerTraceContext.$instrumentationSuppressed.withValue(true) {
+          base._reduce(into: &state, action: action)
+        }
+      }
+      return ReducerTraceContext.$instrumentationSuppressed.withValue(false) {
+        reduceInstrumented(into: &state, action: action, actionID: actionID)
+      }
+    }
+
+    private func reduceInstrumented(
+      into state: inout Base.State,
+      action: Base.Action,
+      actionID: ActionID
+    ) -> Effect<Base.Action> {
       let feature = telemetry.policy.schema.bounded(feature)
-      let boundedAction = telemetry.policy.schema.bounded(actionID(action))
+      let boundedAction = telemetry.policy.schema.bounded(actionID)
       let attributes: [String: AttributeValue] = [
         TCAAttributes.featureName: .string(feature.rawValue),
         TCAAttributes.actionName: .string(boundedAction.rawValue),
@@ -48,6 +77,9 @@ import OpenTelemetryApi
           .spanBuilder(spanName: ComposableOTelSemantics.Spans.reducer)
           .setSpanKind(spanKind: .internal)
           .setAttributes(telemetry.policy.sanitizedSpanAttributes(attributes))
+        if let parentContext = ReducerTraceContext.spanContext {
+          spanBuilder.setParent(parentContext)
+        }
 
         let traced = spanBuilder.withActiveSpan { span in
           let effect = ReducerTraceContext.$spanContext.withValue(span.context) {
@@ -108,6 +140,24 @@ import OpenTelemetryApi
         base: self,
         feature: feature,
         action: action,
+        stateChangeToken: stateChangeToken
+      )
+    }
+
+    /// Wraps this reducer while omitting every telemetry signal for actions mapped to `nil`.
+    ///
+    /// This is intended for noisy or internal actions that should not aggregate to `.other`.
+    /// Suppression is captured by package effect helpers, so traced effects and dependency calls
+    /// originating from an omitted action also remain silent.
+    public func selectivelyInstrumented(
+      feature: FeatureID,
+      action: @escaping @Sendable (Action) -> ActionID?,
+      stateChangeToken: (@Sendable (State) -> StateChangeToken)? = nil
+    ) -> InstrumentedReducer<Self> {
+      InstrumentedReducer(
+        base: self,
+        feature: feature,
+        selectiveAction: action,
         stateChangeToken: stateChangeToken
       )
     }

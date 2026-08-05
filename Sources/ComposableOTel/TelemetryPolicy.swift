@@ -5,6 +5,10 @@ public struct TelemetryPolicy: Sendable {
   public let schema: TelemetrySchema
   public let catalog: TelemetryContractCatalog
   public let signals: TelemetrySignalConfiguration
+  /// Registered span/log-only host context, or `nil` when it is not configured.
+  public let hostContext: TelemetryHostContext?
+  /// Severity and deterministic sampling controls for logs.
+  public let logging: TelemetryLoggingConfiguration
   private let classifyError: @Sendable (any Error) -> TelemetryErrorMetadata
 
   public init(
@@ -16,6 +20,41 @@ public struct TelemetryPolicy: Sendable {
     self.schema = schema
     self.catalog = catalog
     self.signals = signals
+    hostContext = nil
+    logging = .init()
+    self.classifyError = classifyError
+  }
+
+  /// Creates a policy that registers a fixed host/session context for spans and logs only.
+  public init(
+    schema: TelemetrySchema = .denyAll,
+    catalog: TelemetryContractCatalog = .empty,
+    signals: TelemetrySignalConfiguration = .init(),
+    hostContext: TelemetryHostContext,
+    logging: TelemetryLoggingConfiguration = .init(),
+    classifyError: @escaping @Sendable (any Error) -> TelemetryErrorMetadata = { _ in .init() }
+  ) {
+    self.schema = schema
+    self.catalog = catalog
+    self.signals = signals
+    self.hostContext = hostContext
+    self.logging = logging
+    self.classifyError = classifyError
+  }
+
+  /// Creates a policy with explicit severity filtering and deterministic log sampling.
+  public init(
+    schema: TelemetrySchema = .denyAll,
+    catalog: TelemetryContractCatalog = .empty,
+    signals: TelemetrySignalConfiguration = .init(),
+    logging: TelemetryLoggingConfiguration,
+    classifyError: @escaping @Sendable (any Error) -> TelemetryErrorMetadata = { _ in .init() }
+  ) {
+    self.schema = schema
+    self.catalog = catalog
+    self.signals = signals
+    hostContext = nil
+    self.logging = logging
     self.classifyError = classifyError
   }
 
@@ -88,6 +127,28 @@ public struct TelemetryPolicy: Sendable {
   ) -> [String: AttributeValue] {
     let allowedKeys = ComposableOTelSemantics.Metrics.attributeKeys(for: instrumentName)
     return sanitizedAttributes(attributes.filter { allowedKeys.contains($0.key) })
+  }
+
+  package func addingValidatedHostContext(
+    to attributes: [String: AttributeValue]
+  ) -> [String: AttributeValue]? {
+    guard let hostContext else { return attributes }
+    guard let context = hostContext.sanitizedAttributes else { return nil }
+    return attributes.merging(context) { _, registered in registered }
+  }
+
+  package func removingHostContext(
+    from attributes: [String: AttributeValue]
+  ) -> [String: AttributeValue] {
+    attributes.filter { !TCAAttributes.hostContextKeys.contains($0.key) }
+  }
+
+  package func shouldRecordLog(
+    severity: TelemetryLogSeverity,
+    stableIdentifier: String
+  ) -> Bool {
+    signals.logsEnabled
+      && logging.shouldRecord(severity: severity, stableIdentifier: stableIdentifier)
   }
 
   package func sanitizedResourceAttributes(

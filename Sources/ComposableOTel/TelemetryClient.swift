@@ -190,6 +190,36 @@ package struct TelemetryOperationalEventRecorder: Sendable {
   }
 }
 
+/// The synchronous outcome of an explicit diagnostic trace-promotion request.
+public enum TelemetryTailPromotionResult: Equatable, Sendable {
+  /// A head-missed active trace was marked for export.
+  case promoted
+  /// The active trace was already retained by ordinary head sampling.
+  case alreadySampled
+  /// No valid active trace context was available.
+  case noActiveTrace
+  /// Tail promotion is not configured or instrumentation is suppressed.
+  case disabled
+  /// The trace had already exceeded a configured retention bound.
+  case dropped
+}
+
+package struct TelemetryTailPromotionRecorder: Sendable {
+  private let operation: @Sendable (SpanContext) -> TelemetryTailPromotionResult
+
+  package init(
+    _ operation: @escaping @Sendable (SpanContext) -> TelemetryTailPromotionResult
+  ) {
+    self.operation = operation
+  }
+
+  package func promote(_ context: SpanContext) -> TelemetryTailPromotionResult {
+    operation(context)
+  }
+
+  package static let disabled = Self { _ in .disabled }
+}
+
 /// The dependency-injected runtime for bounded ComposableOTel instrumentation.
 ///
 /// Use `TelemetryRuntime.client` for production or `TelemetryBootstrap.configure` for explicit
@@ -200,6 +230,7 @@ public struct TelemetryClient: Sendable {
   let logger: SendableLogger
   private let operationalEventRecorder: TelemetryOperationalEventRecorder
   private let privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder
+  private let tailPromotionRecorder: TelemetryTailPromotionRecorder
   package let contracts: TelemetryContractRuntime
 
   public let policy: TelemetryPolicy
@@ -211,7 +242,8 @@ public struct TelemetryClient: Sendable {
     policy: TelemetryPolicy,
     contracts: TelemetryContractRuntime,
     operationalEventRecorder: TelemetryOperationalEventRecorder? = nil,
-    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil
+    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil,
+    tailPromotionRecorder: TelemetryTailPromotionRecorder = .disabled
   ) {
     let logger = SendableLogger(underlying: logger)
     self.tracer = SendableTracer(underlying: tracer)
@@ -219,6 +251,7 @@ public struct TelemetryClient: Sendable {
     self.logger = logger
     self.operationalEventRecorder = operationalEventRecorder ?? .logger(logger)
     self.privacyAwareLogRecorder = privacyAwareLogRecorder ?? .logger(logger)
+    self.tailPromotionRecorder = tailPromotionRecorder
     self.policy = policy
     self.contracts = contracts
   }
@@ -255,7 +288,8 @@ public struct TelemetryClient: Sendable {
     contractCounters: [TelemetryContractIdentity: any LongCounter],
     contractProviderRetention: AnyObject? = nil,
     operationalEventRecorder: TelemetryOperationalEventRecorder? = nil,
-    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil
+    privacyAwareLogRecorder: TelemetryPrivacyAwareLogRecorder? = nil,
+    tailPromotionRecorder: TelemetryTailPromotionRecorder = .disabled
   ) -> TelemetryClient {
     TelemetryClient(
       tracer: tracer,
@@ -268,7 +302,8 @@ public struct TelemetryClient: Sendable {
         providerRetention: contractProviderRetention
       ),
       operationalEventRecorder: operationalEventRecorder,
-      privacyAwareLogRecorder: privacyAwareLogRecorder
+      privacyAwareLogRecorder: privacyAwareLogRecorder,
+      tailPromotionRecorder: tailPromotionRecorder
     )
   }
 
@@ -300,9 +335,15 @@ public struct TelemetryClient: Sendable {
     body: String,
     attributes: [String: AttributeValue]
   ) {
-    guard policy.signals.logsEnabled else { return }
+    guard
+      !ReducerTraceContext.instrumentationSuppressed,
+      let severity = TelemetryLogSeverity(otelSeverity: severity),
+      policy.shouldRecordLog(severity: severity, stableIdentifier: body)
+    else {
+      return
+    }
     logger.logRecordBuilder()
-      .setSeverity(severity)
+      .setSeverity(severity.otelSeverity)
       .setBody(policy.sanitizedLogBody(.string(body)))
       .setAttributes(policy.sanitizedLogAttributes(attributes))
       .emit()
@@ -317,7 +358,16 @@ public struct TelemetryClient: Sendable {
     _ severity: TelemetryLogSeverity,
     _ message: TelemetryLogMessage
   ) -> TelemetryLogRecordingResult {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return .disabled }
     guard policy.signals.logsEnabled else { return .disabled }
+    guard
+      policy.shouldRecordLog(
+        severity: severity,
+        stableIdentifier: message.templateID
+      )
+    else {
+      return .dropped
+    }
     guard
       let record = TelemetryLogWireFormat.makeRecord(
         from: message,
@@ -330,10 +380,30 @@ public struct TelemetryClient: Sendable {
     return privacyAwareLogRecorder.record(record)
   }
 
+  /// Explicitly promotes the current head-missed trace for bounded diagnostic export.
+  ///
+  /// The request carries no dynamic label or payload. A configured tail buffer exports only the
+  /// sanitized trace and its already-sanitized correlated breadcrumbs.
+  @discardableResult
+  public func triggerDiagnosticTracePromotion() -> TelemetryTailPromotionResult {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return .disabled }
+    guard policy.signals.tracesEnabled else { return .disabled }
+    guard
+      let context =
+        ReducerTraceContext.spanContext
+        ?? OpenTelemetry.instance.contextProvider.activeSpan?.context,
+      context.isValid
+    else {
+      return .noActiveTrace
+    }
+    return tailPromotionRecorder.promote(context)
+  }
+
   package func recordOperationalEvent(
     _ event: TelemetryOperationalEventRecord
   ) -> TelemetryOperationalEventRecordingResult {
-    operationalEventRecorder.record(event)
+    guard !ReducerTraceContext.instrumentationSuppressed else { return .disabled }
+    return operationalEventRecorder.record(event)
   }
 
   package func rejectOperationalEventContract() -> TelemetryOperationalEventRecordingResult {

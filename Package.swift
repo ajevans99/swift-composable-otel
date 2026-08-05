@@ -49,7 +49,7 @@ let package = Package(
         .product(
           name: "ComposableArchitecture",
           package: "swift-composable-architecture",
-          condition: .when(platforms: [.iOS, .macOS])
+          condition: .when(platforms: [.iOS, .macOS, .watchOS])
         ),
         .product(name: "Dependencies", package: "swift-dependencies"),
         .product(name: "DependenciesMacros", package: "swift-dependencies"),

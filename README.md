@@ -5,7 +5,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 
 > [!IMPORTANT]
 > The current tagged release is
-> [`0.4.0-rc.2`](https://github.com/ajevans99/swift-composable-otel/tree/0.4.0-rc.2).
+> [`0.4.0-rc.3`](https://github.com/ajevans99/swift-composable-otel/tree/0.4.0-rc.3).
 > This release remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -15,7 +15,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    exact: "0.4.0-rc.2"
+    exact: "0.4.0-rc.3"
   )
 ]
 ```
@@ -105,9 +105,48 @@ and public values to 8. An invalid message returns `.invalidMessage` without ent
 observer, queue, exporter, or persistence path. `.recorded` means synchronous acceptance by the
 configured pipeline, not successful remote delivery.
 
-Private-value local rendering is intentionally deferred. There is no debug switch that could
-accidentally route private values into observer stores, tail buffers, persistence, test collectors,
-or OTLP; local and remote paths receive the same redacted record.
+`TelemetryLoggingConfiguration` applies a minimum severity and deterministic sampling rate for each
+supported severity. Sampling uses stable template or event identity, never a private value. Errors can
+remain fully retained while reviewed informational templates are sampled.
+
+Private rendering remains redacted by default. DEBUG builds expose one explicit overload that
+evaluates private interpolation autoclosures only for an immediate renderer call:
+
+```swift
+#if DEBUG
+telemetry.log(
+  .info,
+  "Plan \(planID) finished",
+  debugConsole: .standardOutput
+)
+#endif
+```
+
+The ordinary retained record is still `Plan <private> finished`. The ephemeral body bypasses the SDK
+logger, observers, testing collectors, tail buffers, queues, persistence, and OTLP. The overload is
+absent from release builds.
+
+## Registered process-session context
+
+Hosts may register one deliberately small context at policy construction:
+
+```swift
+let policy = TelemetryPolicy(
+  schema: schema,
+  signals: signals,
+  hostContext: TelemetryHostContext(
+    processSessionID: .current,
+    platform: .current,
+    processKind: .application
+  )
+)
+```
+
+`TelemetryProcessSessionID.current` is an anonymous UUID generated once per process. It must not be
+derived from an account, device, installation, or other persistent identity. After privacy validation,
+the context is attached to spans and logs and follows reducer, effect, and dependency trace context
+across async boundaries. It is excluded by construction from every package metric and registered
+counter dimension.
 
 ## Typed exact-wire contracts
 
@@ -178,6 +217,23 @@ let store = Store(initialState: AppFeature.State()) {
   $0.composableOTel = telemetry
 }
 ```
+
+Noisy or internal reducer actions can be omitted instead of aggregating to `other`:
+
+```swift
+AppFeature()
+  .selectivelyInstrumented(feature: "library") { action in
+    switch action {
+    case .internalTimerTick:
+      nil
+    case .refreshButtonTapped:
+      "refresh"
+    }
+  }
+```
+
+A `nil` mapping suppresses reducer, effect, dependency, log, and metric instrumentation originating
+from that action. Existing `.instrumented(...)` behavior is unchanged.
 
 `TelemetryBootstrap` is development-only. It has no production environment and cannot select a
 remote or production stdout exporter.
@@ -316,6 +372,7 @@ Default limits are finite and configurable:
 | Request | 10-second timeout; gateway profiles can lower it |
 | Retry | 4 total attempts; 1-to-30-second exponential backoff; 20% symmetric jitter |
 | Metrics | 60-second periodic collection |
+| Optional tail retention | 32 traces, 256 spans, 128 breadcrumbs, 512 KiB, 30 seconds |
 | Flush | 10 seconds; 5 seconds when backgrounding |
 | Persistence | Optional; 5 MiB and 24-hour maximum |
 
@@ -342,6 +399,38 @@ counter catalog whose declared maximum-series sum exceeds that independent point
 The package's official OTLP exporters do not enable compression, so the encoded ceiling bounds the
 decoded protobuf body. A custom transport that adds compression remains responsible for enforcing
 its compressed-body ceiling as well.
+
+### Optional bounded tail promotion
+
+Head sampling remains the default. To recover reviewed diagnostic traces without retaining all
+telemetry, enable a bounded memory-only tail policy:
+
+```swift
+var configuration = TelemetryRuntime.Configuration(
+  serviceName: "example-app",
+  endpoints: endpoints,
+  samplingRatio: 0.1,
+  policy: policy
+)
+configuration.tailSampling = .enabled(
+  try TelemetryTailSamplingPolicy(
+    slowTraceThreshold: .seconds(2)
+  )
+)
+```
+
+When enabled, spans pass the package privacy boundary before a head-missed trace enters the tail
+buffer. The package promotes the complete current root trace and correlated sanitized breadcrumbs on
+an error span/log, the reviewed slow threshold, or
+`TelemetryClient.triggerDiagnosticTracePromotion()` inside an active trace. Ordinary head-sampled
+traces remain retained, so downstream sampling is additive rather than replaced.
+
+Retention is bounded independently by trace count, span count, breadcrumb count, deterministic encoded
+byte estimate, and age. Unpromoted entries remain memory-only and are discarded. If a correlated error
+log cannot retain or enqueue its trace, its trace/span correlation is removed before export; an
+exported error never points to a trace deliberately discarded by this runtime. Promotion does not
+persist data directly: promoted signals first enter the existing bounded queues and privacy-safe OTLP
+encoding path.
 
 `setExportCondition(_:)` accepts reachability or policy hints. `.unavailable` pauses new attempts;
 `.available` and `.constrained` permit them. Reachability never proves that DNS, TLS, authentication,

@@ -55,7 +55,8 @@ Every submission must identify immutable or access-controlled locations for:
 - Link runtime creation, dependency injection, active/background/shutdown/discard lifecycle wiring,
   debug/staging selection, kill-switch entry point, and bounded schema/configuration source.
 - Record enabled signals, trace sampling, log defaults, finite identifiers, error classifications,
-  cardinality estimates, persistence posture, queue limits, and accepted platform constraints.
+  cardinality estimates, anonymous process-session context, tail-promotion thresholds/limits,
+  persistence posture, queue limits, and accepted platform constraints.
 
 ### Gateway, authentication, and receipt
 
@@ -80,6 +81,9 @@ Every submission must identify immutable or access-controlled locations for:
   and corresponding metric/log evidence.
 - Include suspension and inherited child-task propagation. Record the documented detached-task
   boundary if the representative flow uses detached work.
+- Prove process-session context appears on the representative spans/logs and on no metric point.
+- Exercise a head-missed error, reviewed slow trace, and explicit diagnostic trigger; link the complete
+  promoted root tree and correlated sanitized breadcrumbs.
 
 ### Physical-device release evidence
 
@@ -93,6 +97,8 @@ Every submission must identify immutable or access-controlled locations for:
   not restart the runtime.
 - Record sentinel values used to prove that action, state, payload, URL, raw error, credential, and
   unapproved identifiers do not reach queues, disk, network, or the backend.
+- Prove unpromoted tail entries stay memory-only, respect count/byte/age limits, and are removed by
+  shutdown and terminal discard.
 - Report release-build CPU/action/effect latency, memory high-water, bytes and requests sent,
   persistence bytes, drop rate, and background behavior against reviewed performance, network, disk,
   and drop budgets. A specific dashboard or OS metrics framework is not required; the method must be

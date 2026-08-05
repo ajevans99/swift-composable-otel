@@ -69,15 +69,17 @@ reviewer:
    non-capture, persistence filtering, and unsafe custom SDK boundaries are approved.
 4. **Runtime guarantees and limits:** lifecycle, batching, retry, timeout, overflow, persistence,
    corruption, encoded request ceiling, `Retry-After`, auth refresh, flush/shutdown, terminal
-   consent-revocation discard, failure isolation, and best-effort delivery language match tested
-   behavior.
+   consent-revocation discard, tail-retention count/byte/age bounds, promotion completeness,
+   error-log correlation, observer independence, failure isolation, and best-effort delivery language
+   match tested behavior.
    An exact severity-text requirement remains a no-go until the upstream Swift log model can
    represent it without a raw encoding bypass.
 5. **Performance and memory:** hosted release benchmarks pass the reviewed budgets, and consumer
    pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
 6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
    in `SUPPORT.md` remains exact and reviewed.
-7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS.
+7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS,
+   including selective TCA reducer instrumentation.
    Platform-relevant contract/runtime tests and watchOS lifecycle limitations remain documented.
 8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
    release notes, and residual-risk ownership are approved.

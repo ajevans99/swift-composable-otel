@@ -217,6 +217,11 @@ for requiredPrivacyClaim in [
   "never persisted",
   "TelemetryClient.noop",
   "disableAndDiscardPending",
+  "`TelemetryProcessSessionID.current`",
+  "TelemetryTailSamplingPolicy",
+  ".selectivelyInstrumented",
+  "debugConsole:",
+  "excluded by construction from every package metric",
 ] where !readme.contains(requiredPrivacyClaim) {
   failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
@@ -269,6 +274,37 @@ for requiredCatalogBoundary in [
   "conditional combinations",
 ] where !privacy.contains(requiredCatalogBoundary) {
   failures.append("PRIVACY.md is missing typed catalog boundary: \(requiredCatalogBoundary)")
+}
+for requiredPhaseOneBoundary in [
+  "anonymous process-lifetime UUID",
+  "Metric sanitizers remove these keys",
+  "Unpromoted entries are memory-only",
+  "trace/span correlation is removed",
+  "absent from release builds",
+] where !privacy.contains(requiredPhaseOneBoundary) {
+  failures.append("PRIVACY.md is missing Phase 1 boundary: \(requiredPhaseOneBoundary)")
+}
+
+let migration = read("MIGRATION.md")
+for requiredMigration in [
+  "0.4.0-rc.3",
+  "TelemetryHostContext",
+  "TelemetryLoggingConfiguration",
+  "TelemetryTailSamplingPolicy",
+  ".selectivelyInstrumented",
+] where !migration.contains(requiredMigration) {
+  failures.append("MIGRATION.md is missing rc.3 guidance: \(requiredMigration)")
+}
+
+for requiredReleaseClaim in [
+  "0.4.0-rc.3",
+  "Cross-signal process-session context",
+  "Bounded tail promotion",
+  "DEBUG builds",
+  "No general histogram API was added",
+  "Do not tag 0.4.0 final",
+] where !releaseNotes.contains(requiredReleaseClaim) {
+  failures.append("RELEASE_NOTES is missing rc.3 claim: \(requiredReleaseClaim)")
 }
 
 let manifest = read("Package.swift")

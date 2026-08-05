@@ -45,3 +45,52 @@ Callers that need synchronous acceptance information should handle
 `TelemetryLogRecordingResult`. `.invalidMessage` indicates a reviewed template/body,
 interpolation-count, or public-field bound was exceeded. `.recorded` does not guarantee remote
 delivery.
+
+## Adopting the remaining Phase 1 APIs in 0.4.0-rc.3
+
+The rc.3 APIs are additive. Existing `.instrumented`, `.tracedRun`, `.tracedLongLivedRun`,
+`traceStart`, `tracedCall`, navigation, typed contracts, counters, and rc.2 interpolated logs remain
+source-compatible.
+
+Register anonymous process-session context and log controls when constructing the policy:
+
+```swift
+let policy = TelemetryPolicy(
+  schema: schema,
+  catalog: catalog,
+  signals: signals,
+  hostContext: TelemetryHostContext(
+    processSessionID: .current,
+    platform: .current,
+    processKind: .application
+  ),
+  logging: TelemetryLoggingConfiguration(
+    minimumSeverity: .info,
+    infoSampling: TelemetryLogSamplingRate(0.25)!,
+    errorSampling: .always
+  ),
+  classifyError: classifyError
+)
+```
+
+The process-session UUID is new for each process and is span/log-only. Do not replace it with an
+account, device, installation, or persisted identifier. No metric query or dashboard migration is
+needed because the context cannot become a metric dimension.
+
+Tail promotion is opt-in. Build the existing runtime configuration, then set its additive property:
+
+```swift
+configuration.tailSampling = .enabled(
+  try TelemetryTailSamplingPolicy(
+    slowTraceThreshold: .seconds(2)
+  )
+)
+```
+
+Review the threshold and count/byte/age limits for the host. Unpromoted data is memory-only. Explicit
+promotion must occur inside an active trace and returns `TelemetryTailPromotionResult`.
+
+Use `.selectivelyInstrumented(feature:action:stateChangeToken:)` only when `nil` must mean no
+telemetry. Keep `.instrumented(...)` when every action belongs to the finite schema. DEBUG-only
+private console rendering requires the `debugConsole:` overload at each call site; no global switch
+changes the default redacted behavior.

@@ -1,5 +1,6 @@
 import ComposableOTel
 import ComposableOTelExporters
+import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
@@ -14,6 +15,7 @@ public struct TestCollectors: @unchecked Sendable {
   private let tracerProvider: TracerProviderSdk
   private let meterProvider: MeterProviderSdk
   private let contractMeterProvider: MeterProviderSdk?
+  private let tailSampling: RuntimeTailSamplingCoordinator?
 
   init(
     spans: InMemorySpanCollector,
@@ -22,7 +24,8 @@ public struct TestCollectors: @unchecked Sendable {
     contractMetrics: InMemoryMetricReader?,
     tracerProvider: TracerProviderSdk,
     meterProvider: MeterProviderSdk,
-    contractMeterProvider: MeterProviderSdk?
+    contractMeterProvider: MeterProviderSdk?,
+    tailSampling: RuntimeTailSamplingCoordinator?
   ) {
     self.spans = spans
     self.logs = logs
@@ -31,14 +34,37 @@ public struct TestCollectors: @unchecked Sendable {
     self.tracerProvider = tracerProvider
     self.meterProvider = meterProvider
     self.contractMeterProvider = contractMeterProvider
+    self.tailSampling = tailSampling
   }
 
   /// Flushes pending spans and metrics before assertions.
   public func forceFlush() {
+    tailSampling?.forceFlush()
     tracerProvider.forceFlush()
     _ = meterProvider.forceFlush()
     _ = contractMeterProvider?.forceFlush()
   }
+
+  /// Current sanitized, memory-only tail-retention usage.
+  public var tailSamplingState: TestTailSamplingState? {
+    tailSampling.map {
+      let snapshot = $0.snapshot
+      return TestTailSamplingState(
+        retainedTraceCount: snapshot.retainedTraceCount,
+        retainedSpanCount: snapshot.retainedSpanCount,
+        retainedBreadcrumbCount: snapshot.retainedBreadcrumbCount,
+        retainedByteEstimate: snapshot.retainedByteEstimate
+      )
+    }
+  }
+}
+
+/// Bounded tail-retention usage exposed for deterministic tests.
+public struct TestTailSamplingState: Equatable, Sendable {
+  public let retainedTraceCount: Int
+  public let retainedSpanCount: Int
+  public let retainedBreadcrumbCount: Int
+  public let retainedByteEstimate: Int
 }
 
 extension TelemetryClient {
@@ -49,6 +75,28 @@ extension TelemetryClient {
     resourceMode: TelemetryResourceMode = .native(environment: .test),
     policy: TelemetryPolicy = .init()
   ) throws -> (client: TelemetryClient, collectors: TestCollectors) {
+    try test(
+      samplingRatio: 1,
+      tailSampling: .disabled,
+      metricReader: metricReader,
+      contractMetricReader: contractMetricReader,
+      resourceMode: resourceMode,
+      policy: policy
+    )
+  }
+
+  /// Creates an isolated client with production-equivalent head and bounded tail sampling.
+  public static func test(
+    samplingRatio: Double,
+    tailSampling: TelemetryTailSamplingConfiguration,
+    metricReader: InMemoryMetricReader? = nil,
+    contractMetricReader: InMemoryMetricReader? = nil,
+    resourceMode: TelemetryResourceMode = .native(environment: .test),
+    policy: TelemetryPolicy = .init()
+  ) throws -> (client: TelemetryClient, collectors: TestCollectors) {
+    guard samplingRatio.isFinite, (0...1).contains(samplingRatio) else {
+      throw TelemetryRuntimeConfigurationError.invalidSamplingRatio
+    }
     let resource = try TelemetryBootstrap.makeResource(
       serviceName: "test-suite",
       serviceVersion: nil,
@@ -57,12 +105,24 @@ extension TelemetryClient {
     )
 
     let spanCollector = InMemorySpanCollector()
-    let spanExporter = PrivacyPreservingSpanExporter(
-      exporter: spanCollector,
-      policy: policy
-    )
-    let spanProcessor = SimpleSpanProcessor(spanExporter: spanExporter)
-    let tracerProvider = TracerProviderBuilder()
+    let logCollector = InMemoryLogCollector()
+    let boundary = TelemetryPrivacyBoundary(policy: policy)
+    let tailSampling = tailSampling.policy.map { tailPolicy in
+      RuntimeTailSamplingCoordinator(
+        policy: tailPolicy,
+        samplingRatio: samplingRatio,
+        clock: .live,
+        emitSpans: { spans in
+          spanCollector.export(spans: spans, explicitTimeout: nil) == .success
+            ? .accepted : .dropped
+        },
+        emitLog: { record in
+          logCollector.export(logRecords: [record], explicitTimeout: nil) == .success
+            ? .accepted : .dropped
+        }
+      )
+    }
+    let tracerBuilder = TracerProviderBuilder()
       .with(resource: resource)
       .with(
         spanLimits: SpanLimits()
@@ -75,8 +135,34 @@ extension TelemetryClient {
           .settingAttributePerEventCountLimit(8)
           .settingAttributePerLinkCountLimit(0)
       )
-      .add(spanProcessor: spanProcessor)
-      .build()
+    if let tailSampling {
+      _ =
+        tracerBuilder
+        .with(sampler: RuntimeTailRecordingSampler())
+        .add(
+          spanProcessor: TestTailSpanProcessor(
+            boundary: boundary,
+            tailSampling: tailSampling
+          )
+        )
+    } else {
+      _ =
+        tracerBuilder
+        .with(
+          sampler: Samplers.parentBased(
+            root: Samplers.traceIdRatio(ratio: samplingRatio)
+          )
+        )
+        .add(
+          spanProcessor: SimpleSpanProcessor(
+            spanExporter: PrivacyPreservingSpanExporter(
+              exporter: spanCollector,
+              policy: policy
+            )
+          )
+        )
+    }
+    let tracerProvider = tracerBuilder.build()
     let tracer = tracerProvider.get(
       instrumentationName: ComposableOTelMetadata.instrumentationName,
       instrumentationVersion: ComposableOTelMetadata.version
@@ -121,12 +207,11 @@ extension TelemetryClient {
       )
     }
 
-    let logCollector = InMemoryLogCollector()
-    let logExporter = PrivacyPreservingLogRecordExporter(
-      exporter: logCollector,
-      policy: policy
+    let logProcessor = TestPrivacyLogProcessor(
+      boundary: boundary,
+      collector: logCollector,
+      tailSampling: tailSampling
     )
-    let logProcessor = SimpleLogRecordProcessor(logRecordExporter: logExporter)
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
       logRecordProcessors: [logProcessor]
@@ -143,7 +228,13 @@ extension TelemetryClient {
       logger: logger,
       policy: policy,
       contractCounters: contractCounters,
-      contractProviderRetention: contractMeterProvider
+      contractProviderRetention: contractMeterProvider,
+      tailPromotionRecorder: tailSampling.map {
+        let tailSampling = $0
+        return TelemetryTailPromotionRecorder { context in
+          tailSampling.promote(context: context)
+        }
+      } ?? .disabled
     )
     return (
       client,
@@ -154,8 +245,76 @@ extension TelemetryClient {
         contractMetrics: resolvedContractReader,
         tracerProvider: tracerProvider,
         meterProvider: meterProvider,
-        contractMeterProvider: contractMeterProvider
+        contractMeterProvider: contractMeterProvider,
+        tailSampling: tailSampling
       )
     )
+  }
+}
+
+private final class TestTailSpanProcessor: SpanProcessor, @unchecked Sendable {
+  let isStartRequired = false
+  let isEndRequired = true
+  private let boundary: TelemetryPrivacyBoundary
+  private let tailSampling: RuntimeTailSamplingCoordinator
+
+  init(
+    boundary: TelemetryPrivacyBoundary,
+    tailSampling: RuntimeTailSamplingCoordinator
+  ) {
+    self.boundary = boundary
+    self.tailSampling = tailSampling
+  }
+
+  func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
+
+  func onEnd(span: any ReadableSpan) {
+    guard let span = boundary.sanitizedSpans([span.toSpanData()]).first else { return }
+    tailSampling.record(span: span)
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) {}
+
+  func forceFlush(timeout: TimeInterval?) {
+    tailSampling.forceFlush()
+  }
+}
+
+private final class TestPrivacyLogProcessor: LogRecordProcessor, @unchecked Sendable {
+  private let boundary: TelemetryPrivacyBoundary
+  private let collector: InMemoryLogCollector
+  private let tailSampling: RuntimeTailSamplingCoordinator?
+
+  init(
+    boundary: TelemetryPrivacyBoundary,
+    collector: InMemoryLogCollector,
+    tailSampling: RuntimeTailSamplingCoordinator?
+  ) {
+    self.boundary = boundary
+    self.collector = collector
+    self.tailSampling = tailSampling
+  }
+
+  func onEmit(logRecord: ReadableLogRecord) {
+    guard let record = boundary.sanitizedLogs([logRecord]).first else { return }
+    if let tailSampling {
+      _ = tailSampling.record(log: record)
+    } else {
+      let record =
+        record.spanContext?.traceFlags.sampled == false
+        ? runtimeStrippingCorrelation(from: record)
+        : record
+      _ = collector.export(logRecords: [record], explicitTimeout: nil)
+    }
+  }
+
+  func forceFlush(explicitTimeout: TimeInterval?) -> ExportResult {
+    tailSampling?.forceFlush()
+    return .success
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) -> ExportResult {
+    tailSampling?.shutdown(exportUncorrelatedErrors: false)
+    return .success
   }
 }

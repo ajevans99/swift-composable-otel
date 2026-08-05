@@ -22,7 +22,9 @@ Package-owned instrumentation:
 - attaches an anonymous process-session context only to sanitized spans and logs;
 - excludes process-session context from native and registered metric dimensions;
 - retains only sanitized, bounded, memory-only tail entries before promotion;
-- sanitizes resources, spans, logs, metrics, events, links, and exemplars before package queues;
+- sanitizes resources, spans, logs, metrics, events, links, and exemplars before package queues,
+  retaining at most one or two valid trace/span contexts per metric point only when explicitly enabled
+  and always removing exemplar attributes;
 - persists only sanitized OTLP bodies and a small content-header allowlist; and
 - never persists authorization, cookies, or arbitrary request headers.
 

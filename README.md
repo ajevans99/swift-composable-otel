@@ -4,7 +4,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture).
 
 > [!IMPORTANT]
-> This revision prepares `0.4.0-rc.3`; publish that immutable tag only after its release pull request
+> This revision prepares `0.4.0-rc.4`; publish that immutable tag only after its release pull request
 > merges and hosted CI passes on the merge commit. The candidate remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -14,7 +14,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    exact: "0.4.0-rc.3"
+    exact: "0.4.0-rc.4"
   )
 ]
 ```
@@ -577,8 +577,10 @@ Package metrics use explicit descriptions, units, SDK views, and export-time dim
 | Dependency call/error/duration metrics | `{call}`, `ms` | dependency, operation | 8,385 each |
 | `tca.navigation.transitions` | `{transition}` | operation, route | 260 |
 
-The maxima include the `other` aggregation value. Unknown instruments are dropped. Metric
-exemplars are removed by the package exporter boundary so filtered attributes cannot reappear.
+The maxima include the `other` aggregation value. Unknown instruments are dropped. Metric exemplars
+are disabled by default. The opt-in `TelemetryMetricExemplarPolicy` retains at most one or two
+exemplars per data point, requires valid SDK trace and span context, and removes every exemplar
+attribute. It does not change metric attributes, host-context exclusion, or series cardinality.
 
 See the DocC **Semantic Conventions and Stability** article for the complete field policy.
 
@@ -589,7 +591,8 @@ See the DocC **Semantic Conventions and Stability** article for the complete fie
 - span names, attributes, events, links, status, and resources are sanitized;
 - log bodies, attributes, event names, and resources are rebuilt from allowlists;
 - metric views filter dimensions and define histograms; the exporter drops unknown instruments,
-  sanitizes dimensions again, removes exemplars, and refuses unsafe resources;
+  sanitizes dimensions again, applies the default-off bounded exemplar policy, and refuses unsafe
+  resources;
 - instrumentation scope name/version are fixed; spans and metrics from unsafe scopes are dropped,
   and log scope metadata is rebuilt;
 - resource fields are limited to bounded service name/version, fixed deployment environment,
@@ -677,7 +680,7 @@ See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.4.0-rc.3 package quality layer includes:
+The 0.4.0-rc.4 package quality layer includes:
 
 - externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
@@ -692,7 +695,7 @@ The 0.4.0-rc.3 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.3 and required
+consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.4 and required
 no-go items for 1.0.
 
 ## License

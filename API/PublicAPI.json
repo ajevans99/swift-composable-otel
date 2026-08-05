@@ -182,6 +182,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV14serviceVersion0aB00D10IdentifierVyAG07ServicehI4KindOGSgvp"
   },
   {
+    "declaration" : "var metricExemplars: TelemetryMetricExemplarPolicy",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntime.Configuration.metricExemplars",
+    "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV15metricExemplarsAA0D20MetricExemplarPolicyOvp"
+  },
+  {
     "declaration" : "var endpointSecurity: TelemetryEndpointSecurityPolicy",
     "kind" : "swift.property",
     "module" : "ComposableOTelExporters",
@@ -313,6 +320,20 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryBootstrap.configure(serviceName:serviceVersion:samplingRatio:resourceMode:policy:)",
     "preciseIdentifier" : "s:23ComposableOTelExporters18TelemetryBootstrapO9configure11serviceName0G7Version13samplingRatio12resourceMode6policy0aB00D6ClientVAJ0D10IdentifierVyAJ07ServiceP4KindOG_ANyAJ0qipR0OGSgSdSgAJ0d8ResourceM0OAJ0D6PolicyVtKFZ"
+  },
+  {
+    "declaration" : "@discardableResult static func configure(serviceName: ServiceID, serviceVersion: ServiceVersionID? = nil, samplingRatio: Double? = nil, resourceMode: TelemetryResourceMode = .native(environment: .development), policy: TelemetryPolicy = .init(), metricExemplars: TelemetryMetricExemplarPolicy, observerExporters: TelemetryObserverExporters) throws -> TelemetryClient",
+    "kind" : "swift.type.method",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryBootstrap.configure(serviceName:serviceVersion:samplingRatio:resourceMode:policy:metricExemplars:observerExporters:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters18TelemetryBootstrapO9configure11serviceName0G7Version13samplingRatio12resourceMode6policy15metricExemplars08observerC00aB00D6ClientVAL0D10IdentifierVyAL07ServiceS4KindOG_APyAL0tisU0OGSgSdSgAL0d8ResourceM0OAL0D6PolicyVAA0d14MetricExemplarW0OAA0d8ObserverC0VtKFZ"
+  },
+  {
+    "declaration" : "@discardableResult static func configure(serviceName: ServiceID, serviceVersion: ServiceVersionID? = nil, samplingRatio: Double? = nil, resourceMode: TelemetryResourceMode = .native(environment: .development), policy: TelemetryPolicy = .init(), metricExemplars: TelemetryMetricExemplarPolicy) throws -> TelemetryClient",
+    "kind" : "swift.type.method",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryBootstrap.configure(serviceName:serviceVersion:samplingRatio:resourceMode:policy:metricExemplars:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters18TelemetryBootstrapO9configure11serviceName0G7Version13samplingRatio12resourceMode6policy15metricExemplars0aB00D6ClientVAK0D10IdentifierVyAK07ServiceR4KindOG_AOyAK0sirT0OGSgSdSgAK0d8ResourceM0OAK0D6PolicyVAA0d14MetricExemplarV0OtKFZ"
   },
   {
     "declaration" : "final class ConsoleSpanExporter",
@@ -796,6 +817,55 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryTailSamplingPolicy.maximumRetainedBreadcrumbCount",
     "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV30maximumRetainedBreadcrumbCountSivp"
+  },
+  {
+    "declaration" : "enum TelemetryMetricExemplarPolicy",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO"
+  },
+  {
+    "declaration" : "case traceContext(maximumPerDataPoint: MaximumPerDataPoint)",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.traceContext(maximumPerDataPoint:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO12traceContextyA2C19MaximumPerDataPointO_tcACmF"
+  },
+  {
+    "declaration" : "enum MaximumPerDataPoint",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.MaximumPerDataPoint",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO19MaximumPerDataPointO"
+  },
+  {
+    "declaration" : "case one",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.MaximumPerDataPoint.one",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO19MaximumPerDataPointO3oneyA2EmF"
+  },
+  {
+    "declaration" : "case two",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.MaximumPerDataPoint.two",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO19MaximumPerDataPointO3twoyA2EmF"
+  },
+  {
+    "declaration" : "init?(rawValue: Int)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.MaximumPerDataPoint.init(rawValue:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO19MaximumPerDataPointO8rawValueAESgSi_tcfc"
+  },
+  {
+    "declaration" : "case disabled",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryMetricExemplarPolicy.disabled",
+    "preciseIdentifier" : "s:23ComposableOTelExporters29TelemetryMetricExemplarPolicyO8disabledyA2CmF"
   },
   {
     "declaration" : "struct TelemetryRequestAuthenticator",

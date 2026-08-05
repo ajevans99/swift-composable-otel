@@ -1,6 +1,7 @@
-# swift-composable-otel 0.4.0-rc.1
+# swift-composable-otel 0.4.0-rc.2
 
-0.4.0-rc.1 is a source-compatible pre-1.0 prerelease that adds privacy-aware interpolated
+0.4.0-rc.2 supersedes 0.4.0-rc.1, whose immutable tag predates the reviewed release-preparation
+metadata. It is a source-compatible pre-1.0 prerelease that adds privacy-aware interpolated
 application logs. It is intended for Momentum integration testing before the final 0.4.0 release.
 
 ## Privacy-aware interpolated logs
@@ -43,7 +44,7 @@ Because this is a prerelease, consumers should pin it exactly:
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  exact: "0.4.0-rc.1"
+  exact: "0.4.0-rc.2"
 )
 ```
 

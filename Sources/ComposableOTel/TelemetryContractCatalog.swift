@@ -1012,6 +1012,7 @@ public struct TelemetryContractCatalog: Sendable {
         ComposableOTelSemantics.Events.effectCancelled,
         ComposableOTelSemantics.Events.exception,
         ComposableOTelSemantics.Events.navigationChanged,
+        ComposableOTelSemantics.Events.applicationLog,
       ])
       .union(ComposableOTelSemantics.Metrics.all)
     guard

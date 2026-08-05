@@ -13,6 +13,10 @@ views, own local providers, and never replace process-global OpenTelemetry provi
 ``TestCollectors`` exposes spans, logs, and the optional metric reader. Call
 ``TestCollectors/forceFlush()`` before assertions.
 
+``InMemoryLogCollector/privacyAwareLogs`` decodes interpolated logs into
+``CapturedTelemetryLog`` values with exact template, identity, redacted body, severity, ordered typed
+public values, and trace correlation.
+
 For registered contracts, use decoded span/log/counter/resource helpers and
 ``InMemoryEncodedRequestCollector``. Captures preserve scalar wire types and contract version without
 exposing production credentials or performing network I/O.
@@ -34,6 +38,9 @@ exposing production credentials or performing network I/O.
 - ``DecodedContractLog``
 - ``DecodedContractCounter``
 - ``DecodedContractResource``
+- ``CapturedTelemetryLog``
+- ``CapturedTelemetryLogPublicValue``
+- ``CapturedTelemetryLogValueKind``
 
 ### Assertions
 

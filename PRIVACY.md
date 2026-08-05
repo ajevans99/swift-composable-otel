@@ -14,6 +14,9 @@ Package-owned instrumentation:
 - never reflects or describes reducer actions or state;
 - compares optional state-change tokens only in memory;
 - exports bounded error classification rather than descriptions, payloads, URLs, or stack traces;
+- replaces unannotated log interpolations with a fixed token during message construction;
+- permits public log interpolation only for package-approved finite or explicitly bounded values;
+- preserves a bounded canonical log template and identity separately from rendered values;
 - sanitizes resources, spans, logs, metrics, events, links, and exemplars before package queues;
 - persists only sanitized OTLP bodies and a small content-header allowlist; and
 - never persists authorization, cookies, or arbitrary request headers.
@@ -30,6 +33,12 @@ it never silently mixes native metadata into the strict contract.
 Action and navigation logs and contract-bound operational events are disabled by default. Their
 controls are independent, so enabling registered operational events does not enable package-owned
 logs. Trace sampling does not disable metrics, logs, or operational events.
+
+Privacy-aware interpolated logs use the `logsEnabled` control. Their `app.log` records are rebuilt
+from a canonical template and typed public fields at the privacy boundary. Private values are already
+gone before the OpenTelemetry logger is called. Production runtime observers, bounded queues, OTLP
+encoding, and persistence receive only that rebuilt record. The package does not currently expose a
+local private-rendering mode; it is deferred rather than sharing a weaker record with retained paths.
 
 ## Host responsibilities
 

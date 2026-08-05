@@ -51,7 +51,24 @@ let errors = collectors.logs.records(withSeverity: .error)
 let failures = collectors.logs.records(containing: "Dependency call failed")
 ```
 
-Log bodies remain fixed. Assert bounded attributes rather than payload text.
+Package instrumentation log bodies remain fixed. Privacy-aware interpolated logs can be asserted
+without reading raw attribute dictionaries:
+
+```swift
+telemetry.log(
+  .info,
+  "Plan \(privatePlanID) finished with \(TelemetryOutcome.success, privacy: .public)"
+)
+
+let log = try #require(collectors.logs.privacyAwareLogs.first)
+#expect(log.template == "Plan <private> finished with <public:0:outcome>")
+#expect(log.body == "Plan <private> finished with success")
+#expect(log.publicValues.first?.value == .string("success"))
+#expect(log.spanContext == expectedSpanContext)
+```
+
+The capture models remote output after the privacy boundary. Private values are never available from
+the collector.
 
 ## Inspect metrics
 

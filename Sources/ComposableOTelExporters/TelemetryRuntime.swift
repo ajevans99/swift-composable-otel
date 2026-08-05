@@ -429,6 +429,14 @@ public final class TelemetryRuntime: @unchecked Sendable {
         resource: resource,
         now: dependencies.clock.now,
         observerPipeline: observerPipeline
+      ),
+      privacyAwareLogRecorder: makeRuntimePrivacyAwareLogRecorder(
+        queue: logQueue,
+        boundary: boundary,
+        diagnostics: diagnosticsState,
+        resource: resource,
+        now: dependencies.clock.now,
+        observerPipeline: observerPipeline
       )
     )
 

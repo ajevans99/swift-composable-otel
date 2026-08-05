@@ -21,3 +21,27 @@ Before migrating production composition, review [PRIVACY.md](PRIVACY.md), [SUPPO
 and the mobile runtime operational runbook. Production delivery remains bounded and best-effort; the
 runtime does not guarantee export before suspension, termination, force-quit, crash, or device
 shutdown.
+
+## Adopting privacy-aware logs after 0.3.3
+
+The interpolated logging API is additive. Existing fixed package logs, registered log contracts, and
+operational events remain source-compatible.
+
+Replace ad hoc prose logging at application call sites with:
+
+```swift
+telemetry.log(
+  .info,
+  "Plan \(planID) save finished with \(TelemetryOutcome.success, privacy: .public)"
+)
+```
+
+Unannotated values are private and render as `<private>`. A previous arbitrary string field must not
+be mechanically changed to `privacy: .public`; strings, errors, URLs, custom descriptions, and
+consumer-defined identifier kinds intentionally do not compile in that position. Choose a concrete
+schema-bounded package identifier, finite enum, or explicit bounded log wrapper instead.
+
+Callers that need synchronous acceptance information should handle
+`TelemetryLogRecordingResult`. `.invalidMessage` indicates a reviewed template/body,
+interpolation-count, or public-field bound was exceeded. `.recorded` does not guarantee remote
+delivery.

@@ -15,6 +15,7 @@ public struct DecodedContractSpan: Equatable, Sendable {
   public let name: String
   public let contractVersion: Int
   public let fields: [String: TelemetryDecodedScalar]
+  public let hostContext: CapturedTelemetryHostContext?
 }
 
 public struct DecodedContractLog: Equatable, Sendable {
@@ -23,12 +24,14 @@ public struct DecodedContractLog: Equatable, Sendable {
   public let body: TelemetryDecodedScalar?
   public let contractVersion: Int
   public let fields: [String: TelemetryDecodedScalar]
+  public let hostContext: CapturedTelemetryHostContext?
 }
 
 public struct DecodedOperationalEvent: Equatable, Sendable {
   public let eventName: String
   public let contractVersion: Int
   public let fields: [String: TelemetryDecodedScalar]
+  public let hostContext: CapturedTelemetryHostContext?
 }
 
 public enum TelemetryDecodedTemporality: Equatable, Sendable {
@@ -106,7 +109,8 @@ extension TestCollectors {
         DecodedContractSpan(
           name: span.name,
           contractVersion: $0.version,
-          fields: $0.fields
+          fields: $0.fields,
+          hostContext: $0.hostContext
         )
       }
     }
@@ -127,7 +131,8 @@ extension TestCollectors {
         severity: severity,
         body: record.body.flatMap(decodeScalar),
         contractVersion: decoded.version,
-        fields: decoded.fields
+        fields: decoded.fields,
+        hostContext: decoded.hostContext
       )
     }
   }
@@ -148,7 +153,8 @@ extension TestCollectors {
       return DecodedOperationalEvent(
         eventName: definition.eventName.rawValue,
         contractVersion: decoded.version,
-        fields: decoded.fields
+        fields: decoded.fields,
+        hostContext: decoded.hostContext
       )
     }
   }
@@ -213,21 +219,30 @@ package func decodeContractResourceAttributes(
 ) -> (version: Int, fields: [String: TelemetryDecodedScalar])? {
   let expectedKeys = expectedFieldKeys.union([TelemetryContractCatalog.contractVersionKey])
   guard Set(attributes.keys) == expectedKeys else { return nil }
-  return decodeRecord(attributes)
+  return decodeRecord(attributes).map { ($0.version, $0.fields) }
 }
 
 private func decodeRecord(
   _ attributes: [String: AttributeValue]
-) -> (version: Int, fields: [String: TelemetryDecodedScalar])? {
+) -> (
+  version: Int,
+  fields: [String: TelemetryDecodedScalar],
+  hostContext: CapturedTelemetryHostContext?
+)? {
   guard case .int(let version) = attributes[TelemetryContractCatalog.contractVersionKey] else {
     return nil
   }
   var fields: [String: TelemetryDecodedScalar] = [:]
-  for (key, value) in attributes where key != TelemetryContractCatalog.contractVersionKey {
+  for (key, value) in attributes
+  where key != TelemetryContractCatalog.contractVersionKey
+    && key != TCAAttributes.processSessionID
+    && key != TCAAttributes.hostPlatform
+    && key != TCAAttributes.hostProcessKind
+  {
     guard let value = decodeScalar(value) else { return nil }
     fields[key] = value
   }
-  return (version, fields)
+  return (version, fields, capturedHostContext(attributes))
 }
 
 private func decodeScalar(_ value: AttributeValue) -> TelemetryDecodedScalar? {

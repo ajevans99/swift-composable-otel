@@ -38,6 +38,8 @@ sanitized by the same policy. Otherwise they are outside the package trust bound
 - ``TelemetryBatchConfiguration``
 - ``TelemetryDeliveryConfiguration``
 - ``TelemetryPersistenceConfiguration``
+- ``TelemetryTailSamplingConfiguration``
+- ``TelemetryTailSamplingPolicy``
 
 ### Lifecycle and diagnostics
 

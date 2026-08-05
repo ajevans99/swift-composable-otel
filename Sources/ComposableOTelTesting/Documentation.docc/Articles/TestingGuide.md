@@ -36,6 +36,8 @@ let effectSpans = collectors.spans.spans(named: "tca.effect")
 ```
 
 Span names are stable; distinguish operations with bounded attributes.
+Use `collectors.spans.spanTrees`, `spanTreeExpectations`, or `assertSpanTrees(exactly:)` for exact
+root/child structure without comparing runtime-generated IDs or durations.
 
 ## Inspect logs
 
@@ -65,6 +67,7 @@ let log = try #require(collectors.logs.privacyAwareLogs.first)
 #expect(log.body == "Plan <private> finished with success")
 #expect(log.publicValues.first?.value == .string("success"))
 #expect(log.spanContext == expectedSpanContext)
+#expect(log.hostContext == expectedHostContext)
 ```
 
 The capture models remote output after the privacy boundary. Private values are never available from
@@ -79,6 +82,26 @@ let actions = reader.metrics(named: "tca.actions.dispatched")
 
 Collected metrics include package descriptions, units, views, bounded dimensions, and explicit
 duration buckets.
+Call `reader.assertHostContextExcluded()` or inspect `reader.containsHostContext` to prove registered
+process-session context never becomes a metric label.
+
+## Exercise head and tail sampling
+
+```swift
+let (telemetry, collectors) = try TelemetryClient.test(
+  samplingRatio: 0,
+  tailSampling: .enabled(
+    try TelemetryTailSamplingPolicy(
+      slowTraceThreshold: .seconds(2)
+    )
+  ),
+  policy: policy
+)
+```
+
+Assert normal head decisions, error/slow/explicit promotion, trace/log correlation, and
+`collectors.tailSamplingState`. Unpromoted state exposes only bounded counts and a byte estimate, not
+retained payloads.
 
 ## Inspect registered contracts
 

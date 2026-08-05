@@ -48,3 +48,4 @@ xcrun swift Scripts/check-api.swift \
 
 bash Scripts/check-unsafe-api.sh
 bash Scripts/check-privacy-aware-log-api.sh
+bash Scripts/check-release-debug-api.sh

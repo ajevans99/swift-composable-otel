@@ -1,11 +1,11 @@
 import Foundation
 
-struct TelemetryRuntimeClock: Sendable {
-  var now: @Sendable () -> Date
-  var sleep: @Sendable (Duration) async throws -> Void
-  var randomUnit: @Sendable () -> Double
+package struct TelemetryRuntimeClock: Sendable {
+  package var now: @Sendable () -> Date
+  package var sleep: @Sendable (Duration) async throws -> Void
+  package var randomUnit: @Sendable () -> Double
 
-  static let live = Self(
+  package static let live = Self(
     now: Date.init,
     sleep: { duration in
       try await Task.sleep(for: duration)

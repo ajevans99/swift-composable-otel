@@ -121,150 +121,170 @@ public struct TelemetryLogMessage:
     }
 
     public mutating func appendLiteral(_ literal: StaticString) {
+      #if DEBUG
+        TelemetryDebugRenderingContext.buffer?.append(String(describing: literal))
+      #endif
       template += TelemetryLogWireFormat.escapeLiteral(String(describing: literal))
       validateBounds()
     }
 
     /// Appends a private value without evaluating or retaining it.
     public mutating func appendInterpolation<Value>(_ value: @autoclosure () -> Value) {
+      #if DEBUG
+        if let buffer = TelemetryDebugRenderingContext.buffer {
+          buffer.append(String(describing: value()))
+        }
+      #endif
       appendPrivate()
     }
 
-    public mutating func appendInterpolation(_ value: Bool, privacy: TelemetryLogPrivacy) {
-      append(value: .boolean(value), privacy: privacy)
+    public mutating func appendInterpolation(
+      _ value: Bool,
+      privacy: TelemetryLogPrivacy
+    ) {
+      append(value: { .boolean(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: TelemetryLogInteger,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .integer(value), privacy: privacy)
+      append(value: { .integer(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: TelemetryLogDuration,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .duration(value), privacy: privacy)
+      append(value: { .duration(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: TelemetryLogCountBucket,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .countBucket(value), privacy: privacy)
+      append(value: { .countBucket(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: TelemetryCorrelationID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .correlationID(value), privacy: privacy)
+      append(value: { .correlationID(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: FeatureID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .feature(value), privacy: privacy)
+      append(value: { .feature(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ActionID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .action(value), privacy: privacy)
+      append(value: { .action(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: EffectID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .effect(value), privacy: privacy)
+      append(value: { .effect(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: DependencyID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .dependency(value), privacy: privacy)
+      append(value: { .dependency(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: OperationID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .operation(value), privacy: privacy)
+      append(value: { .operation(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: RouteID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .route(value), privacy: privacy)
+      append(value: { .route(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ErrorTypeID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .errorType(value), privacy: privacy)
+      append(value: { .errorType(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ErrorCategoryID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .errorCategory(value), privacy: privacy)
+      append(value: { .errorCategory(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ErrorCodeID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .errorCode(value), privacy: privacy)
+      append(value: { .errorCode(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ServiceID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .service(value), privacy: privacy)
+      append(value: { .service(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: ServiceVersionID,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .serviceVersion(value), privacy: privacy)
+      append(value: { .serviceVersion(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: TelemetryOutcome,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .outcome(value), privacy: privacy)
+      append(value: { .outcome(value) }, privacy: privacy)
     }
 
     public mutating func appendInterpolation(
       _ value: NavigationOperation,
       privacy: TelemetryLogPrivacy
     ) {
-      append(value: .navigationOperation(value), privacy: privacy)
+      append(value: { .navigationOperation(value) }, privacy: privacy)
     }
 
     private mutating func append(
-      value: TelemetryLogApprovedPublicValue,
+      value: () -> TelemetryLogApprovedPublicValue,
       privacy: TelemetryLogPrivacy
     ) {
       switch privacy {
       case .private:
+        #if DEBUG
+          if let buffer = TelemetryDebugRenderingContext.buffer {
+            buffer.append(value().debugRendered)
+          }
+        #endif
         appendPrivate()
       case .public:
+        let value = value()
         interpolationCount += 1
         let index = publicValues.count
         publicValues.append(value)
         template += TelemetryLogWireFormat.publicMarker(index: index, kind: value.kind)
+        #if DEBUG
+          TelemetryDebugRenderingContext.buffer?.append(value.debugRendered)
+        #endif
         validateBounds()
       }
     }
@@ -357,6 +377,31 @@ package enum TelemetryLogApprovedPublicValue: Sendable {
     case .correlationID: .correlationID
     }
   }
+
+  #if DEBUG
+    var debugRendered: String {
+      switch self {
+      case .feature(let value): value.rawValue
+      case .action(let value): value.rawValue
+      case .effect(let value): value.rawValue
+      case .dependency(let value): value.rawValue
+      case .operation(let value): value.rawValue
+      case .route(let value): value.rawValue
+      case .errorType(let value): value.rawValue
+      case .errorCategory(let value): value.rawValue
+      case .errorCode(let value): value.rawValue
+      case .service(let value): value.rawValue
+      case .serviceVersion(let value): value.rawValue
+      case .outcome(let value): value.rawValue
+      case .navigationOperation(let value): value.rawValue
+      case .boolean(let value): String(value)
+      case .integer(let value): String(value.rawValue)
+      case .duration(let value): String(value.milliseconds)
+      case .countBucket(let value): value.rawValue
+      case .correlationID(let value): value.rawValue.uuidString.lowercased()
+      }
+    }
+  #endif
 
   func sanitized(using policy: TelemetryPolicy) -> TelemetryLogSanitizedPublicValue {
     switch self {

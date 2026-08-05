@@ -31,17 +31,24 @@ public struct TelemetryObserverExporters: @unchecked Sendable {
 struct TelemetryObserverPipeline: @unchecked Sendable {
   let spanProcessors: [any SpanProcessor]
   let logRecordProcessors: [any LogRecordProcessor]
+  private let spanExporters: [PrivacyPreservingSpanExporter]
   private let metricLifecycles: [ObserverMetricExporterLifecycle]
 
-  init(exporters: TelemetryObserverExporters, policy: TelemetryPolicy) {
-    spanProcessors = exporters.spanExporters.map {
-      SimpleSpanProcessor(
-        spanExporter: PrivacyPreservingSpanExporter(exporter: $0, policy: policy)
-      )
+  init(
+    exporters: TelemetryObserverExporters,
+    policy: TelemetryPolicy,
+    preserveErrorCorrelation: Bool = false
+  ) {
+    spanExporters = exporters.spanExporters.map {
+      PrivacyPreservingSpanExporter(exporter: $0, policy: policy)
+    }
+    spanProcessors = spanExporters.map {
+      SimpleSpanProcessor(spanExporter: $0)
     }
     logRecordProcessors = exporters.logRecordExporters.map {
       ObserverLogRecordProcessor(
-        exporter: PrivacyPreservingLogRecordExporter(exporter: $0, policy: policy)
+        exporter: PrivacyPreservingLogRecordExporter(exporter: $0, policy: policy),
+        preserveErrorCorrelation: preserveErrorCorrelation
       )
     }
     metricLifecycles = exporters.metricExporters.map {
@@ -85,6 +92,12 @@ struct TelemetryObserverPipeline: @unchecked Sendable {
     }
   }
 
+  func emit(spans: [SpanData]) {
+    for exporter in spanExporters {
+      _ = exporter.export(spans: spans, explicitTimeout: nil)
+    }
+  }
+
   func forceFlushMetrics() {
     for lifecycle in metricLifecycles {
       lifecycle.forceFlush()
@@ -94,6 +107,12 @@ struct TelemetryObserverPipeline: @unchecked Sendable {
   func shutdownLogs(explicitTimeout: TimeInterval?) {
     for processor in logRecordProcessors {
       _ = processor.shutdown(explicitTimeout: explicitTimeout)
+    }
+  }
+
+  func shutdownSpans(explicitTimeout: TimeInterval?) {
+    for var processor in spanProcessors {
+      processor.shutdown(explicitTimeout: explicitTimeout)
     }
   }
 
@@ -107,16 +126,26 @@ struct TelemetryObserverPipeline: @unchecked Sendable {
 private final class ObserverLogRecordProcessor: LogRecordProcessor, @unchecked Sendable {
   private let lock = NSLock()
   private let exporter: PrivacyPreservingLogRecordExporter
+  private let preserveErrorCorrelation: Bool
   private var isShutdown = false
 
-  init(exporter: PrivacyPreservingLogRecordExporter) {
+  init(
+    exporter: PrivacyPreservingLogRecordExporter,
+    preserveErrorCorrelation: Bool
+  ) {
     self.exporter = exporter
+    self.preserveErrorCorrelation = preserveErrorCorrelation
   }
 
   func onEmit(logRecord: ReadableLogRecord) {
     lock.withLock {
       guard !isShutdown else { return }
-      _ = exporter.export(logRecords: [logRecord], explicitTimeout: nil)
+      let record =
+        !preserveErrorCorrelation && logRecord.severity == .error
+          && logRecord.spanContext?.traceFlags.sampled == false
+        ? runtimeStrippingCorrelation(from: logRecord)
+        : logRecord
+      _ = exporter.export(logRecords: [record], explicitTimeout: nil)
     }
   }
 

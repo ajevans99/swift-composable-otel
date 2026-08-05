@@ -1,66 +1,80 @@
-# swift-composable-otel 0.4.0-rc.2
+# swift-composable-otel 0.4.0-rc.3
 
-0.4.0-rc.2 supersedes 0.4.0-rc.1, whose immutable tag predates the reviewed release-preparation
-metadata. It is a source-compatible pre-1.0 prerelease that adds privacy-aware interpolated
-application logs. It is intended for Momentum integration testing before the final 0.4.0 release.
+0.4.0-rc.3 supersedes 0.4.0-rc.2 and completes the planned Phase 1 prerelease surface without changing
+or removing existing public APIs. It remains a pre-1.0 candidate for Momentum integration and
+production-like validation; it is not the 0.4.0 final release.
 
-## Privacy-aware interpolated logs
+## Cross-signal process-session context
 
-`TelemetryClient` now accepts OSLog-style prose through `TelemetryLogMessage`:
+`TelemetryHostContext` registers one anonymous process-session UUID plus finite platform and process
+kind values. The privacy boundary injects the validated context into sanitized spans and logs,
+including reducer, effect, and dependency async work. Native metrics and registered counters exclude
+all host-context keys by construction.
 
-```swift
-telemetry.log(
-  .info,
-  "Plan \(planID) save finished with \(TelemetryOutcome.success, privacy: .public)"
-)
-```
+## Bounded tail promotion
 
-Every unannotated interpolation is private. It is never evaluated or retained and becomes the fixed
-`<private>` token before any OpenTelemetry exporter, observer exporter, persistence queue, test
-collector that models remote output, or other retained telemetry path.
+`TelemetryTailSamplingConfiguration` and `TelemetryTailSamplingPolicy` add opt-in client-side recovery
+for traces missed by ordinary head sampling. Sanitized spans and correlated breadcrumbs remain
+memory-only until an error, reviewed slow threshold, or explicit
+`TelemetryClient.triggerDiagnosticTracePromotion()` promotes the current root trace.
 
-Explicit `.public` interpolation is available only for package-approved bounded values: concrete
-package identifier domains, `TelemetryOutcome`, `NavigationOperation`, `Bool`,
-`TelemetryLogInteger`, `TelemetryLogDuration`, `TelemetryLogCountBucket`, and
-`TelemetryCorrelationID`. Bare strings, errors, URLs, arbitrary descriptions, and externally
-defined identifier kinds cannot be made public.
+Retention has independent trace, span, breadcrumb, byte-estimate, and age ceilings. Head sampling
+remains additive. Promoted signals use the existing bounded queues, privacy exporters, official OTLP
+encoding, optional persistence, observer lifecycle, and terminal discard behavior. If a discarded
+trace cannot accompany an error log, the runtime removes trace/span correlation before exporting the
+error.
 
-Each accepted record exports the stable `app.log` event name, canonical template, deterministic
-template identity, sanitized body, severity, typed public fields, and active trace/span context.
-Templates are limited to 512 UTF-8 bytes, rendered bodies to 1,024 UTF-8 bytes, interpolations to
-16, and public values to 8. `TelemetryLogRecordingResult` reports synchronous acceptance,
-disablement, dropping, or invalid-message rejection.
+## Logging controls and DEBUG rendering
 
-`ComposableOTelTesting` exposes decoded privacy-aware captures for exact assertions over template,
-template identity, redacted body, severity, typed public values, and trace correlation.
+`TelemetryLoggingConfiguration` applies severity filtering and deterministic per-severity sampling
+using stable log identity rather than dynamic or private values. Logs remain disabled by default and
+errors can remain fully retained.
+
+DEBUG builds add the explicitly selected `TelemetryDebugConsoleRenderer`. Its overload evaluates
+private interpolation only for one immediate local render. The normal retained record remains
+redacted, and the private body bypasses collectors, observers, tail buffers, queues, persistence,
+OTLP, and every remote path. Release builds contain no renderer symbol.
+
+## Selective reducer instrumentation and testing
+
+`.selectivelyInstrumented(feature:action:stateChangeToken:)` accepts an `ActionID?`. A `nil` action
+emits no reducer, effect, dependency, log, or metric telemetry instead of aggregating to `other`.
+Existing reducer/effect/dependency/navigation and typed-span APIs remain unchanged.
+
+`ComposableOTelTesting` adds decoded span trees, typed span/log metadata, host-context captures,
+trace/span correlation, tail-retention state, and metric context-exclusion assertions.
+
+No general histogram API was added. Momentum's reviewed low-cardinality flow latency remains modeled
+by typed bounded spans and their captured/exported duration, avoiding an uncontrolled TCA metric
+dimension cross-product.
 
 ## Compatibility and migration
 
-The release removes or changes no public symbols from 0.3.3. Existing fixed package logs, typed
-contract logs, operational events, and runtime composition remain source-compatible.
-
-Because this is a prerelease, consumers should pin it exactly:
+The release removes or changes no public symbols from 0.4.0-rc.2. Consumers must pin the prerelease
+exactly:
 
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  exact: "0.4.0-rc.2"
+  exact: "0.4.0-rc.3"
 )
 ```
 
-Do not mechanically mark an existing arbitrary string field `.public`; instead choose a concrete
-schema-bounded identifier, finite enum, or bounded wrapper. See [MIGRATION.md](MIGRATION.md) and
-[Privacy-aware logs](Sources/ComposableOTel/Documentation.docc/Articles/PrivacyAwareLogs.md).
+See [MIGRATION.md](MIGRATION.md), [PRIVACY.md](PRIVACY.md), and the package DocC guides before
+enabling host context, tail promotion, or DEBUG private rendering.
 
 ## Accepted residual risks
 
-This prerelease does not satisfy the remaining 1.0 go/no-go items.
-
 | Risk | Scope and mitigation | Owner | Reviewer | Reconsideration |
 | --- | --- | --- | --- | --- |
-| Missing external production-like evidence | No external consumer has supplied the physical-device, gateway, privacy, delivery, and resource-usage evidence defined in [PILOT.md](PILOT.md). Package-owned CI and bounded defaults reduce risk; adopters must complete that evidence contract for their own production use. | `ajevans99` | `ajevans99` | 2026-10-13 |
-| Unprotected default branch | Repository administration does not enforce default-branch protection or required checks. The maintainer must verify the complete hosted release CI on the exact release commit before tagging; protection remains mandatory for 1.0. | `ajevans99` | `ajevans99` | 2026-10-13 |
-| Local private rendering deferred | A development-only mode was not added because private values must not enter observers, persistence, tail buffers, OTLP, or remote-modeling test stores. Private interpolation remains redacted in every retained path. | `ajevans99` | `ajevans99` | Before 0.4.0 |
-| Exact empty `severity_text` unsupported | The upstream OpenTelemetry Swift model and encoder cannot represent an explicitly empty severity-text field through supported APIs. This release guarantees the documented event name, severity, body, typed-field, and contract-version behavior without a raw encoding bypass. | `ajevans99` | `ajevans99` | 2026-10-13 |
+| Missing external production-like evidence | Package CI covers privacy, limits, concurrency, lifecycle, compatibility, platforms, and performance, but the physical-device and gateway evidence in [PILOT.md](PILOT.md) remains consumer-owned. | `ajevans99` | `ajevans99` | 2026-10-13 |
+| Unprotected default branch | Repository administration does not enforce default-branch protection or required checks. Verify complete hosted CI on the exact merge commit before creating an rc.3 tag. | `ajevans99` | `ajevans99` | 2026-10-13 |
+| Best-effort mobile completion | Suspension, termination, force-quit, crash, and device shutdown can interrupt memory-only tail retention and queued export. Bounded persistence applies only after promotion and queue encoding. | `ajevans99` | `ajevans99` | 2026-10-13 |
+| Exact empty `severity_text` unsupported | The upstream OpenTelemetry Swift model cannot represent an explicitly empty severity-text through supported APIs. No raw OTLP bypass was added. | `ajevans99` | `ajevans99` | 2026-10-13 |
 
-The complete 1.0 go/no-go decision remains defined in [RELEASING.md](RELEASING.md).
+Recommend creating the immutable `0.4.0-rc.3` tag only after this pull request is merged and every
+hosted release gate passes on the merge commit. Momentum must then prove its production vertical slice
+against that rc.3 tag in its existing adoption pull request. If the evidence is accepted, create the
+`0.4.0` final tag from the exact same upstream commit and update that same Momentum pull request; do not
+make a separate final-code or release-metadata change. The final alias therefore intentionally retains
+the candidate's `0.4.0-rc.3` embedded telemetry version so the validated bits remain identical.

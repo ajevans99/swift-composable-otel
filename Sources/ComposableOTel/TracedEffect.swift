@@ -8,7 +8,8 @@ import OpenTelemetryApi
   extension Effect {
     /// Adds a bounded initiation marker without observing the effect lifecycle.
     public func traceStart(effect: EffectID) -> Self {
-      let parentContext = ReducerTraceContext.spanContext
+      let traceContext = ReducerTraceContext.capture()
+      guard !traceContext.instrumentationSuppressed else { return self }
       let signalEffect: Self = .run { _ in
         @Dependency(\.composableOTel) var telemetry
 
@@ -24,7 +25,7 @@ import OpenTelemetryApi
             .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
             .setSpanKind(spanKind: .internal)
             .setAttributes(telemetry.policy.sanitizedSpanAttributes(attributes))
-          if let parentContext {
+          if let parentContext = traceContext.spanContext {
             spanBuilder.setParent(parentContext)
           } else {
             spanBuilder.setNoParent()
@@ -75,15 +76,20 @@ import OpenTelemetryApi
       longLived: Bool,
       operation: @escaping @Sendable (Send<Action>) async throws -> Void
     ) -> Self {
-      let parentContext = ReducerTraceContext.spanContext
+      let traceContext = ReducerTraceContext.capture()
       return .run(priority: priority, name: effect.rawValue) { send in
-        @Dependency(\.composableOTel) var telemetry
-        try await telemetry.withEffectTrace(
-          effect: effect,
-          longLived: longLived,
-          parentContext: parentContext
-        ) {
-          try await operation(send)
+        try await traceContext.withValues {
+          if traceContext.instrumentationSuppressed {
+            return try await operation(send)
+          }
+          @Dependency(\.composableOTel) var telemetry
+          return try await telemetry.withEffectTrace(
+            effect: effect,
+            longLived: longLived,
+            parentContext: traceContext.spanContext
+          ) {
+            try await operation(send)
+          }
         }
       }
     }
@@ -97,6 +103,9 @@ extension TelemetryClient {
     parentContext: SpanContext?,
     operation: @escaping @Sendable () async throws -> T
   ) async throws -> T {
+    guard !ReducerTraceContext.instrumentationSuppressed else {
+      return try await operation()
+    }
     let effect = policy.schema.bounded(effect)
     let attributes: [String: AttributeValue] = [
       TCAAttributes.effectName: .string(effect.rawValue),
@@ -129,14 +138,16 @@ extension TelemetryClient {
         spanBuilder.setNoParent()
       }
       return try await spanBuilder.withActiveSpan { span in
-        try await runEffectOperation(
-          operation,
-          effect: effect,
-          attributes: metricAttributes,
-          startTime: startTime,
-          clock: clock,
-          span: span
-        )
+        try await ReducerTraceContext.$spanContext.withValue(span.context) {
+          try await runEffectOperation(
+            operation,
+            effect: effect,
+            attributes: metricAttributes,
+            startTime: startTime,
+            clock: clock,
+            span: span
+          )
+        }
       }
     }
 

@@ -59,6 +59,8 @@ flush observers; shutdown and terminal discard shut them down exactly once, whil
 collects pending metrics. Data already accepted by an observer is a completed export and cannot be
 retracted by runtime discard. Each supplied exporter belongs to exactly one runtime or bootstrap
 lifetime. Never reuse an exporter instance across separately configured pipelines.
+When tail promotion is enabled, observers receive every signal released by the tail decision
+independently of whether the OTLP queue accepts that signal.
 
 Resource mode defaults to `.native(environment: .production)`, preserving
 service/environment/Darwin/OpenTelemetry
@@ -132,6 +134,26 @@ declared maximum-series sum exceeds the configured cap and partitions encoded me
 actual point count. It cannot split the points inside one `MetricData`; a single metric record above
 the cap is a bounded non-retryable drop with a `metricPointLimitExceeded` diagnostic.
 
+### Promote reviewed head-missed traces
+
+Head sampling remains the default. For bounded diagnostic recovery, set
+``TelemetryRuntime/Configuration/tailSampling`` after creating the configuration:
+
+```swift
+configuration.tailSampling = .enabled(
+  try TelemetryTailSamplingPolicy(
+    slowTraceThreshold: .seconds(2)
+  )
+)
+```
+
+The runtime records spans, sanitizes them at the privacy boundary, and retains head-missed root traces
+plus correlated sanitized log breadcrumbs only in memory. An error, reviewed slow threshold, or
+`TelemetryClient.triggerDiagnosticTracePromotion()` releases the complete current
+trace into the existing bounded queues. Count, encoded-byte estimate, and age limits remain
+independent. Unpromoted entries are discarded and never persisted. Error logs whose trace cannot be
+retained or enqueued have trace/span correlation removed before export.
+
 The package's OTLP exporters do not enable compression, so this ceiling applies to the decoded
 protobuf body. A custom transport that compresses the request must enforce its compressed-body limit
 after compression.
@@ -170,6 +192,7 @@ reports per-signal success, failure, timeout, pending, and drop state. Shutdown 
 ## Revoke consent and discard unsent data
 
 Graceful shutdown attempts a final bounded flush and retains timed-out persistence for relaunch.
+It discards unpromoted memory-only tail entries; terminal discard also prevents their export.
 Consent revocation requires different behavior. Swap the host facade or dependency to
 `TelemetryClient.noop` first so no feature can start new instrumentation, then call:
 

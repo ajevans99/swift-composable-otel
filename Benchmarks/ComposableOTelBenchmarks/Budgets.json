@@ -5,14 +5,18 @@
     "catalogCounter": 250000,
     "catalogLog": 250000,
     "catalogSpan": 2000000,
+    "configuration": 100000,
     "dependency": 500000,
     "effect": 1000000,
+    "eventCreation": 250000,
     "logging": 100000,
     "metrics": 100000,
     "reducer": 250000,
     "reducerDisabled": 50000,
+    "runtimeStartup": 50000000,
     "sampledSpan": 250000,
     "stateChange": 300000,
+    "tailRetainedSpan": 500000,
     "unsampledSpan": 100000
   },
   "gateway": {
@@ -23,5 +27,10 @@
   "queue": {
     "items": 2048,
     "maximumResidentDeltaBytes": 67108864
+  },
+  "tailBuffer": {
+    "maximumResidentDeltaBytes": 33554432,
+    "maximumRetainedBytes": 524288,
+    "records": 4096
   }
 }

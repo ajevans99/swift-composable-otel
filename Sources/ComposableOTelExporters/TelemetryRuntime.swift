@@ -15,6 +15,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
     public var endpoints: OTLPEndpoints
     public var endpointSecurity: TelemetryEndpointSecurityPolicy
     public var samplingRatio: Double
+    /// Optional bounded promotion for traces missed by ``samplingRatio``.
+    public var tailSampling: TelemetryTailSamplingConfiguration
     public var policy: TelemetryPolicy
     public var resourceMode: TelemetryResourceMode
     public var traces: TelemetryBatchConfiguration
@@ -82,6 +84,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
       self.endpoints = endpoints
       self.endpointSecurity = .requireHTTPS
       self.samplingRatio = samplingRatio
+      tailSampling = .disabled
       self.policy = policy
       self.resourceMode = resourceMode
       self.traces = traces
@@ -180,6 +183,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
   private let customMeterProvider: UncheckedSendableBox<MeterProviderSdk>?
   private let loggerProvider: UncheckedSendableBox<LoggerProviderSdk>
   private let observerPipeline: TelemetryObserverPipeline
+  private let tailSampling: RuntimeTailSamplingCoordinator?
   private let shutdownCoordinator = RuntimeShutdownCoordinator()
   private let discardCoordinator = RuntimeDiscardCoordinator()
   private let clock: TelemetryRuntimeClock
@@ -236,7 +240,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
     let boundary = TelemetryPrivacyBoundary(policy: configuration.policy)
     let observerPipeline = TelemetryObserverPipeline(
       exporters: configuration.observerExporters,
-      policy: configuration.policy
+      policy: configuration.policy,
+      preserveErrorCorrelation: configuration.tailSampling.policy != nil
     )
     self.observerPipeline = observerPipeline
     let traceHTTPClient = RuntimeOTLPHTTPClient(signal: .traces, delivery: delivery)
@@ -261,8 +266,6 @@ public final class TelemetryRuntime: @unchecked Sendable {
       }
     )
     self.spanQueue = spanQueue
-    let spanProcessor = RuntimeSpanProcessor(queue: spanQueue, boundary: boundary)
-
     let metricHTTPClient = RuntimeOTLPHTTPClient(signal: .metrics, delivery: delivery)
     let metricExporter = PrivacyPreservingMetricExporter(
       exporter: RuntimeByteBoundedMetricExporter(
@@ -298,7 +301,31 @@ public final class TelemetryRuntime: @unchecked Sendable {
       }
     )
     self.logQueue = logQueue
-    let logProcessor = RuntimeLogRecordProcessor(queue: logQueue, boundary: boundary)
+    let tailSignalEmitter = RuntimeTailSignalEmitter(
+      spanQueue: spanQueue,
+      logQueue: logQueue,
+      observerPipeline: observerPipeline
+    )
+    let tailSampling = configuration.tailSampling.policy.map { tailPolicy in
+      RuntimeTailSamplingCoordinator(
+        policy: tailPolicy,
+        samplingRatio: configuration.samplingRatio,
+        clock: dependencies.clock,
+        emitSpans: tailSignalEmitter.emit(spans:),
+        emitLog: tailSignalEmitter.emit(log:)
+      )
+    }
+    self.tailSampling = tailSampling
+    let spanProcessor = RuntimeSpanProcessor(
+      queue: spanQueue,
+      boundary: boundary,
+      tailSampling: tailSampling
+    )
+    let logProcessor = RuntimeLogRecordProcessor(
+      queue: logQueue,
+      boundary: boundary,
+      tailSampling: tailSampling
+    )
 
     let resource = try TelemetryBootstrap.makeResource(
       serviceName: configuration.serviceName,
@@ -306,9 +333,12 @@ public final class TelemetryRuntime: @unchecked Sendable {
       resourceMode: configuration.resourceMode,
       policy: configuration.policy
     )
-    let sampler = Samplers.parentBased(
-      root: Samplers.traceIdRatio(ratio: configuration.samplingRatio)
-    )
+    let sampler: any Sampler =
+      tailSampling == nil
+      ? Samplers.parentBased(
+        root: Samplers.traceIdRatio(ratio: configuration.samplingRatio)
+      )
+      : RuntimeTailRecordingSampler()
     let spanLimits = SpanLimits()
       .settingAttributeCountLimit(16)
       .settingAttributeValueLengthLimit(
@@ -323,8 +353,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
       .with(spanLimits: spanLimits)
       .with(sampler: sampler)
       .add(spanProcessor: spanProcessor)
-    for processor in observerPipeline.spanProcessors {
-      _ = tracerBuilder.add(spanProcessor: processor)
+    if tailSampling == nil {
+      for processor in observerPipeline.spanProcessors {
+        _ = tracerBuilder.add(spanProcessor: processor)
+      }
     }
     let tracerProvider = tracerBuilder.build()
     self.tracerProvider = UncheckedSendableBox(tracerProvider)
@@ -392,10 +424,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
     }
     self.customMeterProvider = customMeterProvider.map(UncheckedSendableBox.init)
 
+    let observerLogProcessors =
+      tailSampling == nil ? observerPipeline.logRecordProcessors : []
     let loggerProvider = LoggerProviderSdk(
       resource: resource,
-      logRecordProcessors: [logProcessor as any LogRecordProcessor]
-        + observerPipeline.logRecordProcessors
+      logRecordProcessors: [logProcessor as any LogRecordProcessor] + observerLogProcessors
     )
     self.loggerProvider = UncheckedSendableBox(loggerProvider)
 
@@ -428,7 +461,8 @@ public final class TelemetryRuntime: @unchecked Sendable {
         diagnostics: diagnosticsState,
         resource: resource,
         now: dependencies.clock.now,
-        observerPipeline: observerPipeline
+        observerPipeline: observerPipeline,
+        tailSampling: tailSampling
       ),
       privacyAwareLogRecorder: makeRuntimePrivacyAwareLogRecorder(
         queue: logQueue,
@@ -436,8 +470,15 @@ public final class TelemetryRuntime: @unchecked Sendable {
         diagnostics: diagnosticsState,
         resource: resource,
         now: dependencies.clock.now,
-        observerPipeline: observerPipeline
-      )
+        observerPipeline: observerPipeline,
+        tailSampling: tailSampling
+      ),
+      tailPromotionRecorder: tailSampling.map {
+        let tailSampling = $0
+        return TelemetryTailPromotionRecorder { context in
+          tailSampling.promote(context: context)
+        }
+      } ?? .disabled
     )
 
     Task {
@@ -499,6 +540,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     await shutdownCoordinator.perform {
       let timeout = timeout ?? self.configuration.defaultFlushTimeout
       let deadline = self.clock.now().addingTimeInterval(timeout.runtimeSeconds)
+      self.tailSampling?.shutdown(exportUncorrelatedErrors: true)
       self.spanQueue.stopAccepting()
       self.logQueue.stopAccepting()
       let result = await self.flush(operation: .shutdown, deadline: deadline)
@@ -510,6 +552,9 @@ public final class TelemetryRuntime: @unchecked Sendable {
         self.tracerProvider.value.shutdown()
         _ = self.meterProvider.value.shutdown()
         _ = self.customMeterProvider?.value.shutdown()
+        if self.tailSampling != nil {
+          self.observerPipeline.shutdownSpans(explicitTimeout: nil)
+        }
         self.observerPipeline.shutdownLogs(explicitTimeout: nil)
         self.observerPipeline.shutdownMetrics()
       }
@@ -525,6 +570,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
   /// this operation. Unlike ``shutdown(timeout:)``, this method never flushes pending telemetry and
   /// cannot be reversed by a later lifecycle or export-condition update.
   public func disableAndDiscardPending() async -> TelemetryRuntimeOperationResult {
+    tailSampling?.shutdown(exportUncorrelatedErrors: false)
     spanQueue.stopAccepting()
     logQueue.stopAccepting()
 
@@ -538,6 +584,9 @@ public final class TelemetryRuntime: @unchecked Sendable {
         self.tracerProvider.value.shutdown()
         _ = self.meterProvider.value.shutdown()
         _ = self.customMeterProvider?.value.shutdown()
+        if self.tailSampling != nil {
+          self.observerPipeline.shutdownSpans(explicitTimeout: nil)
+        }
         self.observerPipeline.shutdownLogs(explicitTimeout: nil)
         self.observerPipeline.shutdownMetrics()
       }
@@ -592,6 +641,7 @@ public final class TelemetryRuntime: @unchecked Sendable {
     operation: TelemetryRuntimeOperationResult.Operation,
     deadline: Date
   ) async -> TelemetryRuntimeOperationResult {
+    tailSampling?.forceFlush()
     async let spans: Void = spanQueue.forceFlush()
     async let logs: Void = logQueue.forceFlush()
     async let metricsSucceeded: Bool = performProviderOperation {
@@ -706,6 +756,11 @@ public final class TelemetryRuntime: @unchecked Sendable {
       (0...1).contains(configuration.samplingRatio)
     else {
       throw TelemetryRuntimeConfigurationError.invalidSamplingRatio
+    }
+    if let tailSampling = configuration.tailSampling.policy {
+      guard tailSampling.maximumRetainedSpanCount <= configuration.traces.maximumQueueSize else {
+        throw TelemetryRuntimeConfigurationError.invalidTailSamplingLimits
+      }
     }
     guard valid(batch: configuration.traces), valid(batch: configuration.logs) else {
       throw TelemetryRuntimeConfigurationError.invalidBatchLimits
@@ -826,6 +881,10 @@ public final class TelemetryRuntime: @unchecked Sendable {
         continuation.resume(returning: operation())
       }
     }
+  }
+
+  package var tailSamplingSnapshot: RuntimeTailSamplingSnapshot? {
+    tailSampling?.snapshot
   }
 }
 

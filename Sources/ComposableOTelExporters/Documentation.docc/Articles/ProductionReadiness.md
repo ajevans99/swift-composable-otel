@@ -5,15 +5,15 @@ Package CI checks the reusable evidence that can be produced without a consumer 
 - reducer, effect, dependency, signal, privacy, runtime, persistence, lifecycle, terminal
   consent-revocation discard, and concurrency behavior;
 - minimum and latest dependency endpoint jobs;
-- current iOS simulator tests, generic iOS product builds, and macOS tests;
+- current iOS simulator tests, generic iOS/watchOS product builds, and macOS tests;
 - target and runtime coverage floors;
 - Thread Sanitizer on macOS;
 - public API and semantic-convention locks;
-- release performance, memory, batching, and queue budgets; and
+- release performance, memory, batching, queue, and tail-retention budgets; and
 - all three DocC catalogs.
 
-watchOS is not declared. The inherited graph fails the named watchOS support gate in the TCA
-dependency under Xcode 27, and no support claim is made from an ad hoc partial build.
+watchOS 9 is supported. Every public product, including selective TCA reducer instrumentation, must
+compile for a generic watchOS device in the latest-dependency lane.
 
 A consumer pilot, privacy review, battery and network measurements, ingestion-gateway operation,
 credential service, default-branch protection, required-check settings, and final residual-risk

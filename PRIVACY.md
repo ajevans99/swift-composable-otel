@@ -17,6 +17,11 @@ Package-owned instrumentation:
 - replaces unannotated log interpolations with a fixed token during message construction;
 - permits public log interpolation only for package-approved finite or explicitly bounded values;
 - preserves a bounded canonical log template and identity separately from rendered values;
+- applies severity filtering and deterministic sampling without hashing private values;
+- evaluates private interpolation only for an explicitly requested DEBUG-only immediate renderer;
+- attaches an anonymous process-session context only to sanitized spans and logs;
+- excludes process-session context from native and registered metric dimensions;
+- retains only sanitized, bounded, memory-only tail entries before promotion;
 - sanitizes resources, spans, logs, metrics, events, links, and exemplars before package queues;
 - persists only sanitized OTLP bodies and a small content-header allowlist; and
 - never persists authorization, cookies, or arbitrary request headers.
@@ -36,9 +41,21 @@ logs. Trace sampling does not disable metrics, logs, or operational events.
 
 Privacy-aware interpolated logs use the `logsEnabled` control. Their `app.log` records are rebuilt
 from a canonical template and typed public fields at the privacy boundary. Private values are already
-gone before the OpenTelemetry logger is called. Production runtime observers, bounded queues, OTLP
-encoding, and persistence receive only that rebuilt record. The package does not currently expose a
-local private-rendering mode; it is deferred rather than sharing a weaker record with retained paths.
+gone before the OpenTelemetry logger is called. Production runtime observers, bounded queues, OTLP encoding, persistence, and tail retention receive
+only that rebuilt record. The DEBUG-only `debugConsole:` overload evaluates private autoclosures for
+one immediate renderer invocation. It does not send the private body through any SDK, observer,
+collector, queue, tail buffer, persistence, or remote path, and it is absent from release builds.
+
+Registered `TelemetryHostContext` contains only an anonymous process-lifetime UUID and finite platform
+and process-kind enums. The privacy boundary removes forged context fields and injects the registered
+value into sanitized spans and logs. Metric sanitizers remove these keys, registered contracts reserve
+them, and metric instruments never receive them.
+
+Optional tail promotion changes recording, not the privacy boundary. Head-missed spans and correlated
+breadcrumbs are sanitized before entering a buffer bounded by count, encoded-byte estimate, and age.
+Unpromoted entries are memory-only and discarded. Promoted entries enter the ordinary bounded queues;
+only then can they be encoded or persisted. An error log whose trace was deliberately discarded is
+exported only after its trace/span correlation is removed.
 
 ## Host responsibilities
 
@@ -73,6 +90,7 @@ retention policy.
 
 ## Release and pilot evidence
 
-Every release candidate must pass sentinel-secret leakage and state/action non-capture tests. A
+Every release candidate must pass sentinel-secret leakage, DEBUG renderer isolation, tail-buffer
+limits, metric context exclusion, and state/action non-capture tests. A
 production pilot must supply the privacy-review evidence defined in [PILOT.md](PILOT.md); this
 repository does not infer approval from successful delivery.

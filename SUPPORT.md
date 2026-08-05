@@ -13,12 +13,10 @@ This document defines the supported platform, toolchain, and dependency posture 
 
 The package does not currently make a Linux, tvOS, or visionOS support commitment.
 
-watchOS support covers the typed contracts, telemetry client, production exporters/runtime, and
-testing helpers. The current `swift-composable-architecture` 1.26 graph fails a generic watchOS build
-at `NotificationName.swift:27:12` because a WatchKit lifecycle notification is main-actor isolated.
-The package therefore conditionally excludes its TCA-specific reducer/effect conveniences on watchOS
-instead of carrying an upstream fork. The generic operational-event API needed by watch applications
-does not depend on that surface.
+watchOS support covers typed contracts, the telemetry client, selective and ordinary TCA reducer/effect
+instrumentation, production exporters/runtime, and testing helpers. The manifest links
+`ComposableArchitecture` for watchOS and the latest-dependency gate builds every public product for a
+generic watchOS device.
 
 The latest-dependency CI lane builds every public product for a generic watchOS device. The same lane
 runs platform-relevant typed-contract, bounded-queue, privacy, disabled-state, and deletion tests on

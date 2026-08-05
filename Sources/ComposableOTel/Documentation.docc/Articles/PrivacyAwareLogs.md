@@ -52,5 +52,27 @@ and public values to 8. ``TelemetryClient/log(_:_:)`` returns ``TelemetryLogReco
 synchronously. Invalid messages never enter telemetry. Runtime `.recorded` means the bounded queue
 accepted the record; delivery remains best-effort.
 
-Private local rendering is not supported. This is intentionally deferred so a development switch
-cannot weaken the shared boundary used by observers, persistence, tail buffers, or OTLP.
+## Filter and sample deterministically
+
+``TelemetryLoggingConfiguration`` applies a minimum severity and separate deterministic info/error
+sampling rates. The sampler hashes severity plus stable template identity, never private values.
+Defaults retain all eligible logs when logs are enabled.
+
+## Render private values ephemerally in DEBUG
+
+Default calls remain redacted and do not evaluate unannotated private autoclosures. A DEBUG build can
+opt in at one call site:
+
+```swift
+#if DEBUG
+telemetry.log(
+  .info,
+  "Plan \(planID) finished",
+  debugConsole: .standardOutput
+)
+#endif
+```
+
+The renderer is invoked synchronously and must not retain its body. The private rendering never enters
+the SDK logger, observers, collectors, tail buffers, queues, persistence, OTLP, or any remote path.
+The overload and renderer type are absent from release builds.

@@ -265,6 +265,7 @@ public enum TelemetryRuntimeConfigurationError: Error, Equatable, Sendable {
   case endpointContainsCredentials(signal: TelemetryRuntimeSignal)
   case endpointContainsQueryOrFragment(signal: TelemetryRuntimeSignal)
   case invalidSamplingRatio
+  case invalidTailSamplingLimits
   case invalidBatchLimits
   case invalidDeliveryLimits
   case invalidPersistenceLimits
@@ -284,6 +285,8 @@ extension TelemetryRuntimeConfigurationError: LocalizedError {
       "The \(signal.rawValue) OTLP endpoint must not contain a query or fragment."
     case .invalidSamplingRatio:
       "The trace sampling ratio must be finite and between zero and one."
+    case .invalidTailSamplingLimits:
+      "Tail sampling limits must fit within the configured trace queue."
     case .invalidBatchLimits:
       "Batch limits must be positive and the batch size cannot exceed the queue size."
     case .invalidDeliveryLimits:

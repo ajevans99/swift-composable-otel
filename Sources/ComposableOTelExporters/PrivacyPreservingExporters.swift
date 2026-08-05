@@ -86,8 +86,14 @@ package final class PrivacyPreservingLogRecordExporter: LogRecordExporter, @unch
     logRecords: [ReadableLogRecord],
     explicitTimeout: TimeInterval?
   ) -> ExportResult {
-    exporter.export(
-      logRecords: boundary.sanitizedLogs(logRecords),
+    let records = boundary.sanitizedLogs(logRecords).map { record in
+      if record.severity == .error, record.spanContext?.traceFlags.sampled == false {
+        return runtimeStrippingCorrelation(from: record)
+      }
+      return record
+    }
+    return exporter.export(
+      logRecords: records,
       explicitTimeout: explicitTimeout
     )
   }
@@ -213,10 +219,14 @@ package final class DeltaCounterMetricExporter: MetricExporter, @unchecked Senda
   }
 }
 
-struct TelemetryPrivacyBoundary: Sendable {
-  let policy: TelemetryPolicy
+package struct TelemetryPrivacyBoundary: Sendable {
+  package let policy: TelemetryPolicy
 
-  func sanitizedSpans(_ spans: [SpanData]) -> [SpanData] {
+  package init(policy: TelemetryPolicy) {
+    self.policy = policy
+  }
+
+  package func sanitizedSpans(_ spans: [SpanData]) -> [SpanData] {
     guard policy.signals.tracesEnabled else { return [] }
     return spans.filter { isSafeInstrumentationScope($0.instrumentationScope) }.compactMap {
       original in
@@ -239,21 +249,25 @@ struct TelemetryPrivacyBoundary: Sendable {
         status = .unset
       }
       let name: String
-      let attributes: [String: AttributeValue]
+      let signalAttributes: [String: AttributeValue]
+      let originalAttributes = policy.removingHostContext(from: original.attributes)
       if let schema = policy.catalog.spans[original.name] {
         guard
           let sanitized = schema.sanitizedAttributes(
-            original.attributes,
+            originalAttributes,
             version: policy.catalog.contractVersion
           )
         else {
           return nil
         }
         name = original.name
-        attributes = sanitized
+        signalAttributes = sanitized
       } else {
         name = policy.sanitizedSpanName(original.name)
-        attributes = policy.sanitizedSpanAttributes(original.attributes)
+        signalAttributes = policy.sanitizedSpanAttributes(originalAttributes)
+      }
+      guard let attributes = policy.addingValidatedHostContext(to: signalAttributes) else {
+        return nil
       }
       span.settingName(name)
       span.settingAttributes(attributes)
@@ -269,16 +283,24 @@ struct TelemetryPrivacyBoundary: Sendable {
     }
   }
 
-  func sanitizedLogs(_ records: [ReadableLogRecord]) -> [ReadableLogRecord] {
+  package func sanitizedLogs(_ records: [ReadableLogRecord]) -> [ReadableLogRecord] {
     records.compactMap { record in
       if let eventName = record.eventName,
         let schema =
           policy.catalog.operationalEvents[eventName] ?? policy.catalog.logs[eventName]
       {
-        let enabled =
-          policy.catalog.operationalEvents[eventName] != nil
-          ? policy.signals.operationalEventsEnabled
-          : policy.signals.logsEnabled
+        let isOperationalEvent = policy.catalog.operationalEvents[eventName] != nil
+        let enabled: Bool
+        if isOperationalEvent {
+          enabled = policy.signals.operationalEventsEnabled
+        } else if let severity = schema.severity {
+          enabled = policy.shouldRecordLog(
+            severity: severity,
+            stableIdentifier: eventName
+          )
+        } else {
+          enabled = false
+        }
         guard
           enabled,
           isSafeInstrumentationScope(record.instrumentationScopeInfo),
@@ -286,9 +308,10 @@ struct TelemetryPrivacyBoundary: Sendable {
           (schema.bodyIsNil && record.body == nil)
             || (!schema.bodyIsNil && record.body == schema.fixedBody),
           let attributes = schema.sanitizedAttributes(
-            record.attributes,
+            policy.removingHostContext(from: record.attributes),
             version: policy.catalog.contractVersion
-          )
+          ),
+          let attributes = policy.addingValidatedHostContext(to: attributes)
         else {
           return nil
         }
@@ -308,15 +331,21 @@ struct TelemetryPrivacyBoundary: Sendable {
       }
       if record.eventName == TelemetryLogWireFormat.eventName {
         guard
-          policy.signals.logsEnabled,
           isSafeInstrumentationScope(record.instrumentationScopeInfo),
-          let severity = record.severity,
-          severity == Severity.info || severity == Severity.error,
+          let severity = TelemetryLogSeverity(otelSeverity: record.severity),
           let sanitized = TelemetryLogWireFormat.sanitize(
             body: record.body,
-            attributes: record.attributes,
+            attributes: policy.removingHostContext(from: record.attributes),
             policy: policy
-          )
+          ),
+          case .string(let templateID) = sanitized.attributes[
+            TelemetryLogWireFormat.templateIDKey
+          ],
+          policy.shouldRecordLog(
+            severity: severity,
+            stableIdentifier: templateID
+          ),
+          let attributes = policy.addingValidatedHostContext(to: sanitized.attributes)
         else {
           return nil
         }
@@ -328,13 +357,34 @@ struct TelemetryPrivacyBoundary: Sendable {
           timestamp: record.timestamp,
           observedTimestamp: record.observedTimestamp,
           spanContext: record.spanContext,
-          severity: severity,
+          severity: severity.otelSeverity,
           body: sanitized.body,
-          attributes: sanitized.attributes,
+          attributes: attributes,
           eventName: TelemetryLogWireFormat.eventName
         )
       }
-      guard policy.signals.logsEnabled else { return nil }
+      guard
+        let severity = TelemetryLogSeverity(otelSeverity: record.severity)
+      else {
+        return nil
+      }
+      let body = policy.sanitizedLogBody(record.body)
+      let stableIdentifier =
+        record.eventName.flatMap(policy.sanitizedEventName)
+        ?? body.description
+      guard
+        policy.shouldRecordLog(
+          severity: severity,
+          stableIdentifier: stableIdentifier
+        ),
+        let attributes = policy.addingValidatedHostContext(
+          to: policy.sanitizedLogAttributes(
+            policy.removingHostContext(from: record.attributes)
+          )
+        )
+      else {
+        return nil
+      }
       return ReadableLogRecord(
         resource: Resource(
           attributes: policy.sanitizedResourceAttributes(record.resource.attributes)
@@ -343,15 +393,15 @@ struct TelemetryPrivacyBoundary: Sendable {
         timestamp: record.timestamp,
         observedTimestamp: record.observedTimestamp,
         spanContext: record.spanContext,
-        severity: record.severity,
-        body: policy.sanitizedLogBody(record.body),
-        attributes: policy.sanitizedLogAttributes(record.attributes),
+        severity: severity.otelSeverity,
+        body: body,
+        attributes: attributes,
         eventName: record.eventName.flatMap(policy.sanitizedEventName)
       )
     }
   }
 
-  func sanitizedMetrics(_ metrics: [MetricData]) -> [MetricData] {
+  package func sanitizedMetrics(_ metrics: [MetricData]) -> [MetricData] {
     guard policy.signals.metricsEnabled else { return [] }
     return metrics.compactMap { metric -> MetricData? in
       guard isSafeInstrumentationScope(metric.instrumentationScopeInfo),

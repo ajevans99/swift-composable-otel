@@ -161,6 +161,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV12resourceMode0aB00d8ResourceH0Ovp"
   },
   {
+    "declaration" : "var tailSampling: TelemetryTailSamplingConfiguration",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntime.Configuration.tailSampling",
+    "preciseIdentifier" : "s:23ComposableOTelExporters16TelemetryRuntimeC13ConfigurationV12tailSamplingAA0d4TailhF0Ovp"
+  },
+  {
     "declaration" : "var samplingRatio: Double",
     "kind" : "swift.property",
     "module" : "ComposableOTelExporters",
@@ -698,6 +705,97 @@
     "module" : "ComposableOTelExporters",
     "path" : "TelemetryRuntimeDiagnostics.metrics",
     "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryRuntimeDiagnosticsV7metricsAA0d6SignalF0Vvp"
+  },
+  {
+    "declaration" : "struct TelemetryTailSamplingPolicy",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV"
+  },
+  {
+    "declaration" : "let maximumAge: Duration",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAge",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV10maximumAges8DurationVvp"
+  },
+  {
+    "declaration" : "static let maximumAllowedAge: Duration",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAllowedAge",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV17maximumAllowedAges8DurationVvpZ"
+  },
+  {
+    "declaration" : "let maximumTraceCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumTraceCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV17maximumTraceCountSivp"
+  },
+  {
+    "declaration" : "init(slowTraceThreshold: Duration, maximumTraceCount: Int = 32, maximumRetainedSpanCount: Int = 256, maximumRetainedBreadcrumbCount: Int = 128, maximumRetainedBytes: Int = 512 * 1_024, maximumAge: Duration = .seconds(30)) throws",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.init(slowTraceThreshold:maximumTraceCount:maximumRetainedSpanCount:maximumRetainedBreadcrumbCount:maximumRetainedBytes:maximumAge:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV18slowTraceThreshold07maximumI5Count0k12RetainedSpanL00km10BreadcrumbL00kM5Bytes0K3AgeACs8DurationV_S4iAKtKcfc"
+  },
+  {
+    "declaration" : "let slowTraceThreshold: Duration",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.slowTraceThreshold",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV18slowTraceThresholds8DurationVvp"
+  },
+  {
+    "declaration" : "let maximumRetainedBytes: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumRetainedBytes",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV20maximumRetainedBytesSivp"
+  },
+  {
+    "declaration" : "static let maximumAllowedSpanCount: Int",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAllowedSpanCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV23maximumAllowedSpanCountSivpZ"
+  },
+  {
+    "declaration" : "static let maximumAllowedTraceCount: Int",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAllowedTraceCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV24maximumAllowedTraceCountSivpZ"
+  },
+  {
+    "declaration" : "let maximumRetainedSpanCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumRetainedSpanCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV24maximumRetainedSpanCountSivp"
+  },
+  {
+    "declaration" : "static let maximumAllowedRetainedBytes: Int",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAllowedRetainedBytes",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV27maximumAllowedRetainedBytesSivpZ"
+  },
+  {
+    "declaration" : "static let maximumAllowedBreadcrumbCount: Int",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumAllowedBreadcrumbCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV29maximumAllowedBreadcrumbCountSivpZ"
+  },
+  {
+    "declaration" : "let maximumRetainedBreadcrumbCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingPolicy.maximumRetainedBreadcrumbCount",
+    "preciseIdentifier" : "s:23ComposableOTelExporters27TelemetryTailSamplingPolicyV30maximumRetainedBreadcrumbCountSivp"
   },
   {
     "declaration" : "struct TelemetryRequestAuthenticator",
@@ -1288,6 +1386,13 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryRuntimeConfigurationErrorO24invalidPersistenceLimitsyA2CmF"
   },
   {
+    "declaration" : "case invalidTailSamplingLimits",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryRuntimeConfigurationError.invalidTailSamplingLimits",
+    "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryRuntimeConfigurationErrorO25invalidTailSamplingLimitsyA2CmF"
+  },
+  {
     "declaration" : "case endpointContainsCredentials(signal: TelemetryRuntimeSignal)",
     "kind" : "swift.enum.case",
     "module" : "ComposableOTelExporters",
@@ -1302,11 +1407,53 @@
     "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryRuntimeConfigurationErrorO31endpointContainsQueryOrFragmentyAcA0dE6SignalO_tcACmF"
   },
   {
+    "declaration" : "enum TelemetryTailSamplingConfiguration",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingConfiguration",
+    "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryTailSamplingConfigurationO"
+  },
+  {
+    "declaration" : "case enabled(TelemetryTailSamplingPolicy)",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingConfiguration.enabled(_:)",
+    "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryTailSamplingConfigurationO7enabledyAcA0deF6PolicyVcACmF"
+  },
+  {
+    "declaration" : "case disabled",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingConfiguration.disabled",
+    "preciseIdentifier" : "s:23ComposableOTelExporters34TelemetryTailSamplingConfigurationO8disabledyA2CmF"
+  },
+  {
+    "declaration" : "enum TelemetryTailSamplingConfigurationError",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingConfigurationError",
+    "preciseIdentifier" : "s:23ComposableOTelExporters39TelemetryTailSamplingConfigurationErrorO"
+  },
+  {
+    "declaration" : "case invalidLimits",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelExporters",
+    "path" : "TelemetryTailSamplingConfigurationError.invalidLimits",
+    "preciseIdentifier" : "s:23ComposableOTelExporters39TelemetryTailSamplingConfigurationErrorO13invalidLimitsyA2CmF"
+  },
+  {
     "declaration" : "static func test(metricReader: InMemoryMetricReader? = nil, contractMetricReader: InMemoryMetricReader? = nil, resourceMode: TelemetryResourceMode = .native(environment: .test), policy: TelemetryPolicy = .init()) throws -> (client: TelemetryClient, collectors: TestCollectors)",
     "kind" : "swift.type.method",
     "module" : "ComposableOTelTesting",
     "path" : "TelemetryClient.test(metricReader:contractMetricReader:resourceMode:policy:)",
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV0aB7TestingE4test12metricReader014contractMetricH012resourceMode6policyAC6client_AD14TestCollectorsV10collectorstAD08InMemoryjH0CSg_ApA0c8ResourceL0OAA0C6PolicyVtKFZ"
+  },
+  {
+    "declaration" : "static func test(samplingRatio: Double, tailSampling: TelemetryTailSamplingConfiguration, metricReader: InMemoryMetricReader? = nil, contractMetricReader: InMemoryMetricReader? = nil, resourceMode: TelemetryResourceMode = .native(environment: .test), policy: TelemetryPolicy = .init()) throws -> (client: TelemetryClient, collectors: TestCollectors)",
+    "kind" : "swift.type.method",
+    "module" : "ComposableOTelTesting",
+    "path" : "TelemetryClient.test(samplingRatio:tailSampling:metricReader:contractMetricReader:resourceMode:policy:)",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV0aB7TestingE4test13samplingRatio12tailSampling12metricReader014contractMetricL012resourceMode6policyAC6client_AD14TestCollectorsV10collectorstSd_0aB9Exporters0c4TailJ13ConfigurationOAD08InMemorynL0CSgAuA0c8ResourceP0OAA0C6PolicyVtKFZ"
   },
   {
     "declaration" : "struct TestCollectors",
@@ -1358,6 +1505,13 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting14TestCollectorsV15decodedResource3forAA015DecodedContractG0VSg0aB009TelemetryG10DefinitionVyxG_ts8SendableRzlF"
   },
   {
+    "declaration" : "var tailSamplingState: TestTailSamplingState? { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestCollectors.tailSamplingState",
+    "preciseIdentifier" : "s:21ComposableOTelTesting14TestCollectorsV17tailSamplingStateAA0d4TailgH0VSgvp"
+  },
+  {
     "declaration" : "func decodedOperationalEvents<Payload>(for definition: TelemetryOperationalEventDefinition<Payload>) -> [DecodedOperationalEvent] where Payload : Sendable",
     "kind" : "swift.method",
     "module" : "ComposableOTelTesting",
@@ -1391,6 +1545,13 @@
     "module" : "ComposableOTelTesting",
     "path" : "DecodedContractLog",
     "preciseIdentifier" : "s:21ComposableOTelTesting18DecodedContractLogV"
+  },
+  {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "DecodedContractLog.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting18DecodedContractLogV11hostContextAA021CapturedTelemetryHostH0VSgvp"
   },
   {
     "declaration" : "let contractVersion: Int",
@@ -1435,6 +1596,13 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting19DecodedContractSpanV"
   },
   {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "DecodedContractSpan.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting19DecodedContractSpanV11hostContextAA021CapturedTelemetryHostH0VSgvp"
+  },
+  {
     "declaration" : "let contractVersion: Int",
     "kind" : "swift.property",
     "module" : "ComposableOTelTesting",
@@ -1468,6 +1636,13 @@
     "module" : "ComposableOTelTesting",
     "path" : "CapturedTelemetryLog.templateID",
     "preciseIdentifier" : "s:21ComposableOTelTesting20CapturedTelemetryLogV10templateIDSSvp"
+  },
+  {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLog.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting20CapturedTelemetryLogV11hostContextAA0de4HostH0VSgvp"
   },
   {
     "declaration" : "let spanContext: SpanContext?",
@@ -1505,6 +1680,13 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting20CapturedTelemetryLogV8templateSSvp"
   },
   {
+    "declaration" : "init(eventName: String, template: String, templateID: String, body: String, severity: TelemetryLogSeverity, publicValues: [CapturedTelemetryLogPublicValue], spanContext: SpanContext?, hostContext: CapturedTelemetryHostContext?)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLog.init(eventName:template:templateID:body:severity:publicValues:spanContext:hostContext:)",
+    "preciseIdentifier" : "s:21ComposableOTelTesting20CapturedTelemetryLogV9eventName8template0I2ID4body8severity12publicValues11spanContext04hostP0ACSS_S3S0aB00eF8SeverityOSayAA0deF11PublicValueVG04OpenE3Api04SpanP0VSgAA0de4HostP0VSgtcfc"
+  },
+  {
     "declaration" : "init(eventName: String, template: String, templateID: String, body: String, severity: TelemetryLogSeverity, publicValues: [CapturedTelemetryLogPublicValue], spanContext: SpanContext?)",
     "kind" : "swift.init",
     "module" : "ComposableOTelTesting",
@@ -1538,6 +1720,13 @@
     "module" : "ComposableOTelTesting",
     "path" : "InMemoryLogCollector.forceFlush(explicitTimeout:)",
     "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryLogCollectorC10forceFlush15explicitTimeout16OpenTelemetrySdk12ExportResultOSdSg_tF"
+  },
+  {
+    "declaration" : "var capturedRecords: [CapturedTelemetryLogRecord] { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemoryLogCollector.capturedRecords",
+    "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryLogCollectorC15capturedRecordsSayAA017CapturedTelemetryF6RecordVGvp"
   },
   {
     "declaration" : "var privacyAwareLogs: [CapturedTelemetryLog] { get }",
@@ -1631,11 +1820,25 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryMetricReaderC14collectMetricsSay16OpenTelemetrySdk0F4DataVGyF"
   },
   {
+    "declaration" : "var containsHostContext: Bool { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemoryMetricReader.containsHostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryMetricReaderC19containsHostContextSbvp"
+  },
+  {
     "declaration" : "func getDefaultAggregation(for instrument: InstrumentType) -> Aggregation",
     "kind" : "swift.method",
     "module" : "ComposableOTelTesting",
     "path" : "InMemoryMetricReader.getDefaultAggregation(for:)",
     "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryMetricReaderC21getDefaultAggregation3for16OpenTelemetrySdk0J0_pAF14InstrumentTypeO_tF"
+  },
+  {
+    "declaration" : "func assertHostContextExcluded(file: StaticString = #filePath, line: UInt = #line)",
+    "kind" : "swift.method",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemoryMetricReader.assertHostContextExcluded(file:line:)",
+    "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryMetricReaderC25assertHostContextExcluded4file4lineys12StaticStringV_SutF"
   },
   {
     "declaration" : "func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality",
@@ -1680,11 +1883,88 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting20InMemoryMetricReaderC8shutdown16OpenTelemetrySdk12ExportResultOyF"
   },
   {
+    "declaration" : "struct CapturedTelemetrySpan",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV"
+  },
+  {
+    "declaration" : "let parentSpanID: String?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.parentSpanID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV06parentF2IDSSSgvp"
+  },
+  {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV11hostContextAA0de4HostH0VSgvp"
+  },
+  {
+    "declaration" : "let durationMilliseconds: Double",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.durationMilliseconds",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV20durationMillisecondsSdvp"
+  },
+  {
+    "declaration" : "let name: String",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.name",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV4nameSSvp"
+  },
+  {
+    "declaration" : "let events: [CapturedTelemetrySpanEvent]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.events",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV6eventsSayAA0deF5EventVGvp"
+  },
+  {
+    "declaration" : "let spanID: String",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.spanID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV6spanIDSSvp"
+  },
+  {
+    "declaration" : "let status: CapturedTelemetrySpanStatus",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.status",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV6statusAA0deF6StatusOvp"
+  },
+  {
+    "declaration" : "let traceID: String",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.traceID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV7traceIDSSvp"
+  },
+  {
+    "declaration" : "let metadata: [String : TelemetryDecodedScalar]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpan.metadata",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21CapturedTelemetrySpanV8metadataSDySSAA0E13DecodedScalarOGvp"
+  },
+  {
     "declaration" : "final class InMemorySpanCollector",
     "kind" : "swift.class",
     "module" : "ComposableOTelTesting",
     "path" : "InMemorySpanCollector",
     "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC"
+  },
+  {
+    "declaration" : "func assertSpanTrees(exactly expected: [TelemetrySpanTreeExpectation], file: StaticString = #filePath, line: UInt = #line)",
+    "kind" : "swift.method",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemorySpanCollector.assertSpanTrees(exactly:file:line:)",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC06assertF5Trees7exactly4file4lineySayAA09TelemetryF15TreeExpectationVG_s12StaticStringVSutF"
   },
   {
     "declaration" : "func assertSpanExists(named name: String, withAttributes attributes: [String : String] = [:], file: StaticString = #filePath, line: UInt = #line)",
@@ -1699,6 +1979,20 @@
     "module" : "ComposableOTelTesting",
     "path" : "InMemorySpanCollector.assertNoSpan(named:file:line:)",
     "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC08assertNoF05named4file4lineySS_s12StaticStringVSutF"
+  },
+  {
+    "declaration" : "var capturedSpans: [CapturedTelemetrySpan] { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemorySpanCollector.capturedSpans",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC13capturedSpansSayAA017CapturedTelemetryF0VGvp"
+  },
+  {
+    "declaration" : "var spanTreeExpectations: [TelemetrySpanTreeExpectation] { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemorySpanCollector.spanTreeExpectations",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC20spanTreeExpectationsSayAA09TelemetryfI11ExpectationVGvp"
   },
   {
     "declaration" : "func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode",
@@ -1743,11 +2037,53 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC8shutdown15explicitTimeoutySdSg_tF"
   },
   {
+    "declaration" : "var spanTrees: [CapturedTelemetrySpanTree] { get }",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "InMemorySpanCollector.spanTrees",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorC9spanTreesSayAA017CapturedTelemetryF4TreeVGvp"
+  },
+  {
     "declaration" : "init()",
     "kind" : "swift.init",
     "module" : "ComposableOTelTesting",
     "path" : "InMemorySpanCollector.init()",
     "preciseIdentifier" : "s:21ComposableOTelTesting21InMemorySpanCollectorCACycfc"
+  },
+  {
+    "declaration" : "struct TestTailSamplingState",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestTailSamplingState",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21TestTailSamplingStateV"
+  },
+  {
+    "declaration" : "let retainedSpanCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestTailSamplingState.retainedSpanCount",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21TestTailSamplingStateV17retainedSpanCountSivp"
+  },
+  {
+    "declaration" : "let retainedTraceCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestTailSamplingState.retainedTraceCount",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21TestTailSamplingStateV18retainedTraceCountSivp"
+  },
+  {
+    "declaration" : "let retainedByteEstimate: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestTailSamplingState.retainedByteEstimate",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21TestTailSamplingStateV20retainedByteEstimateSivp"
+  },
+  {
+    "declaration" : "let retainedBreadcrumbCount: Int",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TestTailSamplingState.retainedBreadcrumbCount",
+    "preciseIdentifier" : "s:21ComposableOTelTesting21TestTailSamplingStateV23retainedBreadcrumbCountSivp"
   },
   {
     "declaration" : "struct DecodedContractCounter",
@@ -1869,6 +2205,13 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting23DecodedOperationalEventV"
   },
   {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "DecodedOperationalEvent.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting23DecodedOperationalEventV11hostContextAA021CapturedTelemetryHostH0VSgvp"
+  },
+  {
     "declaration" : "let contractVersion: Int",
     "kind" : "swift.property",
     "module" : "ComposableOTelTesting",
@@ -1918,6 +2261,132 @@
     "preciseIdentifier" : "s:21ComposableOTelTesting23EncodedTelemetryRequestV6signal0aB9Exporters0E13RuntimeSignalOSgvp"
   },
   {
+    "declaration" : "struct CapturedTelemetrySpanTree",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanTree",
+    "preciseIdentifier" : "s:21ComposableOTelTesting25CapturedTelemetrySpanTreeV"
+  },
+  {
+    "declaration" : "let span: CapturedTelemetrySpan",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanTree.span",
+    "preciseIdentifier" : "s:21ComposableOTelTesting25CapturedTelemetrySpanTreeV4spanAA0deF0Vvp"
+  },
+  {
+    "declaration" : "let children: [CapturedTelemetrySpanTree]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanTree.children",
+    "preciseIdentifier" : "s:21ComposableOTelTesting25CapturedTelemetrySpanTreeV8childrenSayACGvp"
+  },
+  {
+    "declaration" : "struct CapturedTelemetryLogRecord",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV"
+  },
+  {
+    "declaration" : "let hostContext: CapturedTelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.hostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV11hostContextAA0de4HostI0VSgvp"
+  },
+  {
+    "declaration" : "let body: String?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.body",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV4bodySSSgvp"
+  },
+  {
+    "declaration" : "let spanID: String?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.spanID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV6spanIDSSSgvp"
+  },
+  {
+    "declaration" : "let traceID: String?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.traceID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV7traceIDSSSgvp"
+  },
+  {
+    "declaration" : "let metadata: [String : TelemetryDecodedScalar]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.metadata",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV8metadataSDySSAA0E13DecodedScalarOGvp"
+  },
+  {
+    "declaration" : "let severity: TelemetryLogSeverity?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.severity",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV8severity0aB00eF8SeverityOSgvp"
+  },
+  {
+    "declaration" : "let eventName: String?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryLogRecord.eventName",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetryLogRecordV9eventNameSSSgvp"
+  },
+  {
+    "declaration" : "struct CapturedTelemetrySpanEvent",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanEvent",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetrySpanEventV"
+  },
+  {
+    "declaration" : "let name: String",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanEvent.name",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetrySpanEventV4nameSSvp"
+  },
+  {
+    "declaration" : "let metadata: [String : TelemetryDecodedScalar]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanEvent.metadata",
+    "preciseIdentifier" : "s:21ComposableOTelTesting26CapturedTelemetrySpanEventV8metadataSDySSAA0E13DecodedScalarOGvp"
+  },
+  {
+    "declaration" : "enum CapturedTelemetrySpanStatus",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanStatus",
+    "preciseIdentifier" : "s:21ComposableOTelTesting27CapturedTelemetrySpanStatusO"
+  },
+  {
+    "declaration" : "case ok",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanStatus.ok",
+    "preciseIdentifier" : "s:21ComposableOTelTesting27CapturedTelemetrySpanStatusO2okyA2CmF"
+  },
+  {
+    "declaration" : "case error",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanStatus.error",
+    "preciseIdentifier" : "s:21ComposableOTelTesting27CapturedTelemetrySpanStatusO5erroryA2CmF"
+  },
+  {
+    "declaration" : "case unset",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetrySpanStatus.unset",
+    "preciseIdentifier" : "s:21ComposableOTelTesting27CapturedTelemetrySpanStatusO5unsetyA2CmF"
+  },
+  {
     "declaration" : "enum TelemetryDecodedTemporality",
     "kind" : "swift.enum",
     "module" : "ComposableOTelTesting",
@@ -1937,6 +2406,69 @@
     "module" : "ComposableOTelTesting",
     "path" : "TelemetryDecodedTemporality.delta",
     "preciseIdentifier" : "s:21ComposableOTelTesting27TelemetryDecodedTemporalityO5deltayA2CmF"
+  },
+  {
+    "declaration" : "struct CapturedTelemetryHostContext",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryHostContext",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28CapturedTelemetryHostContextV"
+  },
+  {
+    "declaration" : "let processKind: TelemetryHostProcessKind",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryHostContext.processKind",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28CapturedTelemetryHostContextV11processKind0aB00ef7ProcessI0Ovp"
+  },
+  {
+    "declaration" : "let processSessionID: TelemetryProcessSessionID",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryHostContext.processSessionID",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28CapturedTelemetryHostContextV16processSessionID0aB00e7ProcessiJ0Vvp"
+  },
+  {
+    "declaration" : "init(processSessionID: TelemetryProcessSessionID, platform: TelemetryHostPlatform, processKind: TelemetryHostProcessKind)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryHostContext.init(processSessionID:platform:processKind:)",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28CapturedTelemetryHostContextV16processSessionID8platform0H4KindAC0aB00e7ProcessiJ0V_AG0eF8PlatformOAG0efmL0Otcfc"
+  },
+  {
+    "declaration" : "let platform: TelemetryHostPlatform",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "CapturedTelemetryHostContext.platform",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28CapturedTelemetryHostContextV8platform0aB00eF8PlatformOvp"
+  },
+  {
+    "declaration" : "struct TelemetrySpanTreeExpectation",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTelTesting",
+    "path" : "TelemetrySpanTreeExpectation",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28TelemetrySpanTreeExpectationV"
+  },
+  {
+    "declaration" : "let name: String",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TelemetrySpanTreeExpectation.name",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28TelemetrySpanTreeExpectationV4nameSSvp"
+  },
+  {
+    "declaration" : "let children: [TelemetrySpanTreeExpectation]",
+    "kind" : "swift.property",
+    "module" : "ComposableOTelTesting",
+    "path" : "TelemetrySpanTreeExpectation.children",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28TelemetrySpanTreeExpectationV8childrenSayACGvp"
+  },
+  {
+    "declaration" : "init(_ name: String, children: [TelemetrySpanTreeExpectation] = [])",
+    "kind" : "swift.init",
+    "module" : "ComposableOTelTesting",
+    "path" : "TelemetrySpanTreeExpectation.init(_:children:)",
+    "preciseIdentifier" : "s:21ComposableOTelTesting28TelemetrySpanTreeExpectationV_8childrenACSS_SayACGtcfc"
   },
   {
     "declaration" : "enum CapturedTelemetryLogValueKind",
@@ -2513,6 +3045,13 @@
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO12errorHandledSSvpZ"
   },
   {
+    "declaration" : "static let hostPlatform: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.hostPlatform",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO12hostPlatformSSvpZ"
+  },
+  {
     "declaration" : "static let stateChanged: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
@@ -2576,11 +3115,25 @@
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO15effectLongLivedSSvpZ"
   },
   {
+    "declaration" : "static let hostProcessKind: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.hostProcessKind",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO15hostProcessKindSSvpZ"
+  },
+  {
     "declaration" : "static let navigationRoute: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TCAAttributes.navigationRoute",
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO15navigationRouteSSvpZ"
+  },
+  {
+    "declaration" : "static let processSessionID: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.processSessionID",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO16processSessionIDSSvpZ"
   },
   {
     "declaration" : "static let reducerDurationMs: String",
@@ -2695,11 +3248,25 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV19withSynchronousSpan_7payload9operationq_AA0cG10DefinitionVyxG_xq_yYbKXEtKs8SendableRzsAJR_r0_lF"
   },
   {
+    "declaration" : "@discardableResult func triggerDiagnosticTracePromotion() -> TelemetryTailPromotionResult",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryClient.triggerDiagnosticTracePromotion()",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV31triggerDiagnosticTracePromotionAA0c4TailH6ResultOyF"
+  },
+  {
     "declaration" : "func add<Payload>(_ definition: TelemetryCounterDefinition<Payload>, delta: TelemetryCounterDelta, payload: Payload) throws where Payload : Sendable",
     "kind" : "swift.method",
     "module" : "ComposableOTel",
     "path" : "TelemetryClient.add(_:delta:payload:)",
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV3add_5delta7payloadyAA0C17CounterDefinitionVyxG_AA0cH5DeltaVxtKs8SendableRzlF"
+  },
+  {
+    "declaration" : "@discardableResult func log(_ severity: TelemetryLogSeverity, _ message: @autoclosure () -> TelemetryLogMessage, debugConsole renderer: TelemetryDebugConsoleRenderer) -> TelemetryLogRecordingResult",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryClient.log(_:_:debugConsole:)",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryClientV3log__12debugConsoleAA0C18LogRecordingResultOAA0cH8SeverityO_AA0cH7MessageVyXKAA0c5DebugG8RendererVtF"
   },
   {
     "declaration" : "@discardableResult func log(_ severity: TelemetryLogSeverity, _ message: TelemetryLogMessage) -> TelemetryLogRecordingResult",
@@ -2751,6 +3318,13 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV"
   },
   {
+    "declaration" : "let hostContext: TelemetryHostContext?",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryPolicy.hostContext",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV11hostContextAA0c4HostF0VSgvp"
+  },
+  {
     "declaration" : "func errorMetadata(for error: Error) -> TelemetryErrorMetadata",
     "kind" : "swift.method",
     "module" : "ComposableOTel",
@@ -2758,11 +3332,25 @@
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV13errorMetadata3forAA0c5ErrorF0Vs0H0_p_tF"
   },
   {
+    "declaration" : "init(schema: TelemetrySchema = .denyAll, catalog: TelemetryContractCatalog = .empty, signals: TelemetrySignalConfiguration = .init(), hostContext: TelemetryHostContext, logging: TelemetryLoggingConfiguration = .init(), classifyError: @escaping @Sendable (Error) -> TelemetryErrorMetadata = { _ in .init() })",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryPolicy.init(schema:catalog:signals:hostContext:logging:classifyError:)",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV6schema7catalog7signals11hostContext7logging13classifyErrorAcA0C6SchemaV_AA0C15ContractCatalogVAA0C19SignalConfigurationVAA0c4HostI0VAA0c7LoggingQ0VAA0cL8MetadataVs0L0_pYbctcfc"
+  },
+  {
     "declaration" : "init(schema: TelemetrySchema = .denyAll, catalog: TelemetryContractCatalog = .empty, signals: TelemetrySignalConfiguration = .init(), classifyError: @escaping @Sendable (Error) -> TelemetryErrorMetadata = { _ in .init() })",
     "kind" : "swift.init",
     "module" : "ComposableOTel",
     "path" : "TelemetryPolicy.init(schema:catalog:signals:classifyError:)",
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV6schema7catalog7signals13classifyErrorAcA0C6SchemaV_AA0C15ContractCatalogVAA0C19SignalConfigurationVAA0cI8MetadataVs0I0_pYbctcfc"
+  },
+  {
+    "declaration" : "init(schema: TelemetrySchema = .denyAll, catalog: TelemetryContractCatalog = .empty, signals: TelemetrySignalConfiguration = .init(), logging: TelemetryLoggingConfiguration, classifyError: @escaping @Sendable (Error) -> TelemetryErrorMetadata = { _ in .init() })",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryPolicy.init(schema:catalog:signals:logging:classifyError:)",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV6schema7catalog7signals7logging13classifyErrorAcA0C6SchemaV_AA0C15ContractCatalogVAA0C19SignalConfigurationVAA0c7LoggingO0VAA0cJ8MetadataVs0J0_pYbctcfc"
   },
   {
     "declaration" : "let schema: TelemetrySchema",
@@ -2777,6 +3365,13 @@
     "module" : "ComposableOTel",
     "path" : "TelemetryPolicy.catalog",
     "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV7catalogAA0C15ContractCatalogVvp"
+  },
+  {
+    "declaration" : "let logging: TelemetryLoggingConfiguration",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryPolicy.logging",
+    "preciseIdentifier" : "s:14ComposableOTel15TelemetryPolicyV7loggingAA0C20LoggingConfigurationVvp"
   },
   {
     "declaration" : "let signals: TelemetrySignalConfiguration",
@@ -3169,6 +3764,13 @@
     "module" : "ComposableOTel",
     "path" : "InstrumentedReducer",
     "preciseIdentifier" : "s:14ComposableOTel19InstrumentedReducerV"
+  },
+  {
+    "declaration" : "init(base: Base, feature: FeatureID, selectiveAction: @escaping @Sendable (Base.Action) -> ActionID?, stateChangeToken: (@Sendable (Base.State) -> StateChangeToken)? = nil)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "InstrumentedReducer.init(base:feature:selectiveAction:stateChangeToken:)",
+    "preciseIdentifier" : "s:14ComposableOTel19InstrumentedReducerV4base7feature15selectiveAction16stateChangeTokenACyxGx_AA19TelemetryIdentifierVyAA07FeatureM4KindOGAJyAA0hmO0OGSg0H0QzYbcAA05StatejK0V0P0QzYbcSgtcfc"
   },
   {
     "declaration" : "init(base: Base, feature: FeatureID, action: @escaping @Sendable (Base.Action) -> ActionID, stateChangeToken: (@Sendable (Base.State) -> StateChangeToken)? = nil)",
@@ -3591,6 +4193,41 @@
     "preciseIdentifier" : "s:14ComposableOTel20EffectIdentifierKindO"
   },
   {
+    "declaration" : "struct TelemetryHostContext",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostContext",
+    "preciseIdentifier" : "s:14ComposableOTel20TelemetryHostContextV"
+  },
+  {
+    "declaration" : "let processKind: TelemetryHostProcessKind",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostContext.processKind",
+    "preciseIdentifier" : "s:14ComposableOTel20TelemetryHostContextV11processKindAA0cd7ProcessG0Ovp"
+  },
+  {
+    "declaration" : "init(processSessionID: TelemetryProcessSessionID = .current, platform: TelemetryHostPlatform = .current, processKind: TelemetryHostProcessKind = .application)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostContext.init(processSessionID:platform:processKind:)",
+    "preciseIdentifier" : "s:14ComposableOTel20TelemetryHostContextV16processSessionID8platform0F4KindAcA0c7ProcessgH0V_AA0cD8PlatformOAA0cdkJ0Otcfc"
+  },
+  {
+    "declaration" : "let processSessionID: TelemetryProcessSessionID",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostContext.processSessionID",
+    "preciseIdentifier" : "s:14ComposableOTel20TelemetryHostContextV16processSessionIDAA0c7ProcessgH0Vvp"
+  },
+  {
+    "declaration" : "let platform: TelemetryHostPlatform",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostContext.platform",
+    "preciseIdentifier" : "s:14ComposableOTel20TelemetryHostContextV8platformAA0cD8PlatformOvp"
+  },
+  {
     "declaration" : "struct TelemetryLogDuration",
     "kind" : "swift.struct",
     "module" : "ComposableOTel",
@@ -3771,6 +4408,48 @@
     "module" : "ComposableOTel",
     "path" : "TelemetryCounterDelta.init(_:)",
     "preciseIdentifier" : "s:14ComposableOTel21TelemetryCounterDeltaVyACSiKcfc"
+  },
+  {
+    "declaration" : "enum TelemetryHostPlatform",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO"
+  },
+  {
+    "declaration" : "case iOS",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform.iOS",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO3iOSyA2CmF"
+  },
+  {
+    "declaration" : "case macOS",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform.macOS",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO5macOSyA2CmF"
+  },
+  {
+    "declaration" : "static var current: TelemetryHostPlatform { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform.current",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO7currentACvpZ"
+  },
+  {
+    "declaration" : "case watchOS",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform.watchOS",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO7watchOSyA2CmF"
+  },
+  {
+    "declaration" : "init?(rawValue: String)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostPlatform.init(rawValue:)",
+    "preciseIdentifier" : "s:14ComposableOTel21TelemetryHostPlatformO8rawValueACSgSS_tcfc"
   },
   {
     "declaration" : "enum TelemetryResourceMode",
@@ -4249,6 +4928,76 @@
     "preciseIdentifier" : "s:14ComposableOTel24TelemetryContractVersionVyACSiKcfc"
   },
   {
+    "declaration" : "enum TelemetryHostProcessKind",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostProcessKind",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryHostProcessKindO"
+  },
+  {
+    "declaration" : "case application",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostProcessKind.application",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryHostProcessKindO11applicationyA2CmF"
+  },
+  {
+    "declaration" : "case appExtension",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostProcessKind.appExtension",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryHostProcessKindO12appExtensionyA2CmF"
+  },
+  {
+    "declaration" : "case test",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostProcessKind.test",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryHostProcessKindO4testyA2CmF"
+  },
+  {
+    "declaration" : "init?(rawValue: String)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryHostProcessKind.init(rawValue:)",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryHostProcessKindO8rawValueACSgSS_tcfc"
+  },
+  {
+    "declaration" : "struct TelemetryLogSamplingRate",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLogSamplingRate",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryLogSamplingRateV"
+  },
+  {
+    "declaration" : "static let never: TelemetryLogSamplingRate",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLogSamplingRate.never",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryLogSamplingRateV5neverACvpZ"
+  },
+  {
+    "declaration" : "static let always: TelemetryLogSamplingRate",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLogSamplingRate.always",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryLogSamplingRateV6alwaysACvpZ"
+  },
+  {
+    "declaration" : "let rawValue: Double",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLogSamplingRate.rawValue",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryLogSamplingRateV8rawValueSdvp"
+  },
+  {
+    "declaration" : "init?(_ rawValue: Double)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLogSamplingRate.init(_:)",
+    "preciseIdentifier" : "s:14ComposableOTel24TelemetryLogSamplingRateVyACSgSdcfc"
+  },
+  {
     "declaration" : "struct AnyTelemetryLogDefinition",
     "kind" : "swift.struct",
     "module" : "ComposableOTel",
@@ -4261,6 +5010,41 @@
     "module" : "ComposableOTel",
     "path" : "AnyTelemetryLogDefinition.init(_:)",
     "preciseIdentifier" : "s:14ComposableOTel25AnyTelemetryLogDefinitionVyAcA0deF0VyxGcs8SendableRzlufc"
+  },
+  {
+    "declaration" : "struct TelemetryProcessSessionID",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryProcessSessionID",
+    "preciseIdentifier" : "s:14ComposableOTel25TelemetryProcessSessionIDV"
+  },
+  {
+    "declaration" : "init?(validating value: String)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryProcessSessionID.init(validating:)",
+    "preciseIdentifier" : "s:14ComposableOTel25TelemetryProcessSessionIDV10validatingACSgSS_tcfc"
+  },
+  {
+    "declaration" : "static let current: TelemetryProcessSessionID",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryProcessSessionID.current",
+    "preciseIdentifier" : "s:14ComposableOTel25TelemetryProcessSessionIDV7currentACvpZ"
+  },
+  {
+    "declaration" : "let rawValue: UUID",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryProcessSessionID.rawValue",
+    "preciseIdentifier" : "s:14ComposableOTel25TelemetryProcessSessionIDV8rawValue10Foundation4UUIDVvp"
+  },
+  {
+    "declaration" : "init(_ rawValue: UUID)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryProcessSessionID.init(_:)",
+    "preciseIdentifier" : "s:14ComposableOTel25TelemetryProcessSessionIDVyAC10Foundation4UUIDVcfc"
   },
   {
     "declaration" : "struct AnyTelemetrySpanDefinition",
@@ -4480,6 +5264,48 @@
     "preciseIdentifier" : "s:14ComposableOTel28TelemetrySignalConfigurationV8disabledACvpZ"
   },
   {
+    "declaration" : "enum TelemetryTailPromotionResult",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO"
+  },
+  {
+    "declaration" : "case noActiveTrace",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult.noActiveTrace",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO13noActiveTraceyA2CmF"
+  },
+  {
+    "declaration" : "case alreadySampled",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult.alreadySampled",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO14alreadySampledyA2CmF"
+  },
+  {
+    "declaration" : "case dropped",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult.dropped",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO7droppedyA2CmF"
+  },
+  {
+    "declaration" : "case disabled",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult.disabled",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO8disabledyA2CmF"
+  },
+  {
+    "declaration" : "case promoted",
+    "kind" : "swift.enum.case",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryTailPromotionResult.promoted",
+    "preciseIdentifier" : "s:14ComposableOTel28TelemetryTailPromotionResultO8promotedyA2CmF"
+  },
+  {
     "declaration" : "struct AnyTelemetryCounterDefinition",
     "kind" : "swift.struct",
     "module" : "ComposableOTel",
@@ -4492,6 +5318,69 @@
     "module" : "ComposableOTel",
     "path" : "AnyTelemetryCounterDefinition.init(_:)",
     "preciseIdentifier" : "s:14ComposableOTel29AnyTelemetryCounterDefinitionVyAcA0deF0VyxGcs8SendableRzlufc"
+  },
+  {
+    "declaration" : "struct TelemetryDebugConsoleRenderer",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDebugConsoleRenderer",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryDebugConsoleRendererV"
+  },
+  {
+    "declaration" : "static let standardOutput: TelemetryDebugConsoleRenderer",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDebugConsoleRenderer.standardOutput",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryDebugConsoleRendererV14standardOutputACvpZ"
+  },
+  {
+    "declaration" : "init(_ operation: @escaping @Sendable (TelemetryLogSeverity, String) -> Void)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDebugConsoleRenderer.init(_:)",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryDebugConsoleRendererVyACyAA0C11LogSeverityO_SStYbccfc"
+  },
+  {
+    "declaration" : "struct TelemetryLoggingConfiguration",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV"
+  },
+  {
+    "declaration" : "var infoSampling: TelemetryLogSamplingRate",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration.infoSampling",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV12infoSamplingAA0c3LogG4RateVvp"
+  },
+  {
+    "declaration" : "var errorSampling: TelemetryLogSamplingRate",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration.errorSampling",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV13errorSamplingAA0c3LogG4RateVvp"
+  },
+  {
+    "declaration" : "init(minimumSeverity: TelemetryLogSeverity = .info, infoSampling: TelemetryLogSamplingRate = .always, errorSampling: TelemetryLogSamplingRate = .always, deterministicSeed: UInt64 = 0x6f74_656c_2d6c_6f67)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration.init(minimumSeverity:infoSampling:errorSampling:deterministicSeed:)",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV15minimumSeverity12infoSampling05errorI017deterministicSeedAcA0c3LogG0O_AA0cmI4RateVAKs6UInt64Vtcfc"
+  },
+  {
+    "declaration" : "var minimumSeverity: TelemetryLogSeverity",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration.minimumSeverity",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV15minimumSeverityAA0c3LogG0Ovp"
+  },
+  {
+    "declaration" : "var deterministicSeed: UInt64",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryLoggingConfiguration.deterministicSeed",
+    "preciseIdentifier" : "s:14ComposableOTel29TelemetryLoggingConfigurationV17deterministicSeeds6UInt64Vvp"
   },
   {
     "declaration" : "struct AnyTelemetryResourceDefinition",
@@ -4681,5 +5570,12 @@
     "module" : "ComposableOTel",
     "path" : "Reducer.instrumented(feature:action:stateChangeToken:)",
     "preciseIdentifier" : "s:22ComposableArchitecture7ReducerP0A4OTelE12instrumented7feature6action16stateChangeTokenAD012InstrumentedC0VyxGAD19TelemetryIdentifierVyAD07FeatureM4KindOG_AMyAD06ActionmO0OG0P0QzYbcAD05StateiJ0V0Q0QzYbcSgtF"
+  },
+  {
+    "declaration" : "func selectivelyInstrumented(feature: FeatureID, action: @escaping @Sendable (Action) -> ActionID?, stateChangeToken: (@Sendable (State) -> StateChangeToken)? = nil) -> InstrumentedReducer<Self>",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "Reducer.selectivelyInstrumented(feature:action:stateChangeToken:)",
+    "preciseIdentifier" : "s:22ComposableArchitecture7ReducerP0A4OTelE23selectivelyInstrumented7feature6action16stateChangeTokenAD0fC0VyxGAD19TelemetryIdentifierVyAD07FeatureM4KindOG_AMyAD06ActionmO0OGSg0P0QzYbcAD05StatejK0V0Q0QzYbcSgtF"
   }
 ]

@@ -14,7 +14,7 @@ The conventions are package-generic. Application-specific product names, flows, 
 classifications, consent rules, and retention rules do not belong in this package.
 
 The package-specific `tca.*` namespace was reviewed against OpenTelemetry semantic conventions
-v1.43.0 on 2026-07-12. `API/SemanticConventions.lock` binds the source declarations to that review.
+v1.43.0 on 2026-08-05. `API/SemanticConventions.lock` binds the source declarations to that review.
 Adding or renaming a convention requires updating the DocC contract, release or migration notes,
 the lock, cardinality analysis, API baseline where applicable, and release review. CI fails when the
 source changes without that explicit lock update.
@@ -62,12 +62,18 @@ Allowed string attributes are schema-bounded feature, action, effect, dependency
 and error identifiers. Allowed booleans describe state change, lifecycle, and error flags. Reducer
 duration is a finite nonnegative number capped at one day.
 
+Registered host context adds exactly `app.process.session.id`, `app.host.platform`, and
+`app.host.process_kind` after span privacy validation. The session value is a canonical anonymous
+process-lifetime UUID; the remaining values are finite package enums.
+
 ## Logs
 
 Logs are disabled by default. Allowed bodies are fixed to `Action dispatched`, `Effect failed`,
 `Dependency call failed`, and `Navigation changed`. Unknown raw bodies become `Telemetry event`.
 Log attributes use the same typed allowlist as spans. Unknown event names and attributes are
 dropped. Exported scope metadata is rebuilt from the fixed package scope.
+Registered host context uses the same three exact keys and is injected only after the log record has
+passed privacy and typed-contract validation.
 
 ## Errors
 
@@ -87,6 +93,8 @@ scope, filter exact dimension keys, apply schema aggregation, and define explici
 A catch-all drop view and the privacy-preserving metric exporter drop unknown instruments.
 Export-time filtering is repeated, exemplars are removed, and metrics with unsafe resources are
 dropped. Metrics outside the fixed package scope are also dropped.
+Host-context keys are never passed to metric instruments, are absent from every metric view dimension
+set, and are removed by the export privacy boundary.
 
 Maximum series are:
 

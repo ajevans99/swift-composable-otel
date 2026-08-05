@@ -49,6 +49,11 @@ exporter-boundary filtering and metric views.
 - ``TelemetryLogDuration``
 - ``TelemetryLogCountBucket``
 - ``TelemetryCorrelationID``
+- ``TelemetryHostContext``
+- ``TelemetryProcessSessionID``
+- ``TelemetryLoggingConfiguration``
+- ``TelemetryLogSamplingRate``
+- ``TelemetryTailPromotionResult``
 - ``TelemetryContractCatalog``
 - ``TelemetrySpanDefinition``
 - ``TelemetryLogDefinition``
@@ -67,6 +72,7 @@ exporter-boundary filtering and metric views.
 
 - ``InstrumentedReducer``
 - ``ComposableArchitecture/Reducer/instrumented(feature:action:stateChangeToken:)``
+- ``ComposableArchitecture/Reducer/selectivelyInstrumented(feature:action:stateChangeToken:)``
 - ``ComposableArchitecture/Effect/traceStart(effect:)``
 - ``ComposableArchitecture/Effect/tracedRun(effect:priority:operation:)``
 - ``ComposableArchitecture/Effect/tracedLongLivedRun(effect:priority:operation:)``

@@ -16,11 +16,18 @@ private struct Budgets: Decodable {
     let maximumResidentDeltaBytes: Int64
   }
 
+  struct TailBuffer: Decodable {
+    let records: Int
+    let maximumRetainedBytes: Int
+    let maximumResidentDeltaBytes: Int64
+  }
+
   let schemaVersion: Int
   let benchmarks: [String: UInt64]
   let gateway: Gateway
   let maximumSampledToUnsampledRatio: Double
   let queue: Queue
+  let tailBuffer: TailBuffer
 }
 
 private actor EncodedRequestCapture {
@@ -167,6 +174,10 @@ private enum ReleaseBenchmarks {
       bodyPolicy: .none,
       fields: contractFields
     )
+    let operationalEvent = try TelemetryOperationalEventDefinition<BenchmarkContractPayload>(
+      eventName: TelemetryContractName("benchmark.operation.event"),
+      fields: contractFields
+    )
     let contractCounter = try TelemetryCounterDefinition(
       name: TelemetryContractName("benchmark.contract.events"),
       unit: TelemetryStringValue("{event}"),
@@ -178,6 +189,7 @@ private enum ReleaseBenchmarks {
       contractVersion: .init(1),
       spans: [.init(contractSpan)],
       logs: [.init(contractLog)],
+      operationalEvents: [.init(operationalEvent)],
       counters: [.init(contractCounter)]
     )
     let contractPayload = BenchmarkContractPayload(
@@ -210,6 +222,43 @@ private enum ReleaseBenchmarks {
       signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false)
     )
     await unsampledRuntime.setExportCondition(.unavailable)
+    let tailPolicy = try TelemetryTailSamplingPolicy(
+      slowTraceThreshold: .seconds(1),
+      maximumTraceCount: 32,
+      maximumRetainedSpanCount: 256,
+      maximumRetainedBreadcrumbCount: 128,
+      maximumRetainedBytes: budgets.tailBuffer.maximumRetainedBytes,
+      maximumAge: .seconds(30)
+    )
+    let tailRuntime = try runtime(
+      schema: schema,
+      endpoint: endpoint,
+      transport: transport,
+      samplingRatio: 0,
+      signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false),
+      tailSampling: .enabled(tailPolicy)
+    )
+    await tailRuntime.setExportCondition(.unavailable)
+    let tailMemoryBefore = residentHighWaterBytes()
+    for _ in 0..<budgets.tailBuffer.records {
+      tailRuntime.client.recordNavigation(.push, route: "benchmark-route")
+    }
+    let tailMemoryDelta = max(0, residentHighWaterBytes() - tailMemoryBefore)
+    guard
+      let tailSnapshot = tailRuntime.tailSamplingSnapshot,
+      tailSnapshot.retainedTraceCount > 0,
+      tailSnapshot.retainedTraceCount <= tailPolicy.maximumTraceCount,
+      tailSnapshot.retainedSpanCount <= tailPolicy.maximumRetainedSpanCount,
+      tailSnapshot.retainedBreadcrumbCount <= tailPolicy.maximumRetainedBreadcrumbCount,
+      tailSnapshot.retainedByteEstimate <= tailPolicy.maximumRetainedBytes,
+      tailMemoryDelta <= budgets.tailBuffer.maximumResidentDeltaBytes
+    else {
+      throw BenchmarkFailure.regression(
+        "Tail-buffer memory budget failed: "
+          + "snapshot=\(String(describing: tailRuntime.tailSamplingSnapshot)), "
+          + "memoryDelta=\(tailMemoryDelta)"
+      )
+    }
     let loggingRuntime = try runtime(
       schema: schema,
       endpoint: endpoint,
@@ -218,6 +267,15 @@ private enum ReleaseBenchmarks {
       signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: true)
     )
     await loggingRuntime.setExportCondition(.unavailable)
+    let eventRuntime = try runtime(
+      schema: schema,
+      endpoint: endpoint,
+      transport: transport,
+      samplingRatio: 0,
+      signals: .init(operationalEventsEnabled: true),
+      catalog: contractCatalog
+    )
+    await eventRuntime.setExportCondition(.unavailable)
     let metricsRuntime = try runtime(
       schema: schema,
       endpoint: endpoint,
@@ -380,6 +438,38 @@ private enum ReleaseBenchmarks {
       }
     )
     results.append(
+      try await measure(name: "eventCreation", iterations: 5_000, budget: budgets) {
+        {
+          _ = eventRuntime.client.record(operationalEvent, payload: contractPayload)
+        }
+      }
+    )
+    results.append(
+      try await measure(name: "configuration", iterations: 20_000, budget: budgets) {
+        {
+          _ = TelemetryRuntime.Configuration(
+            serviceName: "benchmark",
+            endpoints: .init(baseURL: endpoint),
+            policy: TelemetryPolicy(schema: schema, catalog: contractCatalog)
+          )
+        }
+      }
+    )
+    results.append(
+      try await measureRuntimeStartup(
+        iterations: 10,
+        budget: budgets
+      ) {
+        try runtime(
+          schema: schema,
+          endpoint: endpoint,
+          transport: transport,
+          samplingRatio: 0,
+          signals: .disabled
+        )
+      }
+    )
+    results.append(
       try await measure(name: "effect", iterations: 2_000, budget: budgets) {
         let store = Store(initialState: BenchmarkFeature.State()) {
           BenchmarkFeature()
@@ -421,6 +511,13 @@ private enum ReleaseBenchmarks {
       try await measure(name: "unsampledSpan", iterations: 10_000, budget: budgets) {
         {
           unsampledRuntime.client.recordNavigation(.push, route: "benchmark-route")
+        }
+      }
+    )
+    results.append(
+      try await measure(name: "tailRetainedSpan", iterations: 5_000, budget: budgets) {
+        {
+          tailRuntime.client.recordNavigation(.push, route: "benchmark-route")
         }
       }
     )
@@ -477,6 +574,13 @@ private enum ReleaseBenchmarks {
         + "\(encodedBodySizes.max() ?? 0) encoded bytes "
         + "(budget \(budgets.gateway.maximumEncodedRequestBytes))"
     )
+    print(
+      "tail buffer: \(tailSnapshot.retainedTraceCount) traces, "
+        + "\(tailSnapshot.retainedSpanCount) spans, "
+        + "\(tailSnapshot.retainedBreadcrumbCount) breadcrumbs, "
+        + "\(tailSnapshot.retainedByteEstimate) estimated bytes, "
+        + "\(tailMemoryDelta) resident high-water delta bytes"
+    )
 
     if let outputIndex = CommandLine.arguments.firstIndex(of: "--output") {
       let pathIndex = CommandLine.arguments.index(after: outputIndex)
@@ -494,7 +598,9 @@ private enum ReleaseBenchmarks {
     _ = await fullRuntime.shutdown(timeout: .milliseconds(100))
     _ = await disabledRuntime.shutdown(timeout: .milliseconds(100))
     _ = await unsampledRuntime.shutdown(timeout: .milliseconds(100))
+    _ = await tailRuntime.shutdown(timeout: .milliseconds(100))
     _ = await loggingRuntime.shutdown(timeout: .milliseconds(100))
+    _ = await eventRuntime.shutdown(timeout: .milliseconds(100))
     _ = await metricsRuntime.shutdown(timeout: .milliseconds(100))
     _ = await queueRuntime.shutdown(timeout: .milliseconds(100))
     _ = await batchingRuntime.shutdown(timeout: .milliseconds(100))
@@ -515,37 +621,40 @@ private enum ReleaseBenchmarks {
     samplingRatio: Double,
     signals: TelemetrySignalConfiguration,
     catalog: TelemetryContractCatalog = .empty,
+    tailSampling: TelemetryTailSamplingConfiguration = .disabled,
     maximumQueueSize: Int = 65_536,
     maximumBatchSize: Int? = nil,
     maximumPendingBatches: Int = 1024,
     maximumEncodedRequestBytes: Int = 64 * 1_024,
     requestTimeout: Duration = .seconds(10)
   ) throws -> TelemetryRuntime {
-    try TelemetryRuntime(
-      configuration: .init(
-        serviceName: "benchmark",
-        endpoints: .init(baseURL: endpoint),
-        samplingRatio: samplingRatio,
-        policy: TelemetryPolicy(schema: schema, catalog: catalog, signals: signals),
-        traces: .init(
-          maximumQueueSize: maximumQueueSize,
-          maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
-          scheduledDelay: .seconds(60)
-        ),
-        logs: .init(
-          maximumQueueSize: maximumQueueSize,
-          maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
-          scheduledDelay: .seconds(60)
-        ),
-        metricExportInterval: .seconds(60),
-        delivery: .init(
-          maximumPendingBatches: maximumPendingBatches,
-          maximumEncodedRequestBytes: maximumEncodedRequestBytes,
-          requestTimeout: requestTimeout
-        ),
-        defaultFlushTimeout: .milliseconds(100),
-        backgroundFlushTimeout: .milliseconds(100)
+    var configuration = TelemetryRuntime.Configuration(
+      serviceName: "benchmark",
+      endpoints: .init(baseURL: endpoint),
+      samplingRatio: samplingRatio,
+      policy: TelemetryPolicy(schema: schema, catalog: catalog, signals: signals),
+      traces: .init(
+        maximumQueueSize: maximumQueueSize,
+        maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
+        scheduledDelay: .seconds(60)
       ),
+      logs: .init(
+        maximumQueueSize: maximumQueueSize,
+        maximumBatchSize: maximumBatchSize ?? maximumQueueSize,
+        scheduledDelay: .seconds(60)
+      ),
+      metricExportInterval: .seconds(60),
+      delivery: .init(
+        maximumPendingBatches: maximumPendingBatches,
+        maximumEncodedRequestBytes: maximumEncodedRequestBytes,
+        requestTimeout: requestTimeout
+      ),
+      defaultFlushTimeout: .milliseconds(100),
+      backgroundFlushTimeout: .milliseconds(100)
+    )
+    configuration.tailSampling = tailSampling
+    return try TelemetryRuntime(
+      configuration: configuration,
       transport: transport,
       authenticator: .none
     )
@@ -579,6 +688,50 @@ private enum ReleaseBenchmarks {
         UInt64(max(0, components.seconds)) * 1_000_000_000
         + UInt64(max(0, components.attoseconds / 1_000_000_000))
       samples.append(nanoseconds / UInt64(iterations))
+    }
+    samples.sort()
+    let measured = samples[samples.count / 2]
+    let result = Result(
+      name: name,
+      iterations: iterations,
+      nanosecondsPerOperation: measured,
+      budgetNanosecondsPerOperation: maximum,
+      passed: measured <= maximum
+    )
+    if !result.passed {
+      throw BenchmarkFailure.regression(
+        "\(name) measured \(measured) ns/op, above budget \(maximum)"
+      )
+    }
+    return result
+  }
+
+  @MainActor
+  private static func measureRuntimeStartup(
+    iterations: Int,
+    budget: Budgets,
+    makeRuntime: @MainActor () throws -> TelemetryRuntime
+  ) async throws -> Result {
+    let name = "runtimeStartup"
+    guard let maximum = budget.benchmarks[name], iterations > 0 else {
+      throw BenchmarkFailure.invalidBudgets
+    }
+    for _ in 0..<2 {
+      let runtime = try makeRuntime()
+      _ = await runtime.shutdown(timeout: .milliseconds(100))
+    }
+
+    var samples: [UInt64] = []
+    let clock = ContinuousClock()
+    for _ in 0..<5 {
+      var sample: UInt64 = 0
+      for _ in 0..<iterations {
+        let start = clock.now
+        let runtime = try makeRuntime()
+        sample += nanoseconds(clock.now - start)
+        _ = await runtime.shutdown(timeout: .milliseconds(100))
+      }
+      samples.append(sample / UInt64(iterations))
     }
     samples.sort()
     let measured = samples[samples.count / 2]
@@ -642,5 +795,11 @@ private enum ReleaseBenchmarks {
     var usage = rusage()
     getrusage(RUSAGE_SELF, &usage)
     return Int64(usage.ru_maxrss)
+  }
+
+  private static func nanoseconds(_ duration: Duration) -> UInt64 {
+    let components = duration.components
+    return UInt64(max(0, components.seconds)) * 1_000_000_000
+      + UInt64(max(0, components.attoseconds / 1_000_000_000))
   }
 }

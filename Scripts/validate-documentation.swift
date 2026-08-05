@@ -158,10 +158,8 @@ if let packageVersion {
   if !readme.contains(expectedInstallation) {
     failures.append("README installation does not use ComposableOTelMetadata.version")
   }
-  if !readme.contains(
-    "[`\(packageVersion)`](https://github.com/ajevans99/swift-composable-otel/tree/\(packageVersion))"
-  ) {
-    failures.append("README current release link does not use ComposableOTelMetadata.version")
+  if !readme.contains("This revision prepares `\(packageVersion)`") {
+    failures.append("README staged release notice does not use ComposableOTelMetadata.version")
   }
   if !gettingStarted.contains(#"\#(requirementLabel): "\#(packageVersion)""#) {
     failures.append("Getting Started installation does not use ComposableOTelMetadata.version")
@@ -217,6 +215,11 @@ for requiredPrivacyClaim in [
   "never persisted",
   "TelemetryClient.noop",
   "disableAndDiscardPending",
+  "`TelemetryProcessSessionID.current`",
+  "TelemetryTailSamplingPolicy",
+  ".selectivelyInstrumented",
+  "debugConsole:",
+  "excluded by construction from every package metric",
 ] where !readme.contains(requiredPrivacyClaim) {
   failures.append("README is missing required privacy/support claim: \(requiredPrivacyClaim)")
 }
@@ -269,6 +272,38 @@ for requiredCatalogBoundary in [
   "conditional combinations",
 ] where !privacy.contains(requiredCatalogBoundary) {
   failures.append("PRIVACY.md is missing typed catalog boundary: \(requiredCatalogBoundary)")
+}
+for requiredPhaseOneBoundary in [
+  "anonymous process-lifetime UUID",
+  "Metric sanitizers remove these keys",
+  "Unpromoted entries are memory-only",
+  "trace/span correlation is removed",
+  "absent from release builds",
+] where !privacy.contains(requiredPhaseOneBoundary) {
+  failures.append("PRIVACY.md is missing Phase 1 boundary: \(requiredPhaseOneBoundary)")
+}
+
+let migration = read("MIGRATION.md")
+for requiredMigration in [
+  "0.4.0-rc.3",
+  "TelemetryHostContext",
+  "TelemetryLoggingConfiguration",
+  "TelemetryTailSamplingPolicy",
+  ".selectivelyInstrumented",
+] where !migration.contains(requiredMigration) {
+  failures.append("MIGRATION.md is missing rc.3 guidance: \(requiredMigration)")
+}
+
+for requiredReleaseClaim in [
+  "0.4.0-rc.3",
+  "Cross-signal process-session context",
+  "Bounded tail promotion",
+  "DEBUG builds",
+  "No general histogram API was added",
+  "exact same upstream commit",
+  "same Momentum pull request",
+] where !releaseNotes.contains(requiredReleaseClaim) {
+  failures.append("RELEASE_NOTES is missing rc.3 claim: \(requiredReleaseClaim)")
 }
 
 let manifest = read("Package.swift")

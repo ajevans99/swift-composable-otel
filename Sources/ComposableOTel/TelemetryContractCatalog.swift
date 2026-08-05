@@ -497,7 +497,10 @@ private func validatedDefinition<Payload: Sendable>(
   let keys = fields.map(\.key)
   guard
     Set(keys).count == keys.count,
-    !keys.contains(where: { $0.rawValue == TelemetryContractCatalog.contractVersionKey })
+    !keys.contains(where: {
+      $0.rawValue == TelemetryContractCatalog.contractVersionKey
+        || TCAAttributes.hostContextKeys.contains($0.rawValue)
+    })
   else {
     throw TelemetryContractError.invalidDefinition
   }
@@ -1115,6 +1118,9 @@ extension TelemetryClient {
     payload: Payload,
     operation: @escaping @Sendable () async throws -> Result
   ) async throws -> Result {
+    guard !ReducerTraceContext.instrumentationSuppressed else {
+      return try await operation()
+    }
     guard policy.signals.tracesEnabled else {
       return try await operation()
     }
@@ -1131,22 +1137,24 @@ extension TelemetryClient {
       .setSpanKind(spanKind: .internal)
       .setAttributes(attributes)
       .withActiveSpan { span in
-        do {
-          let result = try await operation()
-          span.status = .ok
-          return result
-        } catch {
-          if error is CancellationError {
-            span.status = .unset
-            span.addEvent(name: ComposableOTelSemantics.Events.effectCancelled)
-          } else {
-            span.status = .error(description: "Operation failed")
-            span.addEvent(
-              name: ComposableOTelSemantics.Events.exception,
-              attributes: telemetryErrorAttributes(for: error)
-            )
+        try await ReducerTraceContext.$spanContext.withValue(span.context) {
+          do {
+            let result = try await operation()
+            span.status = .ok
+            return result
+          } catch {
+            if error is CancellationError {
+              span.status = .unset
+              span.addEvent(name: ComposableOTelSemantics.Events.effectCancelled)
+            } else {
+              span.status = .error(description: "Operation failed")
+              span.addEvent(
+                name: ComposableOTelSemantics.Events.exception,
+                attributes: telemetryErrorAttributes(for: error)
+              )
+            }
+            throw error
           }
-          throw error
         }
       }
   }
@@ -1156,6 +1164,9 @@ extension TelemetryClient {
     payload: Payload,
     operation: @Sendable () throws -> Result
   ) throws -> Result {
+    guard !ReducerTraceContext.instrumentationSuppressed else {
+      return try operation()
+    }
     guard policy.signals.tracesEnabled else {
       return try operation()
     }
@@ -1173,22 +1184,24 @@ extension TelemetryClient {
       .setSpanKind(spanKind: .internal)
       .setAttributes(attributes)
       .withActiveSpan { span in
-        do {
-          let result = try operation()
-          span.status = .ok
-          return result
-        } catch {
-          if error is CancellationError {
-            span.status = .unset
-            span.addEvent(name: ComposableOTelSemantics.Events.effectCancelled)
-          } else {
-            span.status = .error(description: "Operation failed")
-            span.addEvent(
-              name: ComposableOTelSemantics.Events.exception,
-              attributes: telemetryErrorAttributes(for: error)
-            )
+        try ReducerTraceContext.$spanContext.withValue(span.context) {
+          do {
+            let result = try operation()
+            span.status = .ok
+            return result
+          } catch {
+            if error is CancellationError {
+              span.status = .unset
+              span.addEvent(name: ComposableOTelSemantics.Events.effectCancelled)
+            } else {
+              span.status = .error(description: "Operation failed")
+              span.addEvent(
+                name: ComposableOTelSemantics.Events.exception,
+                attributes: telemetryErrorAttributes(for: error)
+              )
+            }
+            throw error
           }
-          throw error
         }
       }
   }
@@ -1197,6 +1210,7 @@ extension TelemetryClient {
     _ definition: TelemetryLogDefinition<Payload>,
     payload: Payload
   ) throws {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return }
     guard policy.signals.logsEnabled else { return }
     guard contracts.catalog.contains(definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition
@@ -1205,6 +1219,14 @@ extension TelemetryClient {
       for: payload,
       version: contracts.catalog.contractVersion
     )
+    guard
+      policy.shouldRecordLog(
+        severity: definition.severity,
+        stableIdentifier: definition.eventName.rawValue
+      )
+    else {
+      return
+    }
     let builder = logger.logRecordBuilder()
       .setSeverity(definition.severity.otelSeverity)
       .setAttributes(attributes)
@@ -1224,6 +1246,7 @@ extension TelemetryClient {
     _ definition: TelemetryOperationalEventDefinition<Payload>,
     payload: Payload
   ) -> TelemetryOperationalEventRecordingResult {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return .disabled }
     guard policy.signals.operationalEventsEnabled else { return .disabled }
     guard contracts.catalog.contains(definition.identity) else {
       return rejectOperationalEventContract()
@@ -1249,6 +1272,7 @@ extension TelemetryClient {
     delta: TelemetryCounterDelta,
     payload: Payload
   ) throws {
+    guard !ReducerTraceContext.instrumentationSuppressed else { return }
     guard policy.signals.metricsEnabled else { return }
     guard contracts.catalog.contains(definition.identity) else {
       throw TelemetryContractError.unregisteredDefinition

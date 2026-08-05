@@ -7,7 +7,7 @@ Configure a finite telemetry schema, inject a client, and instrument selected TC
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  exact: "0.4.0-rc.2"
+  exact: "0.4.0-rc.3"
 )
 ```
 
@@ -26,7 +26,14 @@ let schema = try! TelemetrySchema(
   services: ["example-app"]
 )
 
-let policy = TelemetryPolicy(schema: schema)
+let policy = TelemetryPolicy(
+  schema: schema,
+  hostContext: TelemetryHostContext(
+    processSessionID: .current,
+    platform: .current,
+    processKind: .application
+  )
+)
 ```
 
 Identifiers use lowercase bounded names, not user values, IDs, URLs, titles, notes, search text, or
@@ -71,6 +78,8 @@ Reduce { state, action in
 
 The action mapper replaces reflection. Associated values and custom descriptions are never read.
 The optional state token is compared but never exported; no state description is created.
+Use `selectivelyInstrumented(feature:action:stateChangeToken:)` when noisy/internal actions should
+return `nil` and emit no reducer, effect, dependency, log, or metric telemetry.
 
 ## Trace effects and dependencies
 
@@ -104,7 +113,9 @@ let policy = TelemetryPolicy(
 ```
 
 Each signal is independent. Package logs and registered operational events are disabled by default,
-and trace sampling never suppresses metrics.
+and trace sampling never suppresses metrics. Registered host context is span/log-only and never
+becomes a metric dimension. Use ``TelemetryLoggingConfiguration`` for deterministic per-severity
+sampling.
 
 ## Test
 

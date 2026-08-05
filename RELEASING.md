@@ -30,7 +30,8 @@ pages. Pull requests do not maintain a separate tracked changelog.
 
 1. Confirm the release scope and version against the compatibility policy.
 2. Update `ComposableOTelMetadata.version` and the README installation requirement to the release
-   version. The source version must have no duplicate semantic-version literals.
+   version. The source version must have no duplicate semantic-version literals, except for the
+   explicitly byte-identical 0.4.0 promotion below.
 3. Finalize `RELEASE_NOTES.md`, including migration guidance for behavior or API changes.
 4. Confirm `Package.swift` and `SUPPORT.md` agree on platforms and dependency ranges.
 5. Confirm the approved repository license is present and referenced by the README.
@@ -55,6 +56,24 @@ pages. Pull requests do not maintain a separate tracked changelog.
 Never move or reuse a published tag. If release metadata is wrong, correct the GitHub Release or
 publish a new patch version as appropriate.
 
+### Promoting 0.4.0-rc.3
+
+`0.4.0-rc.3` is published only after its release-preparation pull request merges and hosted CI passes
+on the merge commit. Momentum then proves the production vertical slice against the immutable rc.3 tag
+in its existing adoption pull request. If that evidence is accepted, `0.4.0` final must be an annotated
+tag of the exact same upstream commit:
+
+```sh
+test "$(git rev-list -n 1 0.4.0-rc.3)" = "$(git rev-parse <release-commit>)"
+git tag -a 0.4.0 -m "swift-composable-otel 0.4.0" <release-commit>
+```
+
+Do not create a final-code or metadata-only commit. Update the same Momentum pull request with the final
+exact dependency before it merges, and verify both tags resolve to the same commit. This deliberate
+byte-identical promotion means `ComposableOTelMetadata.version`, instrumentation scope version, and
+`telemetry.distro.version` remain `0.4.0-rc.3` under the `0.4.0` alias; preserving the candidate's exact
+bits is the reviewed requirement for this one promotion.
+
 ## 1.0 go/no-go criteria
 
 Do not tag or publish 1.0 until every item below has an immutable evidence link and an identified
@@ -69,15 +88,17 @@ reviewer:
    non-capture, persistence filtering, and unsafe custom SDK boundaries are approved.
 4. **Runtime guarantees and limits:** lifecycle, batching, retry, timeout, overflow, persistence,
    corruption, encoded request ceiling, `Retry-After`, auth refresh, flush/shutdown, terminal
-   consent-revocation discard, failure isolation, and best-effort delivery language match tested
-   behavior.
+   consent-revocation discard, tail-retention count/byte/age bounds, promotion completeness,
+   error-log correlation, observer independence, failure isolation, and best-effort delivery language
+   match tested behavior.
    An exact severity-text requirement remains a no-go until the upstream Swift log model can
    represent it without a raw encoding bypass.
 5. **Performance and memory:** hosted release benchmarks pass the reviewed budgets, and consumer
    pilot CPU, memory, battery, network, persistence, and drop-rate results are accepted.
 6. **Dependencies and toolchains:** both supported dependency endpoint jobs pass and every exception
    in `SUPPORT.md` remains exact and reviewed.
-7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS.
+7. **Platforms:** macOS and iOS gates pass, and every public library product compiles for watchOS,
+   including selective TCA reducer instrumentation.
    Platform-relevant contract/runtime tests and watchOS lifecycle limitations remain documented.
 8. **Support and operations:** security/private reporting, privacy guidance, runbooks, migration,
    release notes, and residual-risk ownership are approved.

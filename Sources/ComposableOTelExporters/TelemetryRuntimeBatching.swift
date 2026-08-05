@@ -3,10 +3,48 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
-enum RuntimeBatchQueueOfferResult {
+package enum RuntimeBatchQueueOfferResult: Equatable {
   case accepted
   case dropped
   case stopped
+}
+
+struct RuntimeTailSignalEmitter: @unchecked Sendable {
+  private let offerSpans: @Sendable ([SpanData]) -> RuntimeBatchQueueOfferResult
+  private let offerLog: @Sendable (ReadableLogRecord) -> RuntimeBatchQueueOfferResult
+  private let observerPipeline: TelemetryObserverPipeline
+
+  init(
+    spanQueue: RuntimeBatchQueue<SpanData>,
+    logQueue: RuntimeBatchQueue<ReadableLogRecord>,
+    observerPipeline: TelemetryObserverPipeline
+  ) {
+    offerSpans = { spanQueue.offer(contentsOf: $0) }
+    offerLog = { logQueue.offer($0) }
+    self.observerPipeline = observerPipeline
+  }
+
+  init(
+    offerSpans: @escaping @Sendable ([SpanData]) -> RuntimeBatchQueueOfferResult,
+    offerLog: @escaping @Sendable (ReadableLogRecord) -> RuntimeBatchQueueOfferResult,
+    observerPipeline: TelemetryObserverPipeline
+  ) {
+    self.offerSpans = offerSpans
+    self.offerLog = offerLog
+    self.observerPipeline = observerPipeline
+  }
+
+  func emit(spans: [SpanData]) -> RuntimeBatchQueueOfferResult {
+    let result = offerSpans(spans)
+    observerPipeline.emit(spans: spans)
+    return result
+  }
+
+  func emit(log: ReadableLogRecord) -> RuntimeBatchQueueOfferResult {
+    let result = offerLog(log)
+    observerPipeline.emit(logRecord: log)
+    return result
+  }
 }
 
 final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
@@ -50,27 +88,38 @@ final class RuntimeBatchQueue<Item: Sendable>: @unchecked Sendable {
 
   @discardableResult
   func offer(_ item: Item) -> RuntimeBatchQueueOfferResult {
+    offer(contentsOf: [item])
+  }
+
+  @discardableResult
+  func offer(contentsOf newItems: [Item]) -> RuntimeBatchQueueOfferResult {
+    guard !newItems.isEmpty else { return .accepted }
     var batch: [Item]?
     var queueDelta = 0
     var dropped = 0
     var result = RuntimeBatchQueueOfferResult.accepted
     lock.lock()
     if !accepting {
-      dropped = 1
+      dropped = newItems.count
       result = .stopped
-    } else if items.count >= configuration.maximumQueueSize {
-      dropped = 1
+    } else if newItems.count > configuration.maximumQueueSize {
+      dropped = newItems.count
+      result = .dropped
+    } else if items.count + newItems.count > configuration.maximumQueueSize {
       switch configuration.overflowPolicy {
       case .dropNewest:
+        dropped = newItems.count
         result = .dropped
-        break
       case .dropOldest:
-        items.removeFirst()
-        items.append(item)
+        let removeCount = items.count + newItems.count - configuration.maximumQueueSize
+        items.removeFirst(removeCount)
+        items.append(contentsOf: newItems)
+        dropped = removeCount
+        queueDelta = newItems.count - removeCount
       }
     } else {
-      items.append(item)
-      queueDelta = 1
+      items.append(contentsOf: newItems)
+      queueDelta = newItems.count
     }
 
     if accepting, items.count >= configuration.maximumBatchSize, !exporting {
@@ -289,14 +338,17 @@ struct RuntimeSpanProcessor: SpanProcessor {
   let isEndRequired = true
   let queue: RuntimeBatchQueue<SpanData>
   let boundary: TelemetryPrivacyBoundary
+  let tailSampling: RuntimeTailSamplingCoordinator?
 
   func onStart(parentContext: SpanContext?, span: any ReadableSpan) {}
 
   mutating func onEnd(span: any ReadableSpan) {
-    guard span.context.traceFlags.sampled,
-      let sanitized = boundary.sanitizedSpans([span.toSpanData()]).first
-    else { return }
-    queue.offer(sanitized)
+    guard let sanitized = boundary.sanitizedSpans([span.toSpanData()]).first else { return }
+    if let tailSampling {
+      tailSampling.record(span: sanitized)
+    } else if span.context.traceFlags.sampled {
+      queue.offer(sanitized)
+    }
   }
 
   mutating func shutdown(explicitTimeout: TimeInterval?) {
@@ -311,15 +363,29 @@ struct RuntimeSpanProcessor: SpanProcessor {
 final class RuntimeLogRecordProcessor: LogRecordProcessor, @unchecked Sendable {
   let queue: RuntimeBatchQueue<ReadableLogRecord>
   let boundary: TelemetryPrivacyBoundary
+  let tailSampling: RuntimeTailSamplingCoordinator?
 
-  init(queue: RuntimeBatchQueue<ReadableLogRecord>, boundary: TelemetryPrivacyBoundary) {
+  init(
+    queue: RuntimeBatchQueue<ReadableLogRecord>,
+    boundary: TelemetryPrivacyBoundary,
+    tailSampling: RuntimeTailSamplingCoordinator?
+  ) {
     self.queue = queue
     self.boundary = boundary
+    self.tailSampling = tailSampling
   }
 
   func onEmit(logRecord: ReadableLogRecord) {
     guard let sanitized = boundary.sanitizedLogs([logRecord]).first else { return }
-    queue.offer(sanitized)
+    if let tailSampling {
+      _ = tailSampling.record(log: sanitized)
+    } else {
+      let record =
+        sanitized.spanContext?.traceFlags.sampled == false
+        ? runtimeStrippingCorrelation(from: sanitized)
+        : sanitized
+      queue.offer(record)
+    }
   }
 
   func forceFlush(explicitTimeout: TimeInterval?) -> ExportResult {
@@ -339,7 +405,8 @@ func makeRuntimeOperationalEventRecorder(
   diagnostics: RuntimeDiagnosticsState,
   resource: Resource,
   now: @escaping @Sendable () -> Date,
-  observerPipeline: TelemetryObserverPipeline? = nil
+  observerPipeline: TelemetryObserverPipeline? = nil,
+  tailSampling: RuntimeTailSamplingCoordinator? = nil
 ) -> TelemetryOperationalEventRecorder {
   TelemetryOperationalEventRecorder(
     { event in
@@ -360,9 +427,23 @@ func makeRuntimeOperationalEventRecorder(
         diagnostics.recordDrop(signal: .logs)
         return .dropped
       }
-      switch queue.offer(sanitized) {
+      if let tailSampling {
+        switch tailSampling.record(log: sanitized) {
+        case .accepted:
+          return .recorded
+        case .dropped:
+          return .dropped
+        case .stopped:
+          return .disabled
+        }
+      }
+      let correlatedRecord =
+        sanitized.spanContext?.traceFlags.sampled == false
+        ? runtimeStrippingCorrelation(from: sanitized)
+        : sanitized
+      switch queue.offer(correlatedRecord) {
       case .accepted:
-        observerPipeline?.emit(logRecord: sanitized)
+        observerPipeline?.emit(logRecord: correlatedRecord)
         return .recorded
       case .dropped:
         return .dropped
@@ -382,7 +463,8 @@ func makeRuntimePrivacyAwareLogRecorder(
   diagnostics: RuntimeDiagnosticsState,
   resource: Resource,
   now: @escaping @Sendable () -> Date,
-  observerPipeline: TelemetryObserverPipeline? = nil
+  observerPipeline: TelemetryObserverPipeline? = nil,
+  tailSampling: RuntimeTailSamplingCoordinator? = nil
 ) -> TelemetryPrivacyAwareLogRecorder {
   TelemetryPrivacyAwareLogRecorder { log in
     let record = ReadableLogRecord(
@@ -402,9 +484,23 @@ func makeRuntimePrivacyAwareLogRecorder(
       diagnostics.recordDrop(signal: .logs)
       return .invalidMessage
     }
-    switch queue.offer(sanitized) {
+    if let tailSampling {
+      switch tailSampling.record(log: sanitized) {
+      case .accepted:
+        return .recorded
+      case .dropped:
+        return .dropped
+      case .stopped:
+        return .disabled
+      }
+    }
+    let correlatedRecord =
+      sanitized.spanContext?.traceFlags.sampled == false
+      ? runtimeStrippingCorrelation(from: sanitized)
+      : sanitized
+    switch queue.offer(correlatedRecord) {
     case .accepted:
-      observerPipeline?.emit(logRecord: sanitized)
+      observerPipeline?.emit(logRecord: correlatedRecord)
       return .recorded
     case .dropped:
       return .dropped

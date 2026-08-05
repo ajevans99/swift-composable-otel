@@ -107,6 +107,66 @@ struct PrivacyAwareLogTests {
     )
   }
 
+  @Test("exports every schema-bounded identifier domain")
+  func approvedIdentifierDomains() throws {
+    let policy = try logPolicy()
+    let (client, collectors) = try TelemetryClient.test(policy: policy)
+    let feature: FeatureID = "library"
+    let action: ActionID = "save-tapped"
+    let effect: EffectID = "save-plan"
+    let dependency: DependencyID = "plan-client"
+    let route: RouteID = "plan-detail"
+    let errorType: ErrorTypeID = "save-failure"
+    let errorCategory: ErrorCategoryID = "persistence"
+    let errorCode: ErrorCodeID = "write-failed"
+    let service: ServiceID = "test-suite"
+    let serviceVersion: ServiceVersionID = "1.0"
+
+    #expect(
+      client.log(
+        .info,
+        """
+        IDs \(feature, privacy: .public) \(action, privacy: .public) \
+        \(effect, privacy: .public) \(dependency, privacy: .public) \
+        \(route, privacy: .public) \(errorType, privacy: .public) \
+        \(errorCategory, privacy: .public) \(errorCode, privacy: .public)
+        """
+      ) == .recorded
+    )
+    #expect(
+      client.log(
+        .info,
+        "Service \(service, privacy: .public) \(serviceVersion, privacy: .public)"
+      ) == .recorded
+    )
+
+    #expect(
+      collectors.logs.privacyAwareLogs.flatMap(\.publicValues).map(\.kind)
+        == [
+          .featureID,
+          .actionID,
+          .effectID,
+          .dependencyID,
+          .routeID,
+          .errorTypeID,
+          .errorCategoryID,
+          .errorCodeID,
+          .serviceID,
+          .serviceVersionID,
+        ]
+    )
+  }
+
+  @Test("count buckets cover every finite range")
+  func countBucketRanges() {
+    #expect(TelemetryLogCountBucket(count: -1) == .zero)
+    #expect(TelemetryLogCountBucket(count: 1) == .one)
+    #expect(TelemetryLogCountBucket(count: 2) == .twoToFive)
+    #expect(TelemetryLogCountBucket(count: 6) == .sixToTwenty)
+    #expect(TelemetryLogCountBucket(count: 21) == .twentyOneToHundred)
+    #expect(TelemetryLogCountBucket(count: 101) == .overHundred)
+  }
+
   @Test("schema-bounds public identifiers")
   func boundsPublicIdentifiersThroughPolicy() throws {
     let policy = try logPolicy()
@@ -283,8 +343,17 @@ private final class EvaluationCounter: @unchecked Sendable {
 private func logPolicy(logsEnabled: Bool = true) throws -> TelemetryPolicy {
   TelemetryPolicy(
     schema: try TelemetrySchema(
+      features: ["library"],
+      actions: ["save-tapped"],
+      effects: ["save-plan"],
+      dependencies: ["plan-client"],
       operations: ["save"],
-      services: ["test-suite"]
+      routes: ["plan-detail"],
+      errorTypes: ["save-failure"],
+      errorCategories: ["persistence"],
+      errorCodes: ["write-failed"],
+      services: ["test-suite"],
+      serviceVersions: ["1.0"]
     ),
     signals: .init(
       tracesEnabled: true,

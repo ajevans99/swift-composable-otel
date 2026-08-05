@@ -24,6 +24,7 @@ func normalizedDeclaration(_ declaration: String, path: String) -> String {
     "TelemetryBootstrap.",
     "TelemetryDeliveryConfiguration.",
     "TelemetryPersistenceConfiguration.",
+    "TelemetryLogMessage.",
     "TelemetryRuntime.",
     "TelemetryRuntimeDiagnosticEvent.",
     "TelemetryRuntimeOperationResult.",

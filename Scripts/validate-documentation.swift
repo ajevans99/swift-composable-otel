@@ -285,18 +285,19 @@ for requiredPhaseOneBoundary in [
 
 let migration = read("MIGRATION.md")
 for requiredMigration in [
-  "0.4.0-rc.4",
+  "0.4.0-rc.5",
   "TelemetryHostContext",
   "TelemetryLoggingConfiguration",
   "TelemetryTailSamplingPolicy",
   "TelemetryMetricExemplarPolicy",
   ".selectivelyInstrumented",
 ] where !migration.contains(requiredMigration) {
-  failures.append("MIGRATION.md is missing rc.4 guidance: \(requiredMigration)")
+  failures.append("MIGRATION.md is missing rc.5 guidance: \(requiredMigration)")
 }
 
 for requiredReleaseClaim in [
-  "0.4.0-rc.4",
+  "0.4.0-rc.5",
+  "rc.4 was published with stale embedded rc.3 metadata and documentation",
   "TelemetryMetricExemplarPolicy",
   "one or two exemplars per metric data point",
   "valid SDK trace and span context",
@@ -310,7 +311,7 @@ for requiredReleaseClaim in [
   "exact same upstream commit",
   "same Momentum pull request",
 ] where !releaseNotes.contains(requiredReleaseClaim) {
-  failures.append("RELEASE_NOTES is missing rc.4 claim: \(requiredReleaseClaim)")
+  failures.append("RELEASE_NOTES is missing rc.5 claim: \(requiredReleaseClaim)")
 }
 
 let manifest = read("Package.swift")

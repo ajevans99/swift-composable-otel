@@ -864,6 +864,159 @@ struct TelemetryContractCatalogTests {
     #expect(boundary.sanitizedSpans([overflowing]).isEmpty)
   }
 
+  @Test("tail-promoted production protobuf preserves dropped counts and host context")
+  func tailPromotedProductionEncodingCountInvariant() async throws {
+    enum ExpectedFailure: Error {
+      case failed
+    }
+
+    let fixture = try ContractFixture.make()
+    let capture = InMemoryEncodedRequestCollector()
+    let hostContext = TelemetryHostContext(
+      processSessionID: .init(
+        UUID(uuidString: "c50c7f17-8cd6-4bcb-932e-a0571f382c86")!
+      ),
+      platform: .macOS,
+      processKind: .test
+    )
+    let policy = TelemetryPolicy(
+      schema: fixture.policy.schema,
+      catalog: fixture.policy.catalog,
+      signals: fixture.policy.signals,
+      hostContext: hostContext
+    )
+    var configuration = TelemetryRuntime.Configuration(
+      serviceName: "test-suite",
+      endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
+      samplingRatio: 0,
+      policy: policy,
+      resourceMode: .strict(fixture.resourceValue),
+      traces: .init(maximumQueueSize: 128, maximumBatchSize: 16),
+      logs: .init(maximumQueueSize: 64, maximumBatchSize: 16),
+      metricExportInterval: .seconds(3_600)
+    )
+    configuration.tailSampling = .enabled(
+      try TelemetryTailSamplingPolicy(
+        slowTraceThreshold: .seconds(1),
+        maximumTraceCount: 64,
+        maximumRetainedSpanCount: 128,
+        maximumRetainedBreadcrumbCount: 64,
+        maximumRetainedBytes: 512 * 1_024,
+        maximumAge: .seconds(2)
+      )
+    )
+    let runtime = try TelemetryRuntime(
+      configuration: configuration,
+      transport: capture.transport,
+      authenticator: .none
+    )
+
+    let overflowAttributes: [String: AttributeValue] = [
+      TCAAttributes.featureName: .string("counter"),
+      TCAAttributes.actionName: .string("increment"),
+      TCAAttributes.effectName: .string("failure"),
+      TCAAttributes.dependencyName: .string("cache"),
+      TCAAttributes.operationName: .string("load"),
+      TCAAttributes.navigationRoute: .string("settings"),
+      TCAAttributes.errorType: .string("test-error"),
+      TCAAttributes.errorCategory: .string("internal"),
+      TCAAttributes.errorCode: .string("failed"),
+      TCAAttributes.effectOutcome: .string(TelemetryOutcome.error.rawValue),
+      TCAAttributes.navigationOperation: .string(NavigationOperation.push.rawValue),
+      TCAAttributes.stateChanged: .bool(true),
+      TCAAttributes.effectCancelled: .bool(false),
+      TCAAttributes.effectLongLived: .bool(false),
+      TCAAttributes.effectMarker: .bool(true),
+      TCAAttributes.dependencyError: .bool(false),
+      TCAAttributes.errorHandled: .bool(true),
+    ]
+    let invalidLinkContext = SpanContext.create(
+      traceId: .invalid,
+      spanId: .invalid,
+      traceFlags: TraceFlags(),
+      traceState: TraceState()
+    )
+
+    do {
+      let _: Void = try await runtime.client.withEffectTrace(
+        effect: "failure",
+        longLived: false,
+        parentContext: nil
+      ) {
+        let parentContext = try #require(ReducerTraceContext.spanContext)
+        let overflowSpan = runtime.client.tracer
+          .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
+          .setParent(parentContext)
+          .addLink(spanContext: invalidLinkContext)
+          .startSpan()
+        for (key, value) in overflowAttributes {
+          overflowSpan.setAttribute(key: key, value: value)
+        }
+        for _ in 0..<6 {
+          overflowSpan.addEvent(name: ComposableOTelSemantics.Events.effectStarted)
+        }
+        overflowSpan.end()
+        #expect(runtime.client.log(.info, "Breadcrumb before promotion") == .recorded)
+        throw ExpectedFailure.failed
+      }
+      Issue.record("Expected failure")
+    } catch is ExpectedFailure {
+    }
+
+    let result = await runtime.forceFlush(timeout: .seconds(2))
+
+    #expect(result.traces.status == .success)
+    #expect(result.logs.status == .success)
+    #expect(runtime.tailSamplingSnapshot?.retainedSpanCount == 0)
+    #expect(runtime.tailSamplingSnapshot?.retainedBreadcrumbCount == 0)
+
+    let requests = capture.requests
+    #expect(Set(requests.compactMap(\.signal)).contains(.traces))
+    #expect(requests.allSatisfy { $0.contentType == "application/x-protobuf" })
+
+    let traceBodies = try requests.filter { $0.signal == .traces }.map {
+      try decodedOTLPBody($0.body)
+    }
+    let spans = try traceBodies.flatMap(decodeTraceSpans)
+    let overflowEncodedSpan = try #require(
+      spans.first { $0.name == ComposableOTelSemantics.Spans.effect }
+    )
+    #expect(overflowEncodedSpan.droppedAttributesCount == 1)
+    #expect(overflowEncodedSpan.droppedEventsCount == 2)
+    #expect(overflowEncodedSpan.droppedLinksCount == 1)
+
+    let hostKeys = [
+      TCAAttributes.processSessionID,
+      TCAAttributes.hostPlatform,
+      TCAAttributes.hostProcessKind,
+    ]
+    for key in hostKeys {
+      #expect(
+        traceBodies.reduce(0) { $0 + occurrenceCount(in: $1, of: Data(key.utf8)) }
+          == spans.count
+      )
+    }
+
+    let logBodies = try requests.filter { $0.signal == .logs }.map {
+      try decodedOTLPBody($0.body)
+    }
+    let logRecordCount =
+      try logBodies
+      .map {
+        try Opentelemetry_Proto_Collector_Logs_V1_ExportLogsServiceRequest(serializedBytes: $0)
+      }
+      .flatMap(\.resourceLogs).flatMap(\.scopeLogs).flatMap(\.logRecords).count
+    #expect(logRecordCount == 2)
+    for key in hostKeys {
+      #expect(
+        logBodies.reduce(0) { $0 + occurrenceCount(in: $1, of: Data(key.utf8)) }
+          == logRecordCount
+      )
+    }
+
+    _ = await runtime.shutdown(timeout: .seconds(1))
+  }
+
   @Test("one observer metric lifecycle covers native and delta contract readers")
   func observerMetricLifecycle() async throws {
     let fixture = try ContractFixture.make()

@@ -4,7 +4,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture).
 
 > [!IMPORTANT]
-> This revision prepares `0.4.0-rc.5`; publish that immutable tag only after its release pull request
+> This revision prepares `0.4.0-rc.6`; publish that immutable tag only after its release pull request
 > merges and hosted CI passes on the merge commit. The candidate remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
@@ -14,7 +14,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    exact: "0.4.0-rc.5"
+    exact: "0.4.0-rc.6"
   )
 ]
 ```
@@ -680,7 +680,7 @@ See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.4.0-rc.5 package quality layer includes:
+The 0.4.0-rc.6 package quality layer includes:
 
 - externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
@@ -695,7 +695,7 @@ The 0.4.0-rc.5 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.5 and required
+consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.6 and required
 no-go items for 1.0.
 
 ## License

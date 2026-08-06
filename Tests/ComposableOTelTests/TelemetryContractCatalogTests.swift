@@ -2,11 +2,17 @@ import ComposableOTelTesting
 import Dependencies
 import Foundation
 import OpenTelemetryApi
+import OpenTelemetryProtocolExporterCommon
 import OpenTelemetrySdk
+import SwiftProtobuf
 import Testing
 
 @testable import ComposableOTel
 @testable import ComposableOTelExporters
+
+#if canImport(Compression)
+  import Compression
+#endif
 
 private struct ContractSignalPayload: Sendable {
   let flow: TelemetryEnumValue
@@ -234,6 +240,77 @@ struct TelemetryContractCatalogTests {
           == .string(environment.rawValue)
       )
     }
+  }
+
+  private struct DecodedTraceSpan {
+    let name: String
+    let droppedAttributesCount: UInt64
+    let droppedEventsCount: UInt64
+    let droppedLinksCount: UInt64
+  }
+
+  private enum ProtobufTestError: Error {
+    case malformed
+    case unsupportedCompression
+  }
+
+  private func decodeTraceSpans(_ data: Data) throws -> [DecodedTraceSpan] {
+    let request = try Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest(
+      serializedBytes: data
+    )
+    let json = try request.jsonUTF8Data()
+    #expect(
+      try Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest(
+        jsonUTF8Data: json
+      ) == request
+    )
+    return request.resourceSpans.flatMap(\.scopeSpans).flatMap(\.spans).map {
+      DecodedTraceSpan(
+        name: $0.name,
+        droppedAttributesCount: UInt64($0.droppedAttributesCount),
+        droppedEventsCount: UInt64($0.droppedEventsCount),
+        droppedLinksCount: UInt64($0.droppedLinksCount)
+      )
+    }
+  }
+
+  private func decodedOTLPBody(_ data: Data) throws -> Data {
+    guard data.starts(with: [0x1f, 0x8b]) else { return data }
+    #if canImport(Compression)
+      guard data.count >= 18 else { throw ProtobufTestError.malformed }
+      let expectedSize = data.suffix(4).enumerated().reduce(UInt32(0)) { result, element in
+        result | (UInt32(element.element) << UInt32(element.offset * 8))
+      }
+      var output = [UInt8](repeating: 0, count: Int(expectedSize))
+      let compressed = data.dropFirst(10).dropLast(8)
+      let decodedSize = output.withUnsafeMutableBytes { destination in
+        compressed.withUnsafeBytes { source in
+          compression_decode_buffer(
+            destination.bindMemory(to: UInt8.self).baseAddress!,
+            destination.count,
+            source.bindMemory(to: UInt8.self).baseAddress!,
+            source.count,
+            nil,
+            COMPRESSION_ZLIB
+          )
+        }
+      }
+      guard decodedSize == output.count else { throw ProtobufTestError.malformed }
+      return Data(output)
+    #else
+      throw ProtobufTestError.unsupportedCompression
+    #endif
+  }
+
+  private func occurrenceCount(in data: Data, of needle: Data) -> Int {
+    guard !needle.isEmpty else { return 0 }
+    var count = 0
+    var searchRange = data.startIndex..<data.endIndex
+    while let range = data.range(of: needle, options: [], in: searchRange) {
+      count += 1
+      searchRange = range.upperBound..<data.endIndex
+    }
+    return count
   }
 
   @Test("strict resources require one bounded deployment environment")
@@ -575,6 +652,216 @@ struct TelemetryContractCatalogTests {
     #expect(Set(capture.requests.compactMap(\.signal)) == [.traces, .metrics, .logs])
     #expect(capture.requests.allSatisfy { !$0.body.isEmpty && $0.body.count <= 64 * 1_024 })
     _ = await runtime.shutdown(timeout: .seconds(1))
+  }
+
+  @Test("production protobuf preserves dropped counts while adding host context")
+  func productionEncodingCountInvariant() async throws {
+    let fixture = try ContractFixture.make()
+    let capture = InMemoryEncodedRequestCollector()
+    let hostContext = TelemetryHostContext(
+      processSessionID: .init(
+        UUID(uuidString: "c50c7f17-8cd6-4bcb-932e-a0571f382c86")!
+      ),
+      platform: .macOS,
+      processKind: .test
+    )
+    let policy = TelemetryPolicy(
+      schema: fixture.policy.schema,
+      catalog: fixture.policy.catalog,
+      signals: fixture.policy.signals,
+      hostContext: hostContext
+    )
+    var configuration = TelemetryRuntime.Configuration(
+      serviceName: "test-suite",
+      endpoints: .init(baseURL: URL(string: "https://gateway.example.test/otlp")!),
+      samplingRatio: 1,
+      policy: policy,
+      resourceMode: .strict(fixture.resourceValue),
+      traces: .init(maximumQueueSize: 8, maximumBatchSize: 8),
+      logs: .init(maximumQueueSize: 8, maximumBatchSize: 8),
+      metricExportInterval: .seconds(3_600)
+    )
+    configuration.metricExemplars = .traceContext(maximumPerDataPoint: .one)
+    let runtime = try TelemetryRuntime(
+      configuration: configuration,
+      transport: capture.transport,
+      authenticator: .none
+    )
+
+    let packageAttributes: [String: AttributeValue] = [
+      TCAAttributes.featureName: .string("counter"),
+      TCAAttributes.actionName: .string("increment"),
+      TCAAttributes.effectName: .string("success"),
+      TCAAttributes.dependencyName: .string("cache"),
+      TCAAttributes.operationName: .string("load"),
+      TCAAttributes.navigationRoute: .string("settings"),
+      TCAAttributes.errorType: .string("test-error"),
+      TCAAttributes.errorCategory: .string("internal"),
+      TCAAttributes.errorCode: .string("failed"),
+      TCAAttributes.effectOutcome: .string(TelemetryOutcome.success.rawValue),
+      TCAAttributes.navigationOperation: .string(NavigationOperation.push.rawValue),
+      TCAAttributes.stateChanged: .bool(true),
+      TCAAttributes.effectCancelled: .bool(false),
+      TCAAttributes.effectLongLived: .bool(false),
+      TCAAttributes.effectMarker: .bool(true),
+      TCAAttributes.dependencyError: .bool(false),
+      TCAAttributes.errorHandled: .bool(true),
+    ]
+    let invalidLinkContext = SpanContext.create(
+      traceId: .invalid,
+      spanId: .invalid,
+      traceFlags: TraceFlags(),
+      traceState: TraceState()
+    )
+    let packageSpan = runtime.client.tracer
+      .spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
+      .addLink(spanContext: invalidLinkContext)
+      .startSpan()
+    for (key, value) in packageAttributes {
+      packageSpan.setAttribute(key: key, value: value)
+    }
+    for _ in 0..<6 {
+      packageSpan.addEvent(name: ComposableOTelSemantics.Events.effectStarted)
+    }
+    packageSpan.end()
+
+    let payload = try fixture.payload()
+    try await runtime.client.withSpan(fixture.span, payload: payload) {
+      try runtime.client.record(fixture.startedLog, payload: payload)
+      try runtime.client.add(fixture.counter, delta: .init(1), payload: payload)
+    }
+
+    let result = await runtime.forceFlush(timeout: .seconds(2))
+
+    #expect(result.succeeded)
+    let requests = capture.requests
+    #expect(Set(requests.compactMap(\.signal)) == [.traces, .metrics, .logs])
+    #expect(requests.allSatisfy { $0.contentType == "application/x-protobuf" })
+
+    let traceBodies = try requests.filter { $0.signal == .traces }.map {
+      try decodedOTLPBody($0.body)
+    }
+    let spans = try traceBodies.flatMap(decodeTraceSpans)
+    let packageEncodedSpan = try #require(
+      spans.first { $0.name == ComposableOTelSemantics.Spans.effect }
+    )
+    #expect(packageEncodedSpan.droppedAttributesCount == 1)
+    #expect(packageEncodedSpan.droppedEventsCount == 2)
+    #expect(packageEncodedSpan.droppedLinksCount == 1)
+    let contractEncodedSpan = try #require(
+      spans.first { $0.name == fixture.span.name.rawValue }
+    )
+    #expect(contractEncodedSpan.droppedAttributesCount == 0)
+    #expect(contractEncodedSpan.droppedEventsCount == 0)
+    #expect(contractEncodedSpan.droppedLinksCount == 0)
+
+    let hostKeys = [
+      TCAAttributes.processSessionID,
+      TCAAttributes.hostPlatform,
+      TCAAttributes.hostProcessKind,
+    ]
+    for key in hostKeys {
+      #expect(
+        traceBodies.reduce(0) { $0 + occurrenceCount(in: $1, of: Data(key.utf8)) }
+          == spans.count
+      )
+    }
+
+    let logBodies = try requests.filter { $0.signal == .logs }.map {
+      try decodedOTLPBody($0.body)
+    }
+    for key in hostKeys {
+      #expect(
+        logBodies.reduce(0) { $0 + occurrenceCount(in: $1, of: Data(key.utf8)) } == 1
+      )
+    }
+
+    let metricBodies = try requests.filter { $0.signal == .metrics }.map {
+      try decodedOTLPBody($0.body)
+    }
+    let metricRequests = try metricBodies.map {
+      try Opentelemetry_Proto_Collector_Metrics_V1_ExportMetricsServiceRequest(
+        serializedBytes: $0
+      )
+    }
+    let metrics = metricRequests.flatMap(\.resourceMetrics).flatMap(\.scopeMetrics)
+      .flatMap(\.metrics)
+    let counter = try #require(metrics.first { $0.name == fixture.counter.name.rawValue })
+    let exemplars = counter.sum.dataPoints.flatMap(\.exemplars)
+    #expect(!exemplars.isEmpty)
+    #expect(exemplars.allSatisfy { $0.filteredAttributes.isEmpty })
+    for key in hostKeys {
+      #expect(metricBodies.allSatisfy { !$0.contains(Data(key.utf8)) })
+    }
+
+    _ = await runtime.shutdown(timeout: .seconds(1))
+  }
+
+  @Test("malformed span totals normalize and JSON round-trip without underflow")
+  func malformedSpanTotals() throws {
+    let collector = InMemorySpanCollector()
+    let provider = TracerProviderBuilder()
+      .add(spanProcessor: SimpleSpanProcessor(spanExporter: collector))
+      .build()
+    let tracer = provider.get(
+      instrumentationName: ComposableOTelMetadata.instrumentationName,
+      instrumentationVersion: ComposableOTelMetadata.version
+    )
+    let sourceSpan = tracer.spanBuilder(spanName: ComposableOTelSemantics.Spans.effect)
+      .setAttribute(key: TCAAttributes.effectName, value: "success")
+      .startSpan()
+    sourceSpan.addEvent(name: ComposableOTelSemantics.Events.effectStarted)
+    sourceSpan.end()
+    provider.forceFlush()
+
+    var malformed = try #require(collector.spans.first)
+    malformed.settingLinks([
+      SpanData.Link(
+        context: .create(
+          traceId: .invalid,
+          spanId: .invalid,
+          traceFlags: TraceFlags(),
+          traceState: TraceState()
+        )
+      )
+    ])
+    malformed.settingTotalAttributeCount(0)
+    malformed.settingTotalRecordedEvents(-1)
+    malformed.settingTotalRecordedLinks(Int.min)
+    let hostContext = TelemetryHostContext(
+      processSessionID: .init(
+        UUID(uuidString: "c50c7f17-8cd6-4bcb-932e-a0571f382c86")!
+      ),
+      platform: .macOS,
+      processKind: .test
+    )
+    let boundary = TelemetryPrivacyBoundary(
+      policy: TelemetryPolicy(
+        schema: testSchema,
+        signals: .init(tracesEnabled: true, metricsEnabled: false, logsEnabled: false),
+        hostContext: hostContext
+      )
+    )
+
+    let normalized = try #require(boundary.sanitizedSpans([malformed]).first)
+    #expect(normalized.totalAttributeCount == normalized.attributes.count)
+    #expect(normalized.totalRecordedEvents == normalized.events.count)
+    #expect(normalized.totalRecordedLinks == normalized.links.count)
+    #expect(normalized.totalAttributeCount >= normalized.attributes.count)
+    #expect(normalized.totalRecordedEvents >= normalized.events.count)
+    #expect(normalized.totalRecordedLinks >= normalized.links.count)
+
+    let json = try JSONEncoder().encode(normalized)
+    let roundTripped = try JSONDecoder().decode(SpanData.self, from: json)
+    #expect(roundTripped == normalized)
+    let resanitized = try #require(boundary.sanitizedSpans([roundTripped]).first)
+    #expect(resanitized.totalAttributeCount >= resanitized.attributes.count)
+    #expect(resanitized.totalRecordedEvents >= resanitized.events.count)
+    #expect(resanitized.totalRecordedLinks >= resanitized.links.count)
+
+    var overflowing = malformed
+    overflowing.settingTotalAttributeCount(Int.max)
+    #expect(boundary.sanitizedSpans([overflowing]).isEmpty)
   }
 
   @Test("one observer metric lifecycle covers native and delta contract readers")

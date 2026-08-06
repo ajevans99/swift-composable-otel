@@ -39,7 +39,7 @@ limits and prove that evicted unpromoted entries never reach persistence or tran
 
 The benchmark catalog's metric has an explicit four-series ceiling. Its event field has two allowed
 values and its boolean field has two, so the checked metric cross-product cannot exceed that ceiling.
-No general histogram is exposed for rc.5. Consequently the package emits no histogram exemplars from
+No general histogram is exposed for rc.6. Consequently the package emits no histogram exemplars from
 this surface. The default exporter boundary removes all exemplars; the opt-in bounded policy retains
 only valid SDK trace/span context and removes every exemplar attribute, so session context cannot
 reappear in either metric labels or exemplar attributes.

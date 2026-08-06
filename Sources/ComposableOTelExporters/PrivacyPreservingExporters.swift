@@ -278,10 +278,32 @@ package struct TelemetryPrivacyBoundary: Sendable {
       guard let attributes = policy.addingValidatedHostContext(to: signalAttributes) else {
         return nil
       }
+      guard
+        let totalAttributeCount = transformedTotalCount(
+          originalTotal: original.totalAttributeCount,
+          originalRetainedCount: original.attributes.count,
+          transformedRetainedCount: attributes.count
+        ),
+        let totalRecordedEvents = transformedTotalCount(
+          originalTotal: original.totalRecordedEvents,
+          originalRetainedCount: original.events.count,
+          transformedRetainedCount: events.count
+        ),
+        let totalRecordedLinks = transformedTotalCount(
+          originalTotal: original.totalRecordedLinks,
+          originalRetainedCount: original.links.count,
+          transformedRetainedCount: 0
+        )
+      else {
+        return nil
+      }
       span.settingName(name)
       span.settingAttributes(attributes)
+      span.settingTotalAttributeCount(totalAttributeCount)
       span.settingEvents(events)
+      span.settingTotalRecordedEvents(totalRecordedEvents)
       span.settingLinks([])
+      span.settingTotalRecordedLinks(totalRecordedLinks)
       span.settingStatus(status)
       span.settingResource(
         Resource(
@@ -477,6 +499,19 @@ package struct TelemetryPrivacyBoundary: Sendable {
     }
     return selected
   }
+}
+
+private func transformedTotalCount(
+  originalTotal: Int,
+  originalRetainedCount: Int,
+  transformedRetainedCount: Int
+) -> Int? {
+  let originalDroppedCount =
+    originalTotal > originalRetainedCount
+    ? originalTotal - originalRetainedCount
+    : 0
+  let (total, overflow) = transformedRetainedCount.addingReportingOverflow(originalDroppedCount)
+  return overflow ? nil : total
 }
 
 private let safeInstrumentationScope = InstrumentationScopeInfo(

@@ -1,12 +1,18 @@
-# swift-composable-otel 0.4.0-rc.5
+# swift-composable-otel 0.4.0-rc.6
 
-0.4.0-rc.5 supersedes 0.4.0-rc.4.
+0.4.0-rc.6 supersedes 0.4.0-rc.4 and 0.4.0-rc.5.
 rc.4 was published with stale embedded rc.3 metadata and documentation.
 Do not adopt rc.4: its embedded package and instrumentation version and its installation and release
-documentation still identify rc.3. Its tag and release remain immutable and must not be moved or
-reused. rc.5 carries the bounded metric trace exemplar APIs with correct release metadata and changes
-or removes no public APIs. It remains a pre-1.0 candidate for Momentum integration and production-like
-validation; it is not the 0.4.0 final release.
+documentation still identify rc.3. Do not adopt rc.5: adding registered host context could leave
+sanitized span total counts below retained counts and trap the upstream OTLP encoder during
+`forceFlush`. Both tags and releases remain immutable and must not be moved or reused.
+
+rc.6 preserves each source span's SDK-recorded attribute, event, and link drops while rebuilding its
+totals from the sanitized retained values. Malformed totals normalize without subtraction underflow,
+and unrepresentable totals fail closed. Production runtime tests force-flush registered and package
+signals through real OTLP protobuf request encoding and verify host context remains limited to spans
+and logs. This candidate changes or removes no public APIs. It remains a pre-1.0 candidate for Momentum
+integration and production-like validation; it is not the 0.4.0 final release.
 
 ## Default-off bounded metric trace exemplars
 
@@ -67,13 +73,13 @@ dimension cross-product.
 
 ## Compatibility and migration
 
-The release removes or changes no public symbols from 0.4.0-rc.4. Consumers must pin the prerelease
+The release removes or changes no public symbols from 0.4.0-rc.5. Consumers must pin the prerelease
 exactly:
 
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  exact: "0.4.0-rc.5"
+  exact: "0.4.0-rc.6"
 )
 ```
 
@@ -85,14 +91,14 @@ enabling host context, tail promotion, bounded metric exemplars, or DEBUG privat
 | Risk | Scope and mitigation | Owner | Reviewer | Reconsideration |
 | --- | --- | --- | --- | --- |
 | Missing external production-like evidence | Package CI covers privacy, limits, concurrency, lifecycle, compatibility, platforms, and performance, but the physical-device and gateway evidence in [PILOT.md](PILOT.md) remains consumer-owned. | `ajevans99` | `ajevans99` | 2026-10-13 |
-| Unprotected default branch | Repository administration does not enforce default-branch protection or required checks. Verify complete hosted CI on the exact merge commit before creating an rc.5 tag. | `ajevans99` | `ajevans99` | 2026-10-13 |
+| Unprotected default branch | Repository administration does not enforce default-branch protection or required checks. Verify complete hosted CI on the exact merge commit before creating an rc.6 tag. | `ajevans99` | `ajevans99` | 2026-10-13 |
 | Best-effort mobile completion | Suspension, termination, force-quit, crash, and device shutdown can interrupt memory-only tail retention and queued export. Bounded persistence applies only after promotion and queue encoding. | `ajevans99` | `ajevans99` | 2026-10-13 |
 | Exact empty `severity_text` unsupported | The upstream OpenTelemetry Swift model cannot represent an explicitly empty severity-text through supported APIs. No raw OTLP bypass was added. | `ajevans99` | `ajevans99` | 2026-10-13 |
 
-Recommend creating the immutable `0.4.0-rc.5` tag only after this metadata pull request is merged and
-every hosted release gate passes on its merge commit. Momentum must then pin rc.5 and prove its
+Recommend creating the immutable `0.4.0-rc.6` tag only after this release pull request is merged and
+every hosted release gate passes on its merge commit. Momentum must then pin rc.6 and prove its
 production vertical slice and CI against that immutable tag in its existing adoption pull request.
 Only after that evidence is accepted should the byte-identical `0.4.0` final be requested from the
 exact same upstream commit and that same Momentum pull request updated; do not make a separate
 final-code or release-metadata change. The final alias therefore intentionally retains the candidate's
-`0.4.0-rc.5` embedded telemetry version so the validated bits remain identical.
+`0.4.0-rc.6` embedded telemetry version so the validated bits remain identical.

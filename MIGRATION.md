@@ -46,9 +46,9 @@ Callers that need synchronous acceptance information should handle
 interpolation-count, or public-field bound was exceeded. `.recorded` does not guarantee remote
 delivery.
 
-## Adopting the remaining Phase 1 APIs in 0.4.0-rc.5
+## Adopting the remaining Phase 1 APIs in 0.4.0-rc.6
 
-The rc.5 APIs are additive. Existing `.instrumented`, `.tracedRun`, `.tracedLongLivedRun`,
+The rc.6 APIs are additive. Existing `.instrumented`, `.tracedRun`, `.tracedLongLivedRun`,
 `traceStart`, `tracedCall`, navigation, typed contracts, counters, and rc.2 interpolated logs remain
 source-compatible.
 

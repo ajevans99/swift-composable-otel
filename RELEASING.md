@@ -56,24 +56,25 @@ pages. Pull requests do not maintain a separate tracked changelog.
 Never move or reuse a published tag. If release metadata is wrong, correct the GitHub Release or
 publish a new patch version as appropriate.
 
-### Recovering with and promoting 0.4.0-rc.5
+### Recovering with and promoting 0.4.0-rc.6
 
-The published `0.4.0-rc.4` tag and release remain immutable even though that candidate contains stale
-embedded rc.3 metadata and documentation. Do not adopt, move, or reuse rc.4. `0.4.0-rc.5` is published
-only after its release-preparation pull request merges and hosted CI passes on the merge commit.
-Momentum then pins rc.5 and proves the production vertical slice and its CI against the immutable
-rc.5 tag in its existing adoption pull request. If that evidence is accepted,
+The published `0.4.0-rc.4` and `0.4.0-rc.5` tags and releases remain immutable. rc.4 contains stale
+embedded rc.3 metadata and documentation. rc.5 can trap during OTLP span encoding when host-context
+injection leaves retained counts above stale totals. Do not adopt, move, or reuse rc.4 or rc.5.
+Publish `0.4.0-rc.6` only after its release-preparation pull request merges and hosted CI passes on the
+merge commit. Momentum then pins rc.6 and proves the production vertical slice and its CI against the
+immutable rc.6 tag in its existing adoption pull request. If that evidence is accepted,
 `0.4.0` final must be an annotated tag of the exact same upstream commit:
 
 ```sh
-test "$(git rev-list -n 1 0.4.0-rc.5)" = "$(git rev-parse <release-commit>)"
+test "$(git rev-list -n 1 0.4.0-rc.6)" = "$(git rev-parse <release-commit>)"
 git tag -a 0.4.0 -m "swift-composable-otel 0.4.0" <release-commit>
 ```
 
 Do not create a final-code or metadata-only commit. Update the same Momentum pull request with the final
 exact dependency before it merges, and verify both tags resolve to the same commit. This deliberate
 byte-identical promotion means `ComposableOTelMetadata.version`, instrumentation scope version, and
-`telemetry.distro.version` remain `0.4.0-rc.5` under the `0.4.0` alias; preserving the candidate's exact
+`telemetry.distro.version` remain `0.4.0-rc.6` under the `0.4.0` alias; preserving the candidate's exact
 bits is the reviewed requirement for this one promotion.
 
 ## 1.0 go/no-go criteria

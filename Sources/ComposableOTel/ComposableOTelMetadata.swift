@@ -7,5 +7,5 @@ public enum ComposableOTelMetadata {
   public static let instrumentationName = "ComposableOTel"
 
   /// The package and instrumentation version.
-  public static let version = "0.4.0-rc.3"
+  public static let version = "0.4.0-rc.5"
 }

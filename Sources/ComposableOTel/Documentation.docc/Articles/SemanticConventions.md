@@ -91,8 +91,10 @@ state are not accepted. The classifier result passes through the schema before e
 All package instruments have descriptions and units. Views select the package instrumentation
 scope, filter exact dimension keys, apply schema aggregation, and define explicit duration buckets.
 A catch-all drop view and the privacy-preserving metric exporter drop unknown instruments.
-Export-time filtering is repeated, exemplars are removed, and metrics with unsafe resources are
-dropped. Metrics outside the fixed package scope are also dropped.
+Export-time filtering is repeated, metrics with unsafe resources are dropped, and metrics outside the
+fixed package scope are also dropped. Exemplars are disabled by default. The opt-in bounded policy
+retains at most one or two exemplars per data point, requires valid SDK trace and span context, and
+removes every exemplar attribute without changing metric dimensions or series cardinality.
 Host-context keys are never passed to metric instruments, are absent from every metric view dimension
 set, and are removed by the export privacy boundary.
 

@@ -46,9 +46,9 @@ Callers that need synchronous acceptance information should handle
 interpolation-count, or public-field bound was exceeded. `.recorded` does not guarantee remote
 delivery.
 
-## Adopting the remaining Phase 1 APIs in 0.4.0-rc.3
+## Adopting the remaining Phase 1 APIs in 0.4.0-rc.5
 
-The rc.3 APIs are additive. Existing `.instrumented`, `.tracedRun`, `.tracedLongLivedRun`,
+The rc.5 APIs are additive. Existing `.instrumented`, `.tracedRun`, `.tracedLongLivedRun`,
 `traceStart`, `tracedCall`, navigation, typed contracts, counters, and rc.2 interpolated logs remain
 source-compatible.
 
@@ -89,6 +89,18 @@ configuration.tailSampling = .enabled(
 
 Review the threshold and count/byte/age limits for the host. Unpromoted data is memory-only. Explicit
 promotion must occur inside an active trace and returns `TelemetryTailPromotionResult`.
+
+`TelemetryMetricExemplarPolicy` remains disabled by default. Opt in only after reviewing the finite
+one-or-two per-data-point bound:
+
+```swift
+configuration.metricExemplars = .traceContext(maximumPerDataPoint: .one)
+```
+
+The exporter retains only valid SDK trace and span context and removes every exemplar attribute. This
+does not add host context to metrics or change metric attributes, views, or series cardinality.
+Exemplars do not promote traces or bypass tail retention; promoted root traces continue to export as
+complete trees, including child spans that finish after promotion.
 
 Use `.selectivelyInstrumented(feature:action:stateChangeToken:)` only when `nil` must mean no
 telemetry. Keep `.instrumented(...)` when every action belongs to the finite schema. DEBUG-only

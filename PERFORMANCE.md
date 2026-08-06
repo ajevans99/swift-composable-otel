@@ -39,9 +39,10 @@ limits and prove that evicted unpromoted entries never reach persistence or tran
 
 The benchmark catalog's metric has an explicit four-series ceiling. Its event field has two allowed
 values and its boolean field has two, so the checked metric cross-product cannot exceed that ceiling.
-No general histogram is exposed for rc.3. Consequently the package emits no histogram exemplars from
-this surface; the exporter boundary still removes exemplars from any SDK metric before delivery so
-session context cannot reappear in either metric labels or exemplar attributes.
+No general histogram is exposed for rc.5. Consequently the package emits no histogram exemplars from
+this surface. The default exporter boundary removes all exemplars; the opt-in bounded policy retains
+only valid SDK trace/span context and removes every exemplar attribute, so session context cannot
+reappear in either metric labels or exemplar attributes.
 
 ## Baseline and interpretation
 
@@ -60,7 +61,7 @@ microseconds per bodyless log, and 2.8 microseconds per delta counter add under 
 load. Their checked ceilings include hosted-runner headroom and remain regression gates rather than
 application latency guarantees.
 
-The 2026-08-05 rc.3 probe measured registered operational-event creation at 16.9 microseconds, runtime
+The 2026-08-05 rc.5 probe measured registered operational-event creation at 16.9 microseconds, runtime
 configuration construction at 4.4 microseconds, runtime provider startup at 0.53 milliseconds, and a
 sanitized head-missed span retained by the bounded tail coordinator at 36.2 microseconds. After 4,096
 head-missed spans, the tail fixture retained 32 traces and 32 spans using a 10.3 KiB encoded-size

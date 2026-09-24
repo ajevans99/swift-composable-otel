@@ -522,3 +522,24 @@ private final class RuntimeHTTPCompletion: @unchecked Sendable {
     operation(result)
   }
 }
+
+/// Bridges the async `HTTPClient` requirement added by newer `opentelemetry-swift` releases onto the
+/// package's bounded completion-handler delivery path. Older releases ignore the extra method.
+protocol RuntimeCompletionHTTPClient: AnyObject, Sendable {
+  func send(
+    request: URLRequest,
+    completion: @escaping (Result<HTTPURLResponse, any Error>) -> Void
+  )
+}
+
+extension RuntimeCompletionHTTPClient {
+  func send(request: URLRequest) async throws -> HTTPURLResponse {
+    try await withCheckedThrowingContinuation { continuation in
+      send(request: request) { result in
+        continuation.resume(with: result)
+      }
+    }
+  }
+}
+
+extension RuntimeOTLPHTTPClient: RuntimeCompletionHTTPClient {}

@@ -17,12 +17,55 @@ public enum ComposableOTelSemantics {
     public static let applicationLog = "app.log"
   }
 
+  /// Stable `event.name` values set on every package-owned lifecycle log record.
+  public enum LogEvents {
+    public static let actionDispatched = "tca.action.dispatched"
+    public static let effectStarted = "tca.effect.started"
+    public static let effectCompleted = "tca.effect.completed"
+    public static let effectCancelled = "tca.effect.cancelled"
+    public static let effectFailed = "tca.effect.failed"
+    public static let dependencyStarted = "tca.dependency.started"
+    public static let dependencyCompleted = "tca.dependency.completed"
+    public static let dependencyFailed = "tca.dependency.failed"
+    public static let navigationChanged = "tca.navigation.changed"
+
+    public static let all: Set<String> = [
+      actionDispatched,
+      effectStarted,
+      effectCompleted,
+      effectCancelled,
+      effectFailed,
+      dependencyStarted,
+      dependencyCompleted,
+      dependencyFailed,
+      navigationChanged,
+    ]
+  }
+
   public enum LogBodies {
     public static let actionDispatched = "Action dispatched"
+    public static let effectStarted = "Effect started"
+    public static let effectCompleted = "Effect completed"
+    public static let effectCancelled = "Effect cancelled"
     public static let effectFailed = "Effect failed"
+    public static let dependencyStarted = "Dependency call started"
+    public static let dependencyCompleted = "Dependency call completed"
     public static let dependencyFailed = "Dependency call failed"
     public static let navigationChanged = "Navigation changed"
     public static let unknown = "Telemetry event"
+
+    /// Every package-owned lifecycle log body.
+    public static let all: Set<String> = [
+      actionDispatched,
+      effectStarted,
+      effectCompleted,
+      effectCancelled,
+      effectFailed,
+      dependencyStarted,
+      dependencyCompleted,
+      dependencyFailed,
+      navigationChanged,
+    ]
   }
 
   public enum Metrics {

@@ -15,10 +15,12 @@ let testSchema = try! TelemetrySchema(
   effects: [
     "fetch-count", "long-lived", "cancelled-long-lived", "propagation", "failure",
     "cancellation", "recovered-cancellation", "translated-cancellation", "success",
-    "long-lived-success", "error", "cancelled",
+    "long-lived-success", "error", "cancelled", "root-flow", "load-plans",
   ],
   dependencies: ["test-dependency", "cache", "awaited", "child-task", "detached"],
-  operations: ["get-value", "failing", "load"],
+  operations: [
+    "get-value", "failing", "load", "fetch", "save", "delete", "stream", "sync", "authorize",
+  ],
   routes: ["settings"],
   errorTypes: ["test-error"],
   errorCategories: ["internal"],
@@ -418,11 +420,15 @@ struct ComposableOTelAllTests {
       #expect(span.status == .error(description: "Operation failed"))
       #expect(span.events.first?.attributes[TCAAttributes.errorType] == .string("test-error"))
       #expect(
-        collectors.logs.allRecords.first?.body
+        collectors.logs.allRecords.last?.body
           == .string(ComposableOTelSemantics.LogBodies.dependencyFailed)
       )
       #expect(
-        collectors.logs.allRecords.first?.attributes[TCAAttributes.operationName]
+        collectors.logs.allRecords.last?.eventName
+          == ComposableOTelSemantics.LogEvents.dependencyFailed
+      )
+      #expect(
+        collectors.logs.allRecords.last?.attributes[TCAAttributes.operationName]
           == .string("failing")
       )
     }

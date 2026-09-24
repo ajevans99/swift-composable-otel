@@ -59,8 +59,17 @@ The exporter accepts only the fixed ComposableOTel instrumentation scope name/ve
 schema URL or scope attributes. Spans from other scopes are dropped.
 
 Allowed string attributes are schema-bounded feature, action, effect, dependency, operation, route,
-and error identifiers. Allowed booleans describe state change, lifecycle, and error flags. Reducer
-duration is a finite nonnegative number capped at one day.
+and error identifiers, plus the finite `tca.effect.outcome` and `tca.dependency.outcome` values
+`success`, `cancelled`, and `error`. Allowed booleans describe state change, lifecycle,
+cancellation, `tca.flow.root`, and error flags. Reducer, effect, and dependency durations
+(`tca.reducer.duration_ms`, `tca.effect.duration_ms`, `tca.dependency.duration_ms`) are finite
+nonnegative numbers capped at one day.
+
+Effect, dependency, and navigation spans carry the `tca.feature.name` of the reducer or root flow
+that started them. Reducer trace context propagates task-locally into traced effects, dependency
+calls, and navigation. `withTracedRootFlow(feature:flow:operation:)` and
+`Effect.tracedRootRun(feature:effect:priority:operation:)` start a parentless `tca.effect` span
+marked `tca.flow.root = true`.
 
 Registered host context adds exactly `app.process.session.id`, `app.host.platform`, and
 `app.host.process_kind` after span privacy validation. The session value is a canonical anonymous
@@ -68,10 +77,26 @@ process-lifetime UUID; the remaining values are finite package enums.
 
 ## Logs
 
-Logs are disabled by default. Allowed bodies are fixed to `Action dispatched`, `Effect failed`,
-`Dependency call failed`, and `Navigation changed`. Unknown raw bodies become `Telemetry event`.
-Log attributes use the same typed allowlist as spans. Unknown event names and attributes are
-dropped. Exported scope metadata is rebuilt from the fixed package scope.
+Logs are disabled by default. Every package lifecycle log sets a stable `event.name`:
+
+| Operation | `event.name` | Body |
+| --- | --- | --- |
+| Reducer action | `tca.action.dispatched` | `Action dispatched` |
+| Effect | `tca.effect.started` | `Effect started` |
+| Effect | `tca.effect.completed` | `Effect completed` |
+| Effect | `tca.effect.cancelled` | `Effect cancelled` |
+| Effect | `tca.effect.failed` | `Effect failed` |
+| Dependency | `tca.dependency.started` | `Dependency call started` |
+| Dependency | `tca.dependency.completed` | `Dependency call completed` |
+| Dependency | `tca.dependency.failed` | `Dependency call failed` |
+| Navigation | `tca.navigation.changed` | `Navigation changed` |
+
+A dependency cancelled with `CancellationError` emits `tca.dependency.completed` with
+`tca.dependency.outcome = cancelled`. Lifecycle logs carry the trace and span context of the span
+that emitted them. Unknown raw bodies become `Telemetry event`. Log attributes use the same typed
+allowlist as spans. Unknown event names and attributes are dropped. Fractional log sampling is
+decided once at emission, keyed by the process session plus per-record identity; the export boundary
+applies only the severity filter. Exported scope metadata is rebuilt from the fixed package scope.
 Registered host context uses the same three exact keys and is injected only after the log record has
 passed privacy and typed-contract validation.
 

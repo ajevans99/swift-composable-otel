@@ -1,4 +1,65 @@
-# swift-composable-otel 0.4.0-rc.6
+# swift-composable-otel 0.5.0
+
+0.5.0 adds explicit, structured TCA lifecycle signals across spans, logs, and metrics. It is a
+pre-1.0 minor release. Every 0.4.0 public API remains source-compatible; the behavior changes below are
+documented in [MIGRATION.md](MIGRATION.md#migrating-from-040-to-050).
+
+## Structured lifecycle signals
+
+| TCA operation | Span | Logs (`event.name`) | Metrics |
+| --- | --- | --- | --- |
+| Reducer action | `tca.reducer` | `tca.action.dispatched` | count + duration |
+| Effect | `tca.effect` | `tca.effect.started`, `.completed`, `.cancelled`, `.failed` | started/completed/cancelled/errored, duration, active |
+| Dependency | `tca.dependency` | `tca.dependency.started`, `.completed`, `.failed` | called/errored, duration |
+| Navigation | `tca.navigation` | `tca.navigation.changed` | transitions |
+
+Every lifecycle log sets a stable `event.name` from `ComposableOTelSemantics.LogEvents` and a fixed
+readable body such as `Effect started` or `Dependency call completed`. Terminal logs carry the bounded
+outcome, a clamped duration, and a cancellation flag; failures add only bounded error classification.
+Lifecycle logs are trace-correlated to the span that emitted them.
+
+## Context propagation and root flows
+
+`tca.feature.name` and reducer trace context propagate from the reducer into traced effects,
+dependency calls, and navigation. Navigation spans are now parented to the active reducer, effect, or
+dependency span. `withTracedRootFlow(feature:flow:operation:)` and
+`Effect.tracedRootRun(feature:effect:priority:operation:)` start an explicit parentless root flow
+marked `tca.flow.root = true` for work with no reducer parent.
+
+## Central dependency-client instrumentation
+
+`TelemetryDependencyInstrumentation` wraps each endpoint of a dependency client once with
+`instrument(_:_:)`, `instrumentStream(_:_:)`, or `call(_:_:)`, so every call receives the same span,
+logs, and metrics. `OperationID` adds `.fetch`, `.save`, `.delete`, `.stream`, `.sync`, and
+`.authorize` presets. Arguments, return values, stream elements, and error descriptions are never
+inspected or exported.
+
+## Bounded attributes
+
+New span and log attributes are `tca.effect.duration_ms`, `tca.dependency.outcome`,
+`tca.dependency.cancelled`, `tca.dependency.duration_ms`, and `tca.flow.root`. Metric dimensions and
+series cardinality are unchanged; host context remains excluded from metrics. Names come only from
+caller-supplied schema identifiers and never from reflection.
+
+## Behavior changes
+
+- A dependency cancelled with `CancellationError` now completes with outcome `cancelled`, leaves span
+  status unset, and is no longer counted in `tca.dependencies.errored`.
+- Fractional log sampling is decided once at emission, keyed by process session plus per-record
+  identity; the export boundary applies only the severity filter. Applications using the default
+  `.always` rates observe no change.
+- With logs enabled, effects and dependency calls emit started and terminal logs in addition to the
+  previous failure logs.
+
+## Compatibility
+
+The package also bridges the async `HTTPClient` requirement added by newer `opentelemetry-swift`
+exporter releases, so latest-dependency resolution continues to build.
+
+Recommend creating the immutable `0.5.0` tag only after this release pull request is merged and
+hosted CI passes on the merge commit.
+
+## 0.4.0-rc.6
 
 0.4.0-rc.6 supersedes 0.4.0-rc.4 and 0.4.0-rc.5.
 rc.4 was published with stale embedded rc.3 metadata and documentation.
@@ -14,7 +75,7 @@ signals through real OTLP protobuf request encoding and verify host context rema
 and logs. This candidate changes or removes no public APIs. It remains a pre-1.0 candidate for Momentum
 integration and production-like validation; it is not the 0.4.0 final release.
 
-## Default-off bounded metric trace exemplars
+### Default-off bounded metric trace exemplars
 
 PR #26 adds `TelemetryMetricExemplarPolicy`. Existing bootstrap and runtime behavior remains
 `.disabled` and removes every exemplar. Opting into `.traceContext(maximumPerDataPoint: .one)` or
@@ -27,14 +88,14 @@ Exemplar links do not promote a trace or allow a partial trace to bypass tail re
 promotion continues to export the complete promoted root trace, including child spans that finish
 after promotion, through the existing bounded delivery path.
 
-## Cross-signal process-session context
+### Cross-signal process-session context
 
 `TelemetryHostContext` registers one anonymous process-session UUID plus finite platform and process
 kind values. The privacy boundary injects the validated context into sanitized spans and logs,
 including reducer, effect, and dependency async work. Native metrics and registered counters exclude
 all host-context keys by construction.
 
-## Bounded tail promotion
+### Bounded tail promotion
 
 `TelemetryTailSamplingConfiguration` and `TelemetryTailSamplingPolicy` add opt-in client-side recovery
 for traces missed by ordinary head sampling. Sanitized spans and correlated breadcrumbs remain
@@ -47,7 +108,7 @@ encoding, optional persistence, observer lifecycle, and terminal discard behavio
 trace cannot accompany an error log, the runtime removes trace/span correlation before exporting the
 error.
 
-## Logging controls and DEBUG rendering
+### Logging controls and DEBUG rendering
 
 `TelemetryLoggingConfiguration` applies severity filtering and deterministic per-severity sampling
 using stable log identity rather than dynamic or private values. Logs remain disabled by default and
@@ -58,7 +119,7 @@ private interpolation only for one immediate local render. The normal retained r
 redacted, and the private body bypasses collectors, observers, tail buffers, queues, persistence,
 OTLP, and every remote path. Release builds contain no renderer symbol.
 
-## Selective reducer instrumentation and testing
+### Selective reducer instrumentation and testing
 
 `.selectivelyInstrumented(feature:action:stateChangeToken:)` accepts an `ActionID?`. A `nil` action
 emits no reducer, effect, dependency, log, or metric telemetry instead of aggregating to `other`.
@@ -71,7 +132,7 @@ No general histogram API was added. Momentum's reviewed low-cardinality flow lat
 by typed bounded spans and their captured/exported duration, avoiding an uncontrolled TCA metric
 dimension cross-product.
 
-## Compatibility and migration
+### Compatibility and migration
 
 The release removes or changes no public symbols from 0.4.0-rc.5. Consumers must pin the prerelease
 exactly:
@@ -86,7 +147,7 @@ exactly:
 See [MIGRATION.md](MIGRATION.md), [PRIVACY.md](PRIVACY.md), and the package DocC guides before
 enabling host context, tail promotion, bounded metric exemplars, or DEBUG private rendering.
 
-## Accepted residual risks
+### Accepted residual risks
 
 | Risk | Scope and mitigation | Owner | Reviewer | Reconsideration |
 | --- | --- | --- | --- | --- |

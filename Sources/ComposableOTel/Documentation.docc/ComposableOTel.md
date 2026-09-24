@@ -25,7 +25,10 @@ exporter-boundary filtering and metric views.
 - Add `Reducer.instrumented(feature:action:stateChangeToken:)`.
 - Use `Effect.tracedRun(effect:priority:operation:)` or
   `Effect.tracedLongLivedRun(effect:priority:operation:)`.
-- Use `tracedCall(dependency:operation:operation:)` for dependency work.
+- Use `tracedCall(dependency:operation:operation:)` for dependency work, or wrap a whole dependency
+  client once with ``TelemetryDependencyInstrumentation``.
+- Use `withTracedRootFlow(feature:flow:operation:)` or
+  `Effect.tracedRootRun(feature:effect:priority:operation:)` for work with no reducer parent.
 - Call ``TelemetryClient/recordNavigation(_:route:)`` with route names that contain no parameters.
 - Call ``TelemetryClient/log(_:_:)`` for prose whose interpolations must be private by default.
 - Test through `ComposableOTelTesting`.
@@ -76,6 +79,12 @@ exporter-boundary filtering and metric views.
 - ``ComposableArchitecture/Effect/traceStart(effect:)``
 - ``ComposableArchitecture/Effect/tracedRun(effect:priority:operation:)``
 - ``ComposableArchitecture/Effect/tracedLongLivedRun(effect:priority:operation:)``
+- ``ComposableArchitecture/Effect/tracedRootRun(feature:effect:priority:operation:)``
+
+### Dependencies and root flows
+
+- ``TelemetryDependencyInstrumentation``
+- ``OperationID``
 
 ### Articles
 

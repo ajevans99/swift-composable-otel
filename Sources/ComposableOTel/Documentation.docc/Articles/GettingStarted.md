@@ -7,7 +7,7 @@ Configure a finite telemetry schema, inject a client, and instrument selected TC
 ```swift
 .package(
   url: "https://github.com/ajevans99/swift-composable-otel.git",
-  exact: "0.4.0-rc.6"
+  from: "0.5.0"
 )
 ```
 
@@ -97,6 +97,25 @@ return .tracedRun(effect: "fetch-books") { send in
 
 Effect failures and cancellation are recorded and rethrown. Reducer-to-effect explicit parenting
 and task-local propagation across suspension and inherited child tasks are preserved.
+
+Instrument a dependency client once so every call through it is traced consistently:
+
+```swift
+let telemetry = TelemetryDependencyInstrumentation("book-client")
+let client = BookClient(
+  fetchAll: telemetry.instrument(.fetch, base.fetchAll),
+  save: telemetry.instrument(.save, base.save),
+  updates: telemetry.instrumentStream(.stream, base.updates)
+)
+```
+
+Start an explicit root flow for work with no reducer parent:
+
+```swift
+try await withTracedRootFlow(feature: "books", flow: "background-refresh") {
+  try await client.fetchAll()
+}
+```
 
 ## Configure signals
 

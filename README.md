@@ -4,8 +4,8 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 [The Composable Architecture](https://github.com/pointfreeco/swift-composable-architecture).
 
 > [!IMPORTANT]
-> This revision prepares `0.4.0-rc.6`; publish that immutable tag only after its release pull request
-> merges and hosted CI passes on the merge commit. The candidate remains pre-1.0. Production OTLP delivery is
+> This revision prepares `0.5.0`; publish that immutable tag only after its release pull request
+> merges and hosted CI passes on the merge commit. The package remains pre-1.0. Production OTLP delivery is
 > best-effort: iOS may suspend or terminate an application before queued telemetry is exported.
 
 ## Installation
@@ -14,7 +14,7 @@ Privacy-safe, bounded OpenTelemetry instrumentation for
 dependencies: [
   .package(
     url: "https://github.com/ajevans99/swift-composable-otel.git",
-    exact: "0.4.0-rc.6"
+    from: "0.5.0"
   )
 ]
 ```
@@ -105,8 +105,11 @@ observer, queue, exporter, or persistence path. `.recorded` means synchronous ac
 configured pipeline, not successful remote delivery.
 
 `TelemetryLoggingConfiguration` applies a minimum severity and deterministic sampling rate for each
-supported severity. Sampling uses stable template or event identity, never a private value. Errors can
-remain fully retained while reviewed informational templates are sampled.
+supported severity. Fractional sampling is decided once, when a record is emitted, keyed by the anonymous
+process session plus a per-record identity (event name, emitting span, and a process-local sequence),
+never a private value. Records of one event name are therefore sampled independently rather than
+all-or-nothing, and the export boundary applies only the severity filter without re-sampling. Errors
+can remain fully retained while informational records are sampled.
 
 Private rendering remains redacted by default. DEBUG builds expose one explicit overload that
 evaluates private interpolation autoclosures only for an immediate renderer call:
@@ -535,6 +538,90 @@ Record route names without parameters:
 telemetry.recordNavigation(.push, route: "book-detail")
 ```
 
+## TCA lifecycle signals
+
+Every package-owned TCA operation emits one span, stable lifecycle logs, and bounded metrics. Log
+bodies are fixed readable constants and every lifecycle log sets a stable `event.name`
+(`ComposableOTelSemantics.LogEvents`):
+
+| TCA operation | Span | Logs (`event.name`) | Metrics |
+| --- | --- | --- | --- |
+| Reducer action | `tca.reducer` | `tca.action.dispatched` | `tca.actions.dispatched`, `tca.reducer.duration` |
+| Effect | `tca.effect` | `tca.effect.started`, `tca.effect.completed`, `tca.effect.cancelled`, `tca.effect.failed` | `tca.effects.started`, `.completed`, `.cancelled`, `.errored`, `tca.effect.duration`, `tca.store.active_effects` |
+| Dependency | `tca.dependency` | `tca.dependency.started`, `tca.dependency.completed`, `tca.dependency.failed` | `tca.dependencies.called`, `tca.dependencies.errored`, `tca.dependency.duration` |
+| Navigation | `tca.navigation` | `tca.navigation.changed` | `tca.navigation.transitions` |
+
+Lifecycle logs carry only bounded attributes: `tca.feature.name`, `tca.action.name`,
+`tca.effect.name`, `tca.dependency.name`, `tca.operation.name`, the `tca.effect.outcome` or
+`tca.dependency.outcome`, a clamped `*.duration_ms`, a `*.cancelled` flag, bounded error
+classification (`error.type`, `error.category`, `error.code`, `error.handled`, `error.retryable`),
+registered process-session context, and the OpenTelemetry trace/span correlation of the span that
+emitted them. Names come only from caller-supplied schema identifiers. Actions, state, dependency
+arguments, return values, stream elements, error descriptions, parameterized routes, and user content
+are never reflected or exported. A dependency cancelled with `CancellationError` completes with outcome
+`cancelled`; it is not counted in `tca.dependencies.errored`.
+
+Reducer trace context and `tca.feature.name` propagate task-locally from the reducer span into traced
+effects, dependency calls, and navigation, so one user action forms one trace:
+
+```swift
+Reduce { state, action in
+  switch action {
+  case .refreshTapped:
+    return .tracedRun(effect: "refresh-plans") { send in
+      let plans = try await plansClient.fetchPlans()
+      await send(.plansLoaded(plans))
+    }
+  // ...
+  }
+}
+.selectivelyInstrumented(feature: "plans", action: \.telemetryID)
+```
+
+Here `telemetryID` is a curated `Action -> ActionID?` mapper; returning `nil` suppresses the action
+and every effect and dependency call it starts.
+
+### Explicit root flows
+
+Work that has no reducer parent, such as app launch, push handling, background refresh, or widget
+timelines, starts an explicit root flow. The flow is a parentless `tca.effect` span marked
+`tca.flow.root = true`, and its dependency calls and navigation become children:
+
+```swift
+let plans = try await withTracedRootFlow(feature: "plans", flow: "background-refresh") {
+  try await plansClient.fetchPlans()
+}
+```
+
+Inside a reducer, `.tracedRootRun(feature:effect:operation:)` deliberately starts a new trace instead
+of continuing the reducer's.
+
+### Central dependency-client instrumentation
+
+`TelemetryDependencyInstrumentation` wraps every endpoint of one dependency client once so each call
+gets the same span, lifecycle logs, and metrics. `OperationID` provides common presets: `.fetch`,
+`.save`, `.delete`, `.stream`, `.sync`, and `.authorize`.
+
+```swift
+extension PlansClient: DependencyKey {
+  static let liveValue: Self = {
+    let telemetry = TelemetryDependencyInstrumentation("plans-client")
+    let base = Self.live()
+    return Self(
+      fetchPlans: telemetry.instrument(.fetch, base.fetchPlans),
+      savePlan: telemetry.instrument(.save, base.savePlan),
+      deletePlan: telemetry.instrument(.delete, base.deletePlan),
+      planUpdates: telemetry.instrumentStream(.stream, base.planUpdates)
+    )
+  }()
+}
+```
+
+`instrument` supports async throwing and nonthrowing endpoints of any arity. `instrumentStream` traces
+each `AsyncStream` or `AsyncThrowingStream` subscription until the upstream finishes, throws, or the
+consumer cancels. `call(_:_:)` traces one ad hoc invocation. Every name must be registered in the
+`TelemetrySchema`; unregistered names aggregate as `other`.
+
 ## Signal controls
 
 Traces, metrics, and logs are independent. Action and navigation logs are disabled by default:
@@ -558,9 +645,9 @@ Package-owned span names never contain identifiers:
 | Span | Bounded attributes |
 | --- | --- |
 | `tca.reducer` | `tca.feature.name`, `tca.action.name`, optional `tca.state.changed` |
-| `tca.effect` | `tca.effect.name`, `tca.effect.long_lived`, `tca.effect.outcome` |
-| `tca.dependency` | `tca.dependency.name`, `tca.operation.name` |
-| `tca.navigation` | `tca.navigation.operation`, `tca.navigation.route` |
+| `tca.effect` | `tca.feature.name`, `tca.effect.name`, `tca.effect.long_lived`, `tca.effect.outcome`, optional `tca.flow.root` |
+| `tca.dependency` | `tca.feature.name`, `tca.dependency.name`, `tca.operation.name`, `tca.dependency.outcome` |
+| `tca.navigation` | `tca.feature.name`, `tca.navigation.operation`, `tca.navigation.route` |
 
 Effect outcomes are exactly `success`, `cancelled`, or `error`. Package event names and log bodies
 are fixed constants. Error status is rewritten to generic text before export. Production-safe error
@@ -680,7 +767,7 @@ See [SUPPORT.md](SUPPORT.md) and [RELEASING.md](RELEASING.md).
 
 ## Release evidence
 
-The 0.4.0-rc.6 package quality layer includes:
+The 0.5.0 package quality layer includes:
 
 - externally meaningful tests plus concurrency stress and a macOS Thread Sanitizer lane;
 - target-specific coverage floors of 90% core, 80% exporters, 50% testing utilities, and 80% for
@@ -695,7 +782,7 @@ The 0.4.0-rc.6 package quality layer includes:
 See [RELEASE_NOTES.md](RELEASE_NOTES.md), [MIGRATION.md](MIGRATION.md),
 [PERFORMANCE.md](PERFORMANCE.md), [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), and the
 [consumer pilot evidence contract](PILOT.md). This is a pre-1.0 release. External production-like
-consumer evidence and repository protection remain accepted residual risks for 0.4.0-rc.6 and required
+consumer evidence and repository protection remain accepted residual risks for 0.5.0 and required
 no-go items for 1.0.
 
 ## License

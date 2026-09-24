@@ -90,7 +90,7 @@ public struct TelemetryPolicy: Sendable {
       ComposableOTelSemantics.Events.navigationChanged:
       return name
     default:
-      return nil
+      return ComposableOTelSemantics.LogEvents.all.contains(name) ? name : nil
     }
   }
 
@@ -98,15 +98,8 @@ public struct TelemetryPolicy: Sendable {
     guard case .string(let body) = body else {
       return .string(ComposableOTelSemantics.LogBodies.unknown)
     }
-    switch body {
-    case ComposableOTelSemantics.LogBodies.actionDispatched,
-      ComposableOTelSemantics.LogBodies.effectFailed,
-      ComposableOTelSemantics.LogBodies.dependencyFailed,
-      ComposableOTelSemantics.LogBodies.navigationChanged:
-      return .string(body)
-    default:
-      return .string(ComposableOTelSemantics.LogBodies.unknown)
-    }
+    return ComposableOTelSemantics.LogBodies.all.contains(body)
+      ? .string(body) : .string(ComposableOTelSemantics.LogBodies.unknown)
   }
 
   package func sanitizedSpanAttributes(
@@ -143,12 +136,30 @@ public struct TelemetryPolicy: Sendable {
     attributes.filter { !TCAAttributes.hostContextKeys.contains($0.key) }
   }
 
+  /// The anonymous process session used to key per-record log sampling.
+  package var samplingProcessSessionID: TelemetryProcessSessionID {
+    hostContext?.processSessionID ?? .current
+  }
+
+  /// The single emission-time sampling decision for one log record.
   package func shouldRecordLog(
     severity: TelemetryLogSeverity,
-    stableIdentifier: String
+    eventName: String,
+    spanContext: SpanContext?
   ) -> Bool {
-    signals.logsEnabled
-      && logging.shouldRecord(severity: severity, stableIdentifier: stableIdentifier)
+    guard signals.logsEnabled else { return false }
+    return logging.shouldRecord(
+      severity: severity,
+      processSessionID: samplingProcessSessionID,
+      eventName: eventName,
+      spanID: spanContext.flatMap { $0.isValid ? $0.spanId.hexString : nil },
+      sequence: TelemetryLogRecordSequence.shared.next()
+    )
+  }
+
+  /// The export-boundary filter. Sampling was already decided once at emission.
+  package func passesLogExportFilter(severity: TelemetryLogSeverity) -> Bool {
+    signals.logsEnabled && logging.passesSeverityFilter(severity)
   }
 
   package func sanitizedResourceAttributes(
@@ -226,7 +237,7 @@ public struct TelemetryPolicy: Sendable {
         result[key] = boundedString(value, as: ErrorCategoryID.self, schema.bounded)
       case TCAAttributes.errorCode:
         result[key] = boundedString(value, as: ErrorCodeID.self, schema.bounded)
-      case TCAAttributes.effectOutcome:
+      case TCAAttributes.effectOutcome, TCAAttributes.dependencyOutcome:
         if case .string(let rawValue) = value,
           TelemetryOutcome(rawValue: rawValue) != nil
         {
@@ -243,12 +254,16 @@ public struct TelemetryPolicy: Sendable {
         TCAAttributes.effectLongLived,
         TCAAttributes.effectMarker,
         TCAAttributes.dependencyError,
+        TCAAttributes.dependencyCancelled,
+        TCAAttributes.flowRoot,
         TCAAttributes.errorHandled,
         TCAAttributes.errorRetryable:
         if case .bool = value {
           result[key] = value
         }
-      case TCAAttributes.reducerDurationMs:
+      case TCAAttributes.reducerDurationMs,
+        TCAAttributes.effectDurationMs,
+        TCAAttributes.dependencyDurationMs:
         if case .double(let duration) = value, duration.isFinite, duration >= 0 {
           result[key] = .double(min(duration, 86_400_000))
         }

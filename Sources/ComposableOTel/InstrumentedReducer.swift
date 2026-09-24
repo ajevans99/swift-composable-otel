@@ -82,8 +82,10 @@ import OpenTelemetryApi
         }
 
         let traced = spanBuilder.withActiveSpan { span in
-          let effect = ReducerTraceContext.$spanContext.withValue(span.context) {
-            base._reduce(into: &state, action: action)
+          let effect = ReducerTraceContext.$feature.withValue(feature) {
+            ReducerTraceContext.$spanContext.withValue(span.context) {
+              base._reduce(into: &state, action: action)
+            }
           }
           if let oldToken, let newToken = stateChangeToken?(state) {
             span.setAttribute(key: TCAAttributes.stateChanged, value: oldToken != newToken)
@@ -94,13 +96,17 @@ import OpenTelemetryApi
             value: duration
           )
           span.status = .ok
+          emitActionDispatched(attributes, duration: duration, spanContext: span.context)
           return (effect: effect, duration: duration)
         }
         effect = traced.effect
         duration = traced.duration
       } else {
-        effect = base._reduce(into: &state, action: action)
+        effect = ReducerTraceContext.$feature.withValue(feature) {
+          base._reduce(into: &state, action: action)
+        }
         duration = durationMilliseconds(from: startTime, clock: clock)
+        emitActionDispatched(attributes, duration: duration, spanContext: nil)
       }
 
       if telemetry.policy.signals.metricsEnabled {
@@ -113,15 +119,23 @@ import OpenTelemetryApi
         var durationHistogram = telemetry.metrics.reducerDuration
         durationHistogram.record(value: duration, attributes: metricAttributes)
       }
+      return effect
+    }
 
+    private func emitActionDispatched(
+      _ attributes: [String: AttributeValue],
+      duration: Double,
+      spanContext: SpanContext?
+    ) {
       telemetry.emitLog(
         severity: .info,
+        eventName: ComposableOTelSemantics.LogEvents.actionDispatched,
         body: ComposableOTelSemantics.LogBodies.actionDispatched,
         attributes: attributes.merging([
           TCAAttributes.reducerDurationMs: .double(duration)
-        ]) { _, new in new }
+        ]) { _, new in new },
+        spanContext: spanContext
       )
-      return effect
     }
   }
 

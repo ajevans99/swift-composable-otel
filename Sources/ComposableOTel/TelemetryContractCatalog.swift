@@ -1222,7 +1222,8 @@ extension TelemetryClient {
     guard
       policy.shouldRecordLog(
         severity: definition.severity,
-        stableIdentifier: definition.eventName.rawValue
+        eventName: definition.eventName.rawValue,
+        spanContext: currentLogSpanContext
       )
     else {
       return

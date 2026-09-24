@@ -1,3 +1,4 @@
+import Foundation
 import OpenTelemetryApi
 
 /// A validated deterministic sampling rate for one log severity.
@@ -68,12 +69,37 @@ extension TelemetryLogSeverity {
   }
 }
 
+/// A process-wide monotonically increasing per-record identity used only for sampling.
+package final class TelemetryLogRecordSequence: @unchecked Sendable {
+  package static let shared = TelemetryLogRecordSequence()
+
+  private let lock = NSLock()
+  private var value: UInt64 = 0
+
+  package func next() -> UInt64 {
+    lock.lock()
+    defer { lock.unlock() }
+    value &+= 1
+    return value
+  }
+}
+
 extension TelemetryLoggingConfiguration {
+  /// Samples one log record independently of every other record.
+  ///
+  /// The decision is keyed by the anonymous process session plus the record's own identity: its
+  /// stable event name, its span ID when correlated, and a per-process sequence number. A
+  /// fractional rate therefore retains a proportional share of every event name rather than
+  /// retaining or dropping whole event names. It is evaluated exactly once, at emission; export
+  /// boundaries apply only the severity filter.
   package func shouldRecord(
     severity: TelemetryLogSeverity,
-    stableIdentifier: String
+    processSessionID: TelemetryProcessSessionID,
+    eventName: String,
+    spanID: String?,
+    sequence: UInt64
   ) -> Bool {
-    guard severity.rank >= minimumSeverity.rank else { return false }
+    guard passesSeverityFilter(severity) else { return false }
     let rate =
       switch severity {
       case .info: infoSampling.rawValue
@@ -83,16 +109,27 @@ extension TelemetryLoggingConfiguration {
     guard rate < 1 else { return true }
 
     var hash = deterministicSeed ^ 14_695_981_039_346_656_037
-    for byte in severity.rawValue.utf8 {
-      hash ^= UInt64(byte)
+    for component in [
+      severity.rawValue,
+      processSessionID.rawValue.uuidString,
+      eventName,
+      spanID ?? "",
+      String(sequence),
+    ] {
+      for byte in component.utf8 {
+        hash ^= UInt64(byte)
+        hash &*= 1_099_511_628_211
+      }
+      hash ^= 0xff
       hash &*= 1_099_511_628_211
     }
-    hash ^= 0xff
-    hash &*= 1_099_511_628_211
-    for byte in stableIdentifier.utf8 {
-      hash ^= UInt64(byte)
-      hash &*= 1_099_511_628_211
-    }
+    hash ^= hash >> 33
+    hash &*= 0xff51_afd7_ed55_8ccd
+    hash ^= hash >> 33
     return Double(hash) / Double(UInt64.max) < rate
+  }
+
+  package func passesSeverityFilter(_ severity: TelemetryLogSeverity) -> Bool {
+    severity.rank >= minimumSeverity.rank
   }
 }

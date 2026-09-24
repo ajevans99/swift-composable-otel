@@ -325,10 +325,7 @@ package struct TelemetryPrivacyBoundary: Sendable {
         if isOperationalEvent {
           enabled = policy.signals.operationalEventsEnabled
         } else if let severity = schema.severity {
-          enabled = policy.shouldRecordLog(
-            severity: severity,
-            stableIdentifier: eventName
-          )
+          enabled = policy.passesLogExportFilter(severity: severity)
         } else {
           enabled = false
         }
@@ -372,10 +369,8 @@ package struct TelemetryPrivacyBoundary: Sendable {
           case .string(let templateID) = sanitized.attributes[
             TelemetryLogWireFormat.templateIDKey
           ],
-          policy.shouldRecordLog(
-            severity: severity,
-            stableIdentifier: templateID
-          ),
+          !templateID.isEmpty,
+          policy.passesLogExportFilter(severity: severity),
           let attributes = policy.addingValidatedHostContext(to: sanitized.attributes)
         else {
           return nil
@@ -400,14 +395,8 @@ package struct TelemetryPrivacyBoundary: Sendable {
         return nil
       }
       let body = policy.sanitizedLogBody(record.body)
-      let stableIdentifier =
-        record.eventName.flatMap(policy.sanitizedEventName)
-        ?? body.description
       guard
-        policy.shouldRecordLog(
-          severity: severity,
-          stableIdentifier: stableIdentifier
-        ),
+        policy.passesLogExportFilter(severity: severity),
         let attributes = policy.addingValidatedHostContext(
           to: policy.sanitizedLogAttributes(
             policy.removingHostContext(from: record.attributes)

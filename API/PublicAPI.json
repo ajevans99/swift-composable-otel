@@ -3003,6 +3003,27 @@
     "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO12effectFailedSSvpZ"
   },
   {
+    "declaration" : "static let effectStarted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.effectStarted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO13effectStartedSSvpZ"
+  },
+  {
+    "declaration" : "static let effectCancelled: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.effectCancelled",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO15effectCancelledSSvpZ"
+  },
+  {
+    "declaration" : "static let effectCompleted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.effectCompleted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO15effectCompletedSSvpZ"
+  },
+  {
     "declaration" : "static let actionDispatched: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
@@ -3017,6 +3038,13 @@
     "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO16dependencyFailedSSvpZ"
   },
   {
+    "declaration" : "static let dependencyStarted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.dependencyStarted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO17dependencyStartedSSvpZ"
+  },
+  {
     "declaration" : "static let navigationChanged: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
@@ -3024,11 +3052,102 @@
     "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO17navigationChangedSSvpZ"
   },
   {
+    "declaration" : "static let dependencyCompleted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.dependencyCompleted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO19dependencyCompletedSSvpZ"
+  },
+  {
+    "declaration" : "static let all: Set<String>",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogBodies.all",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO3allShySSGvpZ"
+  },
+  {
     "declaration" : "static let unknown: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "ComposableOTelSemantics.LogBodies.unknown",
     "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogBodiesO7unknownSSvpZ"
+  },
+  {
+    "declaration" : "enum LogEvents",
+    "kind" : "swift.enum",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO"
+  },
+  {
+    "declaration" : "static let effectFailed: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.effectFailed",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO12effectFailedSSvpZ"
+  },
+  {
+    "declaration" : "static let effectStarted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.effectStarted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO13effectStartedSSvpZ"
+  },
+  {
+    "declaration" : "static let effectCancelled: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.effectCancelled",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO15effectCancelledSSvpZ"
+  },
+  {
+    "declaration" : "static let effectCompleted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.effectCompleted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO15effectCompletedSSvpZ"
+  },
+  {
+    "declaration" : "static let actionDispatched: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.actionDispatched",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO16actionDispatchedSSvpZ"
+  },
+  {
+    "declaration" : "static let dependencyFailed: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.dependencyFailed",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO16dependencyFailedSSvpZ"
+  },
+  {
+    "declaration" : "static let dependencyStarted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.dependencyStarted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO17dependencyStartedSSvpZ"
+  },
+  {
+    "declaration" : "static let navigationChanged: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.navigationChanged",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO17navigationChangedSSvpZ"
+  },
+  {
+    "declaration" : "static let dependencyCompleted: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.dependencyCompleted",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO19dependencyCompletedSSvpZ"
+  },
+  {
+    "declaration" : "static let all: Set<String>",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "ComposableOTelSemantics.LogEvents.all",
+    "preciseIdentifier" : "s:14ComposableOTel0aB9SemanticsO9LogEventsO3allShySSGvpZ"
   },
   {
     "declaration" : "func tracedCall<T>(dependency: DependencyID, operation operationID: OperationID, operation: @Sendable () async throws -> T) async throws -> T where T : Sendable",
@@ -3199,11 +3318,25 @@
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO15navigationRouteSSvpZ"
   },
   {
+    "declaration" : "static let effectDurationMs: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.effectDurationMs",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO16effectDurationMsSSvpZ"
+  },
+  {
     "declaration" : "static let processSessionID: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TCAAttributes.processSessionID",
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO16processSessionIDSSvpZ"
+  },
+  {
+    "declaration" : "static let dependencyOutcome: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.dependencyOutcome",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO17dependencyOutcomeSSvpZ"
   },
   {
     "declaration" : "static let reducerDurationMs: String",
@@ -3213,11 +3346,32 @@
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO17reducerDurationMsSSvpZ"
   },
   {
+    "declaration" : "static let dependencyCancelled: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.dependencyCancelled",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO19dependencyCancelledSSvpZ"
+  },
+  {
     "declaration" : "static let navigationOperation: String",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TCAAttributes.navigationOperation",
     "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO19navigationOperationSSvpZ"
+  },
+  {
+    "declaration" : "static let dependencyDurationMs: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.dependencyDurationMs",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO20dependencyDurationMsSSvpZ"
+  },
+  {
+    "declaration" : "static let flowRoot: String",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TCAAttributes.flowRoot",
+    "preciseIdentifier" : "s:14ComposableOTel13TCAAttributesO8flowRootSSvpZ"
   },
   {
     "declaration" : "static let errorCode: String",
@@ -3829,6 +3983,20 @@
     "preciseIdentifier" : "s:14ComposableOTel18TelemetryEnumValueVyACSSKcfc"
   },
   {
+    "declaration" : "func withTracedRootFlow<T>(feature: FeatureID, flow: EffectID, operation: @Sendable () async throws -> T) async throws -> T where T : Sendable",
+    "kind" : "swift.func",
+    "module" : "ComposableOTel",
+    "path" : "withTracedRootFlow(feature:flow:operation:)",
+    "preciseIdentifier" : "s:14ComposableOTel18withTracedRootFlow7feature4flow9operationxAA19TelemetryIdentifierVyAA07FeatureK4KindOG_AGyAA06EffectkM0OGxyYaYbKXEtYaKs8SendableRzlF"
+  },
+  {
+    "declaration" : "func withTracedRootFlow<T>(feature: FeatureID, flow: EffectID, operation: @Sendable () async -> T) async -> T where T : Sendable",
+    "kind" : "swift.func",
+    "module" : "ComposableOTel",
+    "path" : "withTracedRootFlow(feature:flow:operation:)",
+    "preciseIdentifier" : "s:14ComposableOTel18withTracedRootFlow7feature4flow9operationxAA19TelemetryIdentifierVyAA07FeatureK4KindOG_AGyAA06EffectkM0OGxyYaYbXEtYas8SendableRzlF"
+  },
+  {
     "declaration" : "struct InstrumentedReducer<Base> where Base : Reducer",
     "kind" : "swift.struct",
     "module" : "ComposableOTel",
@@ -3946,6 +4114,48 @@
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.rawValue",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierV8rawValueSSvp"
+  },
+  {
+    "declaration" : "static var save: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.save",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE4saveACyAEGvpZ"
+  },
+  {
+    "declaration" : "static var sync: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.sync",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE4syncACyAEGvpZ"
+  },
+  {
+    "declaration" : "static var fetch: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.fetch",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE5fetchACyAEGvpZ"
+  },
+  {
+    "declaration" : "static var delete: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.delete",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE6deleteACyAEGvpZ"
+  },
+  {
+    "declaration" : "static var stream: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.stream",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE6streamACyAEGvpZ"
+  },
+  {
+    "declaration" : "static var authorize: `Self` { get }",
+    "kind" : "swift.type.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryIdentifier.authorize",
+    "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE9authorizeACyAEGvpZ"
   },
   {
     "declaration" : "struct TelemetryLogInteger",
@@ -5509,6 +5719,69 @@
     "preciseIdentifier" : "s:14ComposableOTel30TelemetryDeploymentEnvironmentO8rawValueACSgSS_tcfc"
   },
   {
+    "declaration" : "struct TelemetryDependencyInstrumentation",
+    "kind" : "swift.struct",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV"
+  },
+  {
+    "declaration" : "let dependency: DependencyID",
+    "kind" : "swift.property",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.dependency",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV10dependencyAA0C10IdentifierVyAA0dG4KindOGvp"
+  },
+  {
+    "declaration" : "func instrument<each Argument, Result>(_ operation: OperationID, _ endpoint: @escaping @Sendable (repeat each Argument) async throws -> Result) -> @Sendable (repeat each Argument) async throws -> Result where repeat each Argument : Sendable, Result : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.instrument(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV10instrumentyq_xxQpYaYbKcAA0C10IdentifierVyAA09OperationG4KindOG_q_xxQpYaYbKctRvzs8SendableRzsAJR_r0_lF"
+  },
+  {
+    "declaration" : "func instrument<each Argument, Result>(_ operation: OperationID, _ endpoint: @escaping @Sendable (repeat each Argument) async -> Result) -> @Sendable (repeat each Argument) async -> Result where repeat each Argument : Sendable, Result : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.instrument(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV10instrumentyq_xxQpYaYbcAA0C10IdentifierVyAA09OperationG4KindOG_q_xxQpYaYbctRvzs8SendableRzsAJR_r0_lF"
+  },
+  {
+    "declaration" : "func instrumentStream<each Argument, Element>(_ operation: OperationID, _ endpoint: @escaping @Sendable (repeat each Argument) -> AsyncStream<Element>) -> @Sendable (repeat each Argument) -> AsyncStream<Element> where repeat each Argument : Sendable, Element : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.instrumentStream(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV16instrumentStreamyScSyq_GxxQpYbcAA0C10IdentifierVyAA09OperationH4KindOG_AExxQpYbctRvzs8SendableRzsAKR_r0_lF"
+  },
+  {
+    "declaration" : "func instrumentStream<each Argument, Element>(_ operation: OperationID, _ endpoint: @escaping @Sendable (repeat each Argument) -> AsyncThrowingStream<Element, Error>) -> @Sendable (repeat each Argument) -> AsyncThrowingStream<Element, Error> where repeat each Argument : Sendable, Element : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.instrumentStream(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV16instrumentStreamyScsyq_s5Error_pGxxQpYbcAA0C10IdentifierVyAA09OperationI4KindOG_AFxxQpYbctRvzs8SendableRzsALR_r0_lF"
+  },
+  {
+    "declaration" : "func call<T>(_ operation: OperationID, _ body: @Sendable () async throws -> T) async throws -> T where T : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.call(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV4callyxAA0C10IdentifierVyAA09OperationG4KindOG_xyYaYbKXEtYaKs8SendableRzlF"
+  },
+  {
+    "declaration" : "func call<T>(_ operation: OperationID, _ body: @Sendable () async -> T) async -> T where T : Sendable",
+    "kind" : "swift.method",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.call(_:_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationV4callyxAA0C10IdentifierVyAA09OperationG4KindOG_xyYaYbXEtYas8SendableRzlF"
+  },
+  {
+    "declaration" : "init(_ dependency: DependencyID)",
+    "kind" : "swift.init",
+    "module" : "ComposableOTel",
+    "path" : "TelemetryDependencyInstrumentation.init(_:)",
+    "preciseIdentifier" : "s:14ComposableOTel34TelemetryDependencyInstrumentationVyAcA0C10IdentifierVyAA0dF4KindOGcfc"
+  },
+  {
     "declaration" : "struct TelemetryOperationalEventDefinition<Payload> where Payload : Sendable",
     "kind" : "swift.struct",
     "module" : "ComposableOTel",
@@ -5619,6 +5892,13 @@
     "module" : "ComposableOTel",
     "path" : "Effect.traceStart(effect:)",
     "preciseIdentifier" : "s:22ComposableArchitecture6EffectV0A4OTelE10traceStart6effectACyxGAD19TelemetryIdentifierVyAD0cI4KindOG_tF"
+  },
+  {
+    "declaration" : "static func tracedRootRun(feature: FeatureID, effect: EffectID, priority: TaskPriority? = nil, operation: @escaping @Sendable (Send<Action>) async throws -> Void) -> Effect<Action>",
+    "kind" : "swift.type.method",
+    "module" : "ComposableOTel",
+    "path" : "Effect.tracedRootRun(feature:effect:priority:operation:)",
+    "preciseIdentifier" : "s:22ComposableArchitecture6EffectV0A4OTelE13tracedRootRun7feature6effect8priority9operationACyxGAD19TelemetryIdentifierVyAD07FeatureM4KindOG_ALyAD0cmO0OGScPSgyAA4SendVyxGYaYbKctFZ"
   },
   {
     "declaration" : "static func tracedLongLivedRun(effect: EffectID, priority: TaskPriority? = nil, operation: @escaping @Sendable (Send<Action>) async throws -> Void) -> Effect<Action>",

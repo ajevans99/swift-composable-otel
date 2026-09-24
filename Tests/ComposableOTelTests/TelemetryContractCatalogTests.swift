@@ -1006,7 +1006,8 @@ struct TelemetryContractCatalogTests {
         try Opentelemetry_Proto_Collector_Logs_V1_ExportLogsServiceRequest(serializedBytes: $0)
       }
       .flatMap(\.resourceLogs).flatMap(\.scopeLogs).flatMap(\.logRecords).count
-    #expect(logRecordCount == 2)
+    // Effect started, breadcrumb, and effect failed.
+    #expect(logRecordCount == 3)
     for key in hostKeys {
       #expect(
         logBodies.reduce(0) { $0 + occurrenceCount(in: $1, of: Data(key.utf8)) }

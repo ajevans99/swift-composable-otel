@@ -279,3 +279,5 @@ final class RuntimeByteBoundedMetricExporter: MetricExporter, @unchecked Sendabl
     exporter.getDefaultAggregation(for: instrument)
   }
 }
+
+extension RuntimeRequestCaptureHTTPClient: RuntimeCompletionHTTPClient {}

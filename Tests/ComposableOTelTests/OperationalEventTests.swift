@@ -200,6 +200,7 @@ struct OperationalEventTests {
     let (enabledClient, enabledCollectors) = try TelemetryClient.test(policy: enabled.policy)
     enabledClient.emitLog(
       severity: .error,
+      eventName: ComposableOTelSemantics.LogEvents.effectFailed,
       body: ComposableOTelSemantics.LogBodies.effectFailed,
       attributes: [:]
     )

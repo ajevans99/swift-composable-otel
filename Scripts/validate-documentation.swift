@@ -95,6 +95,7 @@ for fileURL in allMarkdown {
 }
 
 for requiredFile in [
+  "CHANGELOG.md",
   "LICENSE",
   "MIGRATION.md",
   "PERFORMANCE.md",
@@ -315,6 +316,33 @@ for requiredReleaseClaim in [
   "same Momentum pull request",
 ] where !releaseNotes.contains(requiredReleaseClaim) {
   failures.append("RELEASE_NOTES is missing rc.6 claim: \(requiredReleaseClaim)")
+}
+
+for requiredMigration in [
+  "Migrating from 0.4.0 to 0.5.0",
+  "TelemetryDependencyInstrumentation",
+  "withTracedRootFlow",
+  "tracedRootRun",
+  "CancellationError",
+  "per-record identity",
+] where !migration.contains(requiredMigration) {
+  failures.append("MIGRATION.md is missing 0.5.0 guidance: \(requiredMigration)")
+}
+
+for requiredReleaseClaim in [
+  "event.name",
+  "TelemetryDependencyInstrumentation",
+  "withTracedRootFlow",
+  "tca.flow.root",
+  "Metric dimensions and\nseries cardinality are unchanged",
+  "no longer counted in `tca.dependencies.errored`",
+] where !releaseNotes.contains(requiredReleaseClaim) {
+  failures.append("RELEASE_NOTES is missing 0.5.0 claim: \(requiredReleaseClaim)")
+}
+
+let changelog = read("CHANGELOG.md")
+if let packageVersion, !changelog.contains("## \(packageVersion)\n") {
+  failures.append("CHANGELOG.md has no section for ComposableOTelMetadata.version")
 }
 
 let manifest = read("Package.swift")

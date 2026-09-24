@@ -348,13 +348,30 @@ struct PhaseOneCapabilitiesTests {
         signals: .init(tracesEnabled: false, metricsEnabled: false, logsEnabled: true),
         logging: logging
       )
-      let (first, firstCollectors) = try TelemetryClient.test(policy: policy)
-      let (second, secondCollectors) = try TelemetryClient.test(policy: policy)
+      let session = TelemetryProcessSessionID.current
+      let decisions = (0..<256).map { sequence in
+        logging.shouldRecord(
+          severity: .info,
+          processSessionID: session,
+          eventName: "app.log",
+          spanID: nil,
+          sequence: UInt64(sequence)
+        )
+      }
+      let replayed = (0..<256).map { sequence in
+        logging.shouldRecord(
+          severity: .info,
+          processSessionID: session,
+          eventName: "app.log",
+          spanID: nil,
+          sequence: UInt64(sequence)
+        )
+      }
+      #expect(decisions == replayed)
+      let retained = decisions.filter { $0 }.count
+      #expect((64...192).contains(retained))
 
-      let firstResult = first.log(.info, "Deterministic sample")
-      let secondResult = second.log(.info, "Deterministic sample")
-      #expect(firstResult == secondResult)
-      #expect(firstCollectors.logs.allRecords.count == secondCollectors.logs.allRecords.count)
+      let (first, _) = try TelemetryClient.test(policy: policy)
       #expect(first.log(.error, "Always retained error") == .recorded)
 
       let errorsOnly = TelemetryPolicy(

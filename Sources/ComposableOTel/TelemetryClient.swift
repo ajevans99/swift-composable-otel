@@ -330,23 +330,44 @@ public struct TelemetryClient: Sendable {
     )
   }()
 
+  /// The span context package lifecycle logs correlate with, if any.
+  var currentLogSpanContext: SpanContext? {
+    let context =
+      ReducerTraceContext.spanContext
+      ?? OpenTelemetry.instance.contextProvider.activeSpan?.context
+    return context?.isValid == true ? context : nil
+  }
+
+  /// Emits one package lifecycle log with a stable `event.name`, fixed body, bounded attributes,
+  /// and explicit trace/span correlation.
   func emitLog(
     severity: Severity,
+    eventName: String,
     body: String,
-    attributes: [String: AttributeValue]
+    attributes: [String: AttributeValue],
+    spanContext: SpanContext? = nil
   ) {
     guard
       !ReducerTraceContext.instrumentationSuppressed,
-      let severity = TelemetryLogSeverity(otelSeverity: severity),
-      policy.shouldRecordLog(severity: severity, stableIdentifier: body)
+      let severity = TelemetryLogSeverity(otelSeverity: severity)
     else {
       return
     }
-    logger.logRecordBuilder()
+    let spanContext = spanContext ?? currentLogSpanContext
+    guard
+      policy.shouldRecordLog(severity: severity, eventName: eventName, spanContext: spanContext)
+    else {
+      return
+    }
+    let builder = logger.logRecordBuilder()
       .setSeverity(severity.otelSeverity)
       .setBody(policy.sanitizedLogBody(.string(body)))
       .setAttributes(policy.sanitizedLogAttributes(attributes))
-      .emit()
+      .setEventName(eventName)
+    if let spanContext {
+      _ = builder.setSpanContext(spanContext)
+    }
+    builder.emit()
   }
 
   /// Synchronously records a privacy-aware interpolated log.
@@ -363,7 +384,8 @@ public struct TelemetryClient: Sendable {
     guard
       policy.shouldRecordLog(
         severity: severity,
-        stableIdentifier: message.templateID
+        eventName: message.templateID,
+        spanContext: currentLogSpanContext
       )
     else {
       return .dropped

@@ -117,9 +117,9 @@ public struct TelemetryDependencyInstrumentation: Sendable {
   ) -> @Sendable (repeat each Argument) async throws -> Result {
     let dependency = dependency
     return { (argument: repeat each Argument) in
-      let arguments = SendableArgumentPack(repeat each argument)
+      let invocation = UncheckedSendableInvocation { try await endpoint(repeat each argument) }
       return try await tracedCall(dependency: dependency, operation: operation) {
-        try await endpoint(repeat each arguments.values)
+        try await invocation.body()
       }
     }
   }
@@ -131,9 +131,9 @@ public struct TelemetryDependencyInstrumentation: Sendable {
   ) -> @Sendable (repeat each Argument) async -> Result {
     let dependency = dependency
     return { (argument: repeat each Argument) in
-      let arguments = SendableArgumentPack(repeat each argument)
+      let invocation = UncheckedSendableInvocation { await endpoint(repeat each argument) }
       return await tracedCall(dependency: dependency, operation: operation) {
-        await endpoint(repeat each arguments.values)
+        await invocation.body()
       }
     }
   }
@@ -192,11 +192,12 @@ public struct TelemetryDependencyInstrumentation: Sendable {
   }
 }
 
-// Swift 6.1 does not infer Sendable for captured parameter packs whose elements are Sendable.
-private struct SendableArgumentPack<each Argument: Sendable>: @unchecked Sendable {
-  let values: (repeat each Argument)
+// Swift 6.1 does not infer Sendable for captured parameter packs whose elements are Sendable, and
+// pack-generic types need watchOS 10, so the call is boxed as a closure over Sendable arguments.
+private struct UncheckedSendableInvocation<Body>: @unchecked Sendable {
+  let body: Body
 
-  init(_ values: repeat each Argument) {
-    self.values = (repeat each values)
+  init(_ body: Body) {
+    self.body = body
   }
 }

@@ -4116,42 +4116,42 @@
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierV8rawValueSSvp"
   },
   {
-    "declaration" : "static var save: `Self` { get }",
+    "declaration" : "static var save: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.save",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE4saveACyAEGvpZ"
   },
   {
-    "declaration" : "static var sync: `Self` { get }",
+    "declaration" : "static var sync: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.sync",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE4syncACyAEGvpZ"
   },
   {
-    "declaration" : "static var fetch: `Self` { get }",
+    "declaration" : "static var fetch: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.fetch",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE5fetchACyAEGvpZ"
   },
   {
-    "declaration" : "static var delete: `Self` { get }",
+    "declaration" : "static var delete: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.delete",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE6deleteACyAEGvpZ"
   },
   {
-    "declaration" : "static var stream: `Self` { get }",
+    "declaration" : "static var stream: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.stream",
     "preciseIdentifier" : "s:14ComposableOTel19TelemetryIdentifierVA2A09OperationD4KindORszrlE6streamACyAEGvpZ"
   },
   {
-    "declaration" : "static var authorize: `Self` { get }",
+    "declaration" : "static var authorize: TelemetryIdentifier<OperationIdentifierKind> { get }",
     "kind" : "swift.type.property",
     "module" : "ComposableOTel",
     "path" : "TelemetryIdentifier.authorize",

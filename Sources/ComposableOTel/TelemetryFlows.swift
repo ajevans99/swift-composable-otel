@@ -53,17 +53,17 @@ public func withTracedRootFlow<T: Sendable>(
 
 extension OperationID {
   /// Reads or queries a resource.
-  public static var fetch: Self { "fetch" }
+  public static var fetch: TelemetryIdentifier<OperationIdentifierKind> { "fetch" }
   /// Creates or updates a resource.
-  public static var save: Self { "save" }
+  public static var save: TelemetryIdentifier<OperationIdentifierKind> { "save" }
   /// Removes a resource.
-  public static var delete: Self { "delete" }
+  public static var delete: TelemetryIdentifier<OperationIdentifierKind> { "delete" }
   /// Observes a long-lived sequence of values.
-  public static var stream: Self { "stream" }
+  public static var stream: TelemetryIdentifier<OperationIdentifierKind> { "stream" }
   /// Reconciles local and remote state.
-  public static var sync: Self { "sync" }
+  public static var sync: TelemetryIdentifier<OperationIdentifierKind> { "sync" }
   /// Authenticates or authorizes the user or device.
-  public static var authorize: Self { "authorize" }
+  public static var authorize: TelemetryIdentifier<OperationIdentifierKind> { "authorize" }
 }
 
 /// Central, consistent instrumentation for every endpoint of one dependency client.
@@ -117,8 +117,9 @@ public struct TelemetryDependencyInstrumentation: Sendable {
   ) -> @Sendable (repeat each Argument) async throws -> Result {
     let dependency = dependency
     return { (argument: repeat each Argument) in
-      try await tracedCall(dependency: dependency, operation: operation) {
-        try await endpoint(repeat each argument)
+      let arguments = SendableArgumentPack(repeat each argument)
+      return try await tracedCall(dependency: dependency, operation: operation) {
+        try await endpoint(repeat each arguments.values)
       }
     }
   }
@@ -130,8 +131,9 @@ public struct TelemetryDependencyInstrumentation: Sendable {
   ) -> @Sendable (repeat each Argument) async -> Result {
     let dependency = dependency
     return { (argument: repeat each Argument) in
-      await tracedCall(dependency: dependency, operation: operation) {
-        await endpoint(repeat each argument)
+      let arguments = SendableArgumentPack(repeat each argument)
+      return await tracedCall(dependency: dependency, operation: operation) {
+        await endpoint(repeat each arguments.values)
       }
     }
   }
@@ -187,5 +189,14 @@ public struct TelemetryDependencyInstrumentation: Sendable {
         continuation.onTermination = { _ in task.cancel() }
       }
     }
+  }
+}
+
+// Swift 6.1 does not infer Sendable for captured parameter packs whose elements are Sendable.
+private struct SendableArgumentPack<each Argument: Sendable>: @unchecked Sendable {
+  let values: (repeat each Argument)
+
+  init(_ values: repeat each Argument) {
+    self.values = (repeat each values)
   }
 }
